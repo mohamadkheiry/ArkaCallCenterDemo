@@ -80,6 +80,43 @@ public class AsteriskProvisioningService : IAsteriskProvisioningService
         return Task.CompletedTask;
     }
 
+    private const string SoundsDir = "/var/lib/asterisk/sounds/arka";
+
+    public Task<string?> UploadSoundAsync(byte[] wavBytes, string soundName, CancellationToken ct = default)
+    {
+        var creds = Creds();
+        if (creds is null)
+        {
+            _logger.LogWarning("Asterisk SSH not configured; skipping sound upload of {Name}.", soundName);
+            return Task.FromResult<string?>(null);
+        }
+        try
+        {
+            var (host, user, pass) = creds.Value;
+            var remotePath = $"{SoundsDir}/{soundName}.wav";
+            using (var ssh = new SshClient(host, user, pass))
+            {
+                ssh.Connect();
+                ssh.RunCommand($"mkdir -p {SoundsDir} && chown -R asterisk:asterisk {SoundsDir} 2>/dev/null || true");
+                ssh.Disconnect();
+            }
+            using (var scp = new ScpClient(host, user, pass))
+            {
+                scp.Connect();
+                using var ms = new MemoryStream(wavBytes);
+                scp.Upload(ms, remotePath);
+                scp.Disconnect();
+            }
+            // نام sound برای dialplan (بدون پسوند)
+            return Task.FromResult<string?>($"arka/{soundName}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to upload sound {Name} to Asterisk", soundName);
+            return Task.FromResult<string?>(null);
+        }
+    }
+
     private static string BuildPjsipBlock(int ext, string secret) => $"""
         ;=== ARKA extension {ext} ===
         [{ext}]

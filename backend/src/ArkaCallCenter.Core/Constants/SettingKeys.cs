@@ -30,4 +30,14 @@ public static class SettingKeys
     public const string FallbackMessageText = "fallback.text";
     public const string FallbackMessageVoice = "fallback.voice";
     public const string FallbackAudioPath = "fallback.audioPath";
+
+    // پیام پذیرش اصلی شرکت (IVR): پخش می‌شود و سپس منتظر دریافت داخلی می‌ماند.
+    public const string MainGreetingText = "main.greetingText";
+    public const string MainGreetingVoice = "main.greetingVoice";
+    public const string MainGreetingAudioPath = "main.greetingAudioPath"; // فایل WAV روی ایزابل
+    public const string MainGreetingAsteriskSound = "main.asteriskSound";  // نام sound برای dialplan
+
+    // موسیقی انتظار (حین «فکر کردن» هوش مصنوعی)
+    public const string HoldMusicEnabled = "hold.enabled";
+    public const string HoldMusicPath = "hold.slinPath"; // SLIN 8kHz raw روی worker
 }

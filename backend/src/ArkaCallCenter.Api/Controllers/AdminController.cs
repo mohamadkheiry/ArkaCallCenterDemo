@@ -24,13 +24,18 @@ public class AdminController : ControllerBase
     private readonly ArkaDbContext _db;
     private readonly ISettingsService _settings;
     private readonly IOpenAiService _openai;
+    private readonly IDemoService _demos;
+    private readonly IAsteriskProvisioningService _asterisk;
     private readonly string _uploadsPath;
 
-    public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai, IConfiguration config)
+    public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai,
+        IDemoService demos, IAsteriskProvisioningService asterisk, IConfiguration config)
     {
         _db = db;
         _settings = settings;
         _openai = openai;
+        _demos = demos;
+        _asterisk = asterisk;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -175,7 +180,7 @@ public class AdminController : ControllerBase
 
         try
         {
-            var audio = await _openai.TextToSpeechAsync(req.Text, req.Voice, ct);
+            var audio = await _openai.TextToSpeechAsync(req.Text, req.Voice, ct: ct);
             var path = Path.Combine(_uploadsPath, "fallback.mp3");
             await System.IO.File.WriteAllBytesAsync(path, audio, ct);
             await _settings.SetAsync(SettingKeys.FallbackAudioPath, path, false, ct);
@@ -221,6 +226,116 @@ public class AdminController : ControllerBase
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(new { message = "محدودیت کاربر به‌روزرسانی شد." });
+    }
+
+    // ---------------- Demos (keys 1..999) ----------------
+    [HttpGet("demos")]
+    public async Task<IActionResult> GetDemos(CancellationToken ct) => Ok(await _demos.ListAsync(ct));
+
+    [HttpPost("demos")]
+    public async Task<IActionResult> CreateDemo(CreateDemoRequest req, CancellationToken ct)
+    {
+        var r = await _demos.CreateAsync(req.Label, req.WelcomeText, req.KbText, req.Voice, req.MinuteLimit, ct);
+        return r.Ok ? Ok(r.Demo) : BadRequest(new { error = r.Error });
+    }
+
+    [HttpPut("demos/{id:int}")]
+    public async Task<IActionResult> UpdateDemo(int id, UpdateDemoRequest req, CancellationToken ct)
+    {
+        var r = await _demos.UpdateAsync(id, req.Label, req.WelcomeText, req.KbText, req.Voice, req.MinuteLimit, req.IsActive, ct);
+        return r.Ok ? Ok(r.Demo) : BadRequest(new { error = r.Error });
+    }
+
+    [HttpDelete("demos/{id:int}")]
+    public async Task<IActionResult> DeleteDemo(int id, CancellationToken ct)
+    {
+        await _demos.DeleteAsync(id, ct);
+        return Ok(new { message = "دمو حذف شد." });
+    }
+
+    // ---------------- Main greeting (IVR reception) ----------------
+    [HttpGet("main-greeting")]
+    public async Task<IActionResult> GetMainGreeting(CancellationToken ct)
+    {
+        var text = await _settings.GetAsync(SettingKeys.MainGreetingText, "به شرکت ما خوش آمدید. لطفاً شماره داخلی موردنظر را وارد کنید.", ct);
+        var voice = await _settings.GetAsync(SettingKeys.MainGreetingVoice, "alloy", ct);
+        var sound = await _settings.GetAsync(SettingKeys.MainGreetingAsteriskSound, null, ct);
+        return Ok(new { text, voice, asteriskSound = sound, uploaded = !string.IsNullOrEmpty(sound) });
+    }
+
+    /// <summary>ذخیره‌ی متن پذیرش، تولید WAV ۸kHz و آپلود آن به ایزابل برای پخش در dialplan.</summary>
+    [HttpPut("main-greeting")]
+    public async Task<IActionResult> SetMainGreeting(MainGreetingRequest req, CancellationToken ct)
+    {
+        await _settings.SetAsync(SettingKeys.MainGreetingText, req.Text, false, ct);
+        await _settings.SetAsync(SettingKeys.MainGreetingVoice, req.Voice, false, ct);
+        try
+        {
+            var pcm = await _openai.TextToSpeechAsync(req.Text, req.Voice, "pcm", ct);
+            var wav = Infrastructure.Audio.AudioConvert.PcmToWav8k(pcm, 24000);
+            var localPath = Path.Combine(_uploadsPath, "main-greeting.wav");
+            await System.IO.File.WriteAllBytesAsync(localPath, wav, ct);
+            await _settings.SetAsync(SettingKeys.MainGreetingAudioPath, localPath, false, ct);
+
+            var soundName = await _asterisk.UploadSoundAsync(wav, "main-greeting", ct);
+            if (soundName is not null)
+                await _settings.SetAsync(SettingKeys.MainGreetingAsteriskSound, soundName, false, ct);
+
+            return Ok(new
+            {
+                message = soundName is not null
+                    ? "متن ذخیره، صوت تولید و روی ایزابل آپلود شد."
+                    : "متن و صوت ذخیره شد؛ آپلود به ایزابل انجام نشد (SSH را بررسی کنید).",
+                asteriskSound = soundName,
+            });
+        }
+        catch
+        {
+            return Ok(new { message = "متن ذخیره شد؛ تولید صوت انجام نشد (کلید OpenAI را بررسی کنید).", asteriskSound = (string?)null });
+        }
+    }
+
+    // ---------------- Hold music (while AI is thinking) ----------------
+    [HttpGet("hold-music")]
+    public async Task<IActionResult> GetHoldMusic(CancellationToken ct)
+    {
+        var path = await _settings.GetAsync(SettingKeys.HoldMusicPath, null, ct);
+        var enabled = await _settings.GetAsync(SettingKeys.HoldMusicEnabled, "false", ct);
+        return Ok(new { enabled = enabled == "true", hasFile = !string.IsNullOrEmpty(path) && System.IO.File.Exists(path) });
+    }
+
+    [HttpPost("hold-music")]
+    [RequestSizeLimit(5_000_000)]
+    public async Task<IActionResult> UploadHoldMusic([FromForm] IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
+        if (!file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "لطفاً فایل WAV (۱۶ بیت) بارگذاری کنید." });
+
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var slin = Infrastructure.Audio.AudioConvert.WavToSlin8k(ms.ToArray());
+            var path = Path.Combine(_uploadsPath, "hold.sln");
+            await System.IO.File.WriteAllBytesAsync(path, slin, ct);
+            await _settings.SetAsync(SettingKeys.HoldMusicPath, path, false, ct);
+            await _settings.SetAsync(SettingKeys.HoldMusicEnabled, "true", false, ct);
+            return Ok(new { message = "موسیقی انتظار ذخیره شد.", seconds = slin.Length / (AudioConvertRate) });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = "پردازش فایل ناموفق بود: " + ex.Message });
+        }
+    }
+
+    private const int AudioConvertRate = 16000; // بایت بر ثانیه SLIN 8kHz (۸۰۰۰ نمونه × ۲ بایت)
+
+    [HttpPut("hold-music/enabled")]
+    public async Task<IActionResult> SetHoldEnabled(HoldEnabledRequest req, CancellationToken ct)
+    {
+        await _settings.SetAsync(SettingKeys.HoldMusicEnabled, req.Enabled ? "true" : "false", false, ct);
+        return Ok(new { message = "به‌روزرسانی شد." });
     }
 
     // ---------------- Token usage reports ----------------

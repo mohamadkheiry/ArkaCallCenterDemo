@@ -116,11 +116,11 @@ public class OpenAiService : IOpenAiService
     private static int GetInt(JsonElement obj, string name)
         => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
 
-    public async Task<byte[]> TextToSpeechAsync(string text, string voice, CancellationToken ct = default)
+    public async Task<byte[]> TextToSpeechAsync(string text, string voice, string format = "mp3", CancellationToken ct = default)
     {
         var model = await _settings.GetAsync(SettingKeys.OpenAiTtsModel, "gpt-4o-mini-tts", ct);
         var req = await BuildAsync(HttpMethod.Post, "/audio/speech",
-            new { model, voice, input = text, response_format = "mp3" }, ct);
+            new { model, voice, input = text, response_format = format }, ct);
         using var res = await _http.SendAsync(req, ct);
         await EnsureOkAsync(res, ct);
         return await res.Content.ReadAsByteArrayAsync(ct);

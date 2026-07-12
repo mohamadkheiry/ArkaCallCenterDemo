@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IExtensionAllocator, ExtensionAllocator>();
         services.AddScoped<IAsteriskProvisioningService, AsteriskProvisioningService>();
         services.AddScoped<ISmartPhoneService, SmartPhoneService>();
+        services.AddScoped<IDemoService, DemoService>();
 
         return services;
     }

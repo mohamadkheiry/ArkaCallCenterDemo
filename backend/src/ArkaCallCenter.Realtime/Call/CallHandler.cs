@@ -28,7 +28,7 @@ public class CallHandler
 
     public async Task HandleAsync(TcpClient client, CancellationToken ct)
     {
-        using var _ = client;
+        using var tcp = client;
         await using var stream = new NetworkStream(client.GetStream().Socket, ownsSocket: false);
 
         // اولین فریم باید UUID باشد تا شماره‌ی داخلی را بفهمیم.
@@ -67,6 +67,15 @@ public class CallHandler
         var limitMinutes = sp.User.CallMinuteLimit
             ?? await settings.GetIntAsync(SettingKeys.DefaultCallMinuteLimit, 30, ct);
 
+        // موسیقی انتظار (حین فکر کردن AI) — SLIN 8kHz خام از تنظیمات
+        byte[]? holdMusic = null;
+        if ((await settings.GetAsync(SettingKeys.HoldMusicEnabled, "false", ct)) == "true")
+        {
+            var holdPath = await settings.GetAsync(SettingKeys.HoldMusicPath, null, ct);
+            if (!string.IsNullOrEmpty(holdPath) && File.Exists(holdPath))
+                holdMusic = await File.ReadAllBytesAsync(holdPath, ct);
+        }
+
         var apiKey = await settings.GetAsync(SettingKeys.OpenAiApiKey, null, ct);
         var baseUrl = await settings.GetAsync(SettingKeys.OpenAiBaseUrl, "https://api.openai.com/v1", ct) ?? "https://api.openai.com/v1";
         var model = await settings.GetAsync(SettingKeys.OpenAiRealtimeModel, "gpt-realtime", ct) ?? "gpt-realtime";
@@ -90,11 +99,54 @@ public class CallHandler
             Interlocked.Add(ref usageTotal, t);
         };
 
+        // نوشتن روی AudioSocket باید هماهنگ باشد (صدای AI و موسیقی انتظار همزمان تلاش می‌کنند بنویسند)
+        var writeLock = new SemaphoreSlim(1, 1);
+        CancellationTokenSource? holdCts = null;
+
+        async Task WriteLockedAsync(byte[] slin)
+        {
+            await writeLock.WaitAsync(ct);
+            try { await AudioSocketProtocol.WriteAudioAsync(stream, slin, ct); }
+            finally { writeLock.Release(); }
+        }
+
+        void StopHold() { try { holdCts?.Cancel(); } catch { } holdCts = null; }
+
+        void StartHold()
+        {
+            if (holdMusic is null || holdMusic.Length == 0) return;
+            StopHold();
+            holdCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var token = holdCts.Token;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    const int frame = 320; // ۲۰ms در SLIN 8kHz
+                    while (!token.IsCancellationRequested)
+                    {
+                        for (var off = 0; off < holdMusic.Length && !token.IsCancellationRequested; off += frame)
+                        {
+                            var size = Math.Min(frame, holdMusic.Length - off);
+                            var chunk = new byte[size];
+                            Array.Copy(holdMusic, off, chunk, 0, size);
+                            await WriteLockedAsync(chunk);
+                            await Task.Delay(20, token); // پخش هم‌زمان (real-time)
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, token);
+        }
+
         realtime.OnAudioDelta += async pcm24k =>
         {
+            StopHold(); // صدای AI رسید → موسیقی انتظار قطع شود
             var slin8k = AudioResampler.Downsample24kTo8k(pcm24k);
-            await AudioSocketProtocol.WriteAudioAsync(stream, slin8k, ct);
+            await WriteLockedAsync(slin8k);
         };
+        realtime.OnUserSpeechStopped += () => { StartHold(); return Task.CompletedTask; };
+        realtime.OnResponseDone += () => { StopHold(); return Task.CompletedTask; };
         realtime.OnAssistantText += text =>
         {
             transcript.Append(text);
@@ -132,6 +184,7 @@ public class CallHandler
         }
 
         sw.Stop();
+        StopHold();
         await LogCallAsync(sp.Id, startedAt, (int)sw.Elapsed.TotalSeconds, answeredFromKb, transcript.ToString());
 
         if (Interlocked.Read(ref usageTotal) > 0)

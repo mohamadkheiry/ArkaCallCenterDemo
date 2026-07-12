@@ -10,30 +10,33 @@ namespace ArkaCallCenter.Infrastructure.Services;
 /// </summary>
 public class ExtensionAllocator : IExtensionAllocator
 {
-    private const int Min = 1000;
-    private const int Max = 9999;
+    private const int UserMin = 1000;
+    private const int UserMax = 9999;
+    private const int DemoMin = 1;
+    private const int DemoMax = 999;
 
     private readonly ArkaDbContext _db;
     public ExtensionAllocator(ArkaDbContext db) => _db = db;
 
-    public async Task<int> AllocateAsync(CancellationToken ct = default)
+    public Task<int> AllocateAsync(CancellationToken ct = default) => AllocateInRangeAsync(UserMin, UserMax, ct);
+    public Task<int> AllocateDemoAsync(CancellationToken ct = default) => AllocateInRangeAsync(DemoMin, DemoMax, ct);
+
+    private async Task<int> AllocateInRangeAsync(int min, int max, CancellationToken ct)
     {
         var used = await _db.SmartPhones
             .Where(s => s.Extension != null)
             .Select(s => s.Extension!.Value)
             .ToListAsync(ct);
         var usedSet = new HashSet<int>(used);
-        var total = Max - Min + 1;
-        if (usedSet.Count >= total)
-            throw new InvalidOperationException("هیچ داخلی آزادی در بازه‌ی ۱۰۰۰–۹۹۹۹ باقی نمانده است.");
+        if (usedSet.Count(e => e >= min && e <= max) >= (max - min + 1))
+            throw new InvalidOperationException($"هیچ داخلی آزادی در بازه‌ی {min}–{max} باقی نمانده است.");
 
-        // چند تلاش تصادفی؛ در صورت شکست، اولین آزاد را برمی‌داریم.
         for (var i = 0; i < 50; i++)
         {
-            var candidate = Random.Shared.Next(Min, Max + 1);
+            var candidate = Random.Shared.Next(min, max + 1);
             if (!usedSet.Contains(candidate)) return candidate;
         }
-        for (var e = Min; e <= Max; e++)
+        for (var e = min; e <= max; e++)
             if (!usedSet.Contains(e)) return e;
 
         throw new InvalidOperationException("تخصیص داخلی ناموفق بود.");

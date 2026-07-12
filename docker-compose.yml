@@ -28,6 +28,9 @@ services:
       Jwt__Audience: ArkaCallCenter
       SuperAdmin__PhoneNumber: ${SUPERADMIN_PHONE:-}
       FrontendOrigin: ${FRONTEND_ORIGIN:-http://localhost:8081}
+      Asterisk__Host: ${ASTERISK_HOST:-}
+      Asterisk__SshUser: ${ASTERISK_SSH_USER:-}
+      Asterisk__SshPassword: ${ASTERISK_SSH_PASSWORD:-}
     volumes:
       - uploads:/app/uploads
     ports:
@@ -45,6 +48,9 @@ services:
       ConnectionStrings__Default: "Server=db;Port=3306;Database=arka_callcenter;User=root;Password=${MYSQL_ROOT_PASSWORD:-arka_root_pass};TreatTinyAsBoolean=true;"
       Realtime__AudioSocketHost: "0.0.0.0"
       Realtime__AudioSocketPort: "9092"
+      Storage__UploadsPath: "/app/uploads"
+    volumes:
+      - uploads:/app/uploads
     ports:
       - "${AUDIOSOCKET_PORT:-9092}:9092"
     restart: unless-stopped

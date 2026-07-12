@@ -24,6 +24,13 @@ public class User : BaseEntity
     /// <summary>مجموع دقایق مصرف‌شده (برای اعمال محدودیت).</summary>
     public int UsedMinutes { get; set; }
 
+    /// <summary>
+    /// دمو: یک پروفایل آزمایشی که سوپرادمین می‌سازد و مدیریت می‌کند (داخلی ۱–۹۹۹).
+    /// دموها لاگین ندارند و PhoneNumber آن‌ها مقدار مصنوعی (demo{ext}) است.
+    /// </summary>
+    public bool IsDemo { get; set; }
+    public string? DemoLabel { get; set; }
+
     public SmartPhone? SmartPhone { get; set; }
     public KnowledgeBase? KnowledgeBase { get; set; }
 }

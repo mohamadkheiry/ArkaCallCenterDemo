@@ -114,7 +114,7 @@ public class SmartPhoneService : ISmartPhoneService
         try
         {
             var voice = await ResolveVoiceAsync(userId, ct);
-            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, ct);
+            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, ct: ct);
             var path = Path.Combine(_uploadsPath, $"welcome_{userId}.mp3");
             await File.WriteAllBytesAsync(path, audio, ct);
             sp.WelcomeAudioPath = path;
