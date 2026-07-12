@@ -262,7 +262,9 @@ public class AdminController : ControllerBase
     [HttpGet("users")]
     public async Task<IActionResult> GetUsers(CancellationToken ct)
     {
+        // دموها در تب مخصوص خودشان مدیریت می‌شوند و اینجا نمایش داده نمی‌شوند.
         var users = await _db.Users.AsNoTracking()
+            .Where(u => !u.IsDemo)
             .Include(u => u.SmartPhone)
             .OrderByDescending(u => u.CreatedAt)
             .Select(u => new
@@ -291,6 +293,23 @@ public class AdminController : ControllerBase
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(new { message = "محدودیت کاربر به‌روزرسانی شد." });
+    }
+
+    /// <summary>ویرایش اطلاعات کاربر توسط سوپرادمین: نام، نام‌خانوادگی، برند، وضعیت فعال و محدودیت.</summary>
+    [HttpPut("users/{id:int}")]
+    public async Task<IActionResult> UpdateUser(int id, UpdateUserRequest req, CancellationToken ct)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null) return NotFound();
+
+        if (req.FirstName is not null) user.FirstName = req.FirstName.Trim();
+        if (req.LastName is not null) user.LastName = req.LastName.Trim();
+        if (req.BrandName is not null) user.BrandName = req.BrandName.Trim();
+        if (req.IsActive.HasValue) user.IsActive = req.IsActive.Value;
+        user.CallMinuteLimit = req.CallMinuteLimit;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { message = "اطلاعات کاربر به‌روزرسانی شد." });
     }
 
     // ---------------- Demos (keys 1..999) ----------------
