@@ -1,0 +1,48 @@
+using ArkaCallCenter.Api.Extensions;
+using ArkaCallCenter.Api.Models;
+using ArkaCallCenter.Core.Abstractions;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace ArkaCallCenter.Api.Controllers;
+
+[ApiController]
+[Route("api/auth")]
+public class AuthController : ControllerBase
+{
+    private readonly IAuthService _auth;
+    public AuthController(IAuthService auth) => _auth = auth;
+
+    /// <summary>ارسال کد یک‌بارمصرف به شماره موبایل.</summary>
+    [HttpPost("request-otp")]
+    public async Task<IActionResult> RequestOtp(RequestOtpRequest req, CancellationToken ct)
+    {
+        var (ok, error) = await _auth.RequestOtpAsync(req.PhoneNumber, ct);
+        return ok ? Ok(new { message = "کد ارسال شد." }) : BadRequest(new { error });
+    }
+
+    /// <summary>اعتبارسنجی کد و صدور توکن.</summary>
+    [HttpPost("verify-otp")]
+    public async Task<IActionResult> VerifyOtp(VerifyOtpRequest req, CancellationToken ct)
+    {
+        var result = await _auth.VerifyOtpAsync(req.PhoneNumber, req.Code, ct);
+        if (!result.Success) return BadRequest(new { error = result.Error });
+        return Ok(new
+        {
+            token = result.Token,
+            isNewUser = result.IsNewUser,
+            profileCompleted = result.ProfileCompleted,
+        });
+    }
+
+    /// <summary>تکمیل پروفایل پس از اولین ورود (نام/نام‌خانوادگی/برند).</summary>
+    [Authorize]
+    [HttpPost("profile")]
+    public async Task<IActionResult> CompleteProfile(CompleteProfileRequest req, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        var user = await _auth.CompleteProfileAsync(userId, req.FirstName, req.LastName, req.BrandName, ct);
+        if (user is null) return NotFound(new { error = "کاربر یافت نشد." });
+        return Ok(new { user.FirstName, user.LastName, user.BrandName, user.ProfileCompleted });
+    }
+}

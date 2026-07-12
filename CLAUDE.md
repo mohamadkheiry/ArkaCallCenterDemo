@@ -144,7 +144,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 ## ۹. وضعیت فازها  ← **بعد از هر گام به‌روز کن**
 
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
-- [ ] **فاز ۱ — بک‌اند پایه:** solution، Core entities، Infrastructure DbContext/MySQL، Api skeleton، Auth OTP.
+- [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
 - [ ] **فاز ۲ — فرانت پایه:** React+Tailwind+Vazirmatn RTL، صفحه‌ی لاگین/OTP، layout داشبورد.
 - [ ] **فاز ۳ — پایگاه دانش + RAG + Moderation.**
 - [ ] **فاز ۴ — SMS.ir + موتور رویداد→پیامک + پنل سوپرادمین.**

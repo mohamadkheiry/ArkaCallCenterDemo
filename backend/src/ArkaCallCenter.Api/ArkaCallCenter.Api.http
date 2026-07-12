@@ -1,0 +1,6 @@
+@ArkaCallCenter.Api_HostAddress = http://localhost:5128
+
+GET {{ArkaCallCenter.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
