@@ -97,6 +97,7 @@ public class ArkaDbContext : DbContext
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
             e.Property(x => x.DisplayName).HasMaxLength(150).IsRequired();
             e.Property(x => x.Provider).HasMaxLength(50);
+            e.Property(x => x.SampleAudioPath).HasMaxLength(500);
         });
 
         b.Entity<TokenUsage>(e =>

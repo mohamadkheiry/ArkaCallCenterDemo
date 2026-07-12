@@ -18,6 +18,7 @@ import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
 import { Button, Card, cn } from '../components/ui'
+import VoiceSampleButton from '../components/VoiceSampleButton'
 
 const MAX_CHARS = 2000
 const MAX_FILE = 100 * 1024
@@ -26,6 +27,7 @@ interface Voice {
   name: string
   displayName: string
   isDefault: boolean
+  hasSample: boolean
 }
 
 const STEPS = [
@@ -379,14 +381,17 @@ export default function SetupWizard() {
                       <div className="text-xs text-slate-400" dir="ltr">{v.name}</div>
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      'grid h-6 w-6 place-items-center rounded-full border',
-                      voice === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
-                    )}
-                  >
-                    <Check size={13} />
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <VoiceSampleButton voiceName={v.name} hasSample={v.hasSample} />
+                    <span
+                      className={cn(
+                        'grid h-6 w-6 place-items-center rounded-full border',
+                        voice === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
+                      )}
+                    >
+                      <Check size={13} />
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>

@@ -123,7 +123,72 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetVoices(CancellationToken ct)
     {
         var list = await _db.VoiceOptions.AsNoTracking().OrderBy(v => v.Id).ToListAsync(ct);
-        return Ok(list.Select(v => new { v.Name, v.DisplayName, v.Enabled, v.IsDefault }));
+        var sampleText = await _settings.GetAsync(SettingKeys.VoiceSampleText,
+            "سلام! من دستیار هوشمند شما هستم و آماده‌ام به سوالات تماس‌گیرندگان پاسخ بدهم.", ct);
+        return Ok(new
+        {
+            sampleText,
+            voices = list.Select(v => new
+            {
+                v.Name, v.DisplayName, v.Enabled, v.IsDefault,
+                hasSample = !string.IsNullOrEmpty(v.SampleAudioPath) && System.IO.File.Exists(v.SampleAudioPath),
+            }),
+        });
+    }
+
+    public record GenerateSampleRequest(string? Text);
+
+    /// <summary>تولید نمونه‌صدای یک گوینده با TTS (متن ورودی یا متن نمونه‌ی سراسری).</summary>
+    [HttpPost("voices/{name}/sample-generate")]
+    public async Task<IActionResult> GenerateVoiceSample(string name, GenerateSampleRequest req, CancellationToken ct)
+    {
+        var voice = await _db.VoiceOptions.FirstOrDefaultAsync(v => v.Name == name, ct);
+        if (voice is null) return NotFound(new { error = "گوینده یافت نشد." });
+
+        var text = string.IsNullOrWhiteSpace(req.Text)
+            ? await _settings.GetAsync(SettingKeys.VoiceSampleText,
+                "سلام! من دستیار هوشمند شما هستم و آماده‌ام به سوالات تماس‌گیرندگان پاسخ بدهم.", ct)
+            : req.Text!.Trim();
+
+        // متن نمونه را برای دفعات بعد ذخیره کن
+        if (!string.IsNullOrWhiteSpace(req.Text))
+            await _settings.SetAsync(SettingKeys.VoiceSampleText, req.Text!.Trim(), false, ct);
+
+        try
+        {
+            var audio = await _openai.TextToSpeechAsync(text!, name, ct: ct);
+            var path = Path.Combine(_uploadsPath, $"voice_sample_{name}.mp3");
+            await System.IO.File.WriteAllBytesAsync(path, audio, ct);
+            voice.SampleAudioPath = path;
+            voice.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { message = $"نمونه‌صدای «{voice.DisplayName}» تولید شد." });
+        }
+        catch
+        {
+            return BadRequest(new { error = "تولید صوت انجام نشد؛ کلید OpenAI را بررسی کنید." });
+        }
+    }
+
+    /// <summary>آپلود دستی فایل نمونه‌صدا (mp3) برای یک گوینده.</summary>
+    [HttpPost("voices/{name}/sample-file")]
+    [RequestSizeLimit(5_000_000)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadVoiceSample(string name, IFormFile file, CancellationToken ct)
+    {
+        var voice = await _db.VoiceOptions.FirstOrDefaultAsync(v => v.Name == name, ct);
+        if (voice is null) return NotFound(new { error = "گوینده یافت نشد." });
+        if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
+        if (!file.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "فقط فایل mp3 مجاز است." });
+
+        var path = Path.Combine(_uploadsPath, $"voice_sample_{name}.mp3");
+        await using (var fs = System.IO.File.Create(path))
+            await file.CopyToAsync(fs, ct);
+        voice.SampleAudioPath = path;
+        voice.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { message = "نمونه‌صدا بارگذاری شد." });
     }
 
     [HttpPut("voices")]

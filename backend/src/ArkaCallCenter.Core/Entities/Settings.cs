@@ -45,4 +45,7 @@ public class VoiceOption : BaseEntity
     public string Provider { get; set; } = "openai";
     public bool IsDefault { get; set; }
     public bool Enabled { get; set; } = true;
+
+    /// <summary>مسیر فایل نمونه‌صدای این گوینده (mp3) برای پیش‌نمایش کاربر.</summary>
+    public string? SampleAudioPath { get; set; }
 }

@@ -17,6 +17,7 @@ public static class SettingKeys
 
     // Voice / defaults
     public const string DefaultVoiceName = "voice.default";
+    public const string VoiceSampleText = "voice.sampleText"; // متن نمونه‌صدای گوینده‌ها
 
     // Limits
     public const string DefaultCallMinuteLimit = "limits.defaultCallMinutes";

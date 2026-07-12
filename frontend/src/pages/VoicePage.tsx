@@ -3,11 +3,13 @@ import { Check, Mic } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { Button, cn } from '../components/ui'
+import VoiceSampleButton from '../components/VoiceSampleButton'
 
 interface Voice {
   name: string
   displayName: string
   isDefault: boolean
+  hasSample: boolean
 }
 
 export default function VoicePage() {
@@ -73,14 +75,17 @@ export default function VoicePage() {
                 </div>
               </div>
             </div>
-            <span
-              className={cn(
-                'grid h-6 w-6 place-items-center rounded-full border',
-                selected === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
-              )}
-            >
-              <Check size={13} />
-            </span>
+            <div className="flex items-center gap-2">
+              <VoiceSampleButton voiceName={v.name} hasSample={v.hasSample} />
+              <span
+                className={cn(
+                  'grid h-6 w-6 place-items-center rounded-full border',
+                  selected === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
+                )}
+              >
+                <Check size={13} />
+              </span>
+            </div>
           </button>
         ))}
       </div>
