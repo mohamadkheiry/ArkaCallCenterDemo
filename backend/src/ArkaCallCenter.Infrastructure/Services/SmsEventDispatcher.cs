@@ -37,14 +37,15 @@ public class SmsEventDispatcher : ISmsEventDispatcher
             .Where(r => r.EventType == eventType)
             .ToListAsync(ct);
 
+        // هر دو مقصد مستقل‌اند: هم می‌توان به خودِ کاربر ارسال کرد و هم به لیست شماره‌های ثابت
+        // (یا فقط یکی، یا هیچ‌کدام). ترکیب همه‌ی رکوردهای این رویداد ساخته می‌شود.
         var numbers = new HashSet<string>();
         foreach (var r in recipients)
         {
             if (r.UseUserOwnNumber && !string.IsNullOrWhiteSpace(relatedUserPhone))
-            {
                 numbers.Add(relatedUserPhone!);
-            }
-            else if (!string.IsNullOrWhiteSpace(r.PhoneNumber))
+
+            if (!string.IsNullOrWhiteSpace(r.PhoneNumber))
             {
                 // چند شماره‌ی جداشده با , ، یا خط جدید
                 foreach (var n in r.PhoneNumber.Split(new[] { ',', '،', '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

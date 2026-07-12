@@ -169,6 +169,8 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 
 - [x] **افزوده — تغییر شماره/لوگو/آواتار:** تغییر شماره‌ی هر کاربر با OTP به شماره‌ی جدید (`IAuthService.RequestPhoneChangeAsync`/`ConfirmPhoneChangeAsync`، endpointهای `me/phone/request-change` و `confirm-change`)؛ آواتار کاربر (`User.AvatarPath`، `POST/DELETE me/avatar`، استریم ناشناس `GET /api/avatars/{id}`)؛ لوگوی سامانه (`SettingKeys.SystemLogoPath`، `POST/DELETE admin/logo`، استریم `GET /api/branding/logo` + `/info`). فرانت: صفحه‌ی `/profile` (آواتار + تغییر شماره دومرحله‌ای)، آواتار کلیک‌پذیر در هدر، `Logo` با fallback به لوگوی آپلودی، تب ادمین «برندینگ». migration `UserAvatarAndLogo`. همه end-to-end تست شد (تغییر شماره، آپلود/استریم آواتار و لوگو).
 
+- [x] **رفع — گیرندگان پیامک رویدادها مستقل:** `SmsEventDispatcher` از `else if` به دو `if` مستقل تغییر کرد تا بتوان همزمان به «خودِ کاربر» **و** «لیست شماره‌های ثابت» ارسال کرد (یا فقط یکی، یا با غیرفعال‌کردن رویداد به هیچ‌کس). فرانت TemplatesTab: فیلد شماره‌ها دیگر disable نمی‌شود؛ متن راهنمای پویا (`recipientHint`) وضعیت مقصد را نشان می‌دهد. تست: KnowledgeBaseRejected با user+شماره ثابت → پیامک به هر دو رفت. ⚠️ PUT `admin/sms-events` کل لیست را جایگزین می‌کند (UI همیشه همه‌ی رویدادها را می‌فرستد).
+
 ## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار + UX + پروفایل/برندینگ کامل و پوش‌شده‌اند.
 گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 
