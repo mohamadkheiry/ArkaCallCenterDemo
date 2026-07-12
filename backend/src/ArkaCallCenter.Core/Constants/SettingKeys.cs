@@ -40,4 +40,7 @@ public static class SettingKeys
     // موسیقی انتظار (حین «فکر کردن» هوش مصنوعی)
     public const string HoldMusicEnabled = "hold.enabled";
     public const string HoldMusicPath = "hold.slinPath"; // SLIN 8kHz raw روی worker
+
+    // ویدیوی آموزشی (آپلود توسط سوپرادمین، نمایش به کاربران)
+    public const string TutorialVideoPath = "tutorial.videoPath";
 }

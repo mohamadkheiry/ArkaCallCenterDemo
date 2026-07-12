@@ -162,7 +162,10 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
   - **ایزابل:** `telephony/extensions_arka.conf` (contextهای `arka-main`+`arka-ai`)، `pjsip_custom.conf`، و `telephony/README.md` (راهنمای کامل: AudioSocket، DID→IVR، SSH، آپلود صوت). `AudioConvert` (WAV/SLIN/resample) در Infrastructure؛ `UploadSoundAsync` (SCP) در provisioning.
   - migration `DemoAndReception`؛ volume آپلود مشترک بین api و realtime در compose.
 
-## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار کامل و پوش‌شده‌اند.
+- [x] **افزوده — UX حرفه‌ای فرانت:** آیکون‌های lucide-react به‌جای ایموجی در کل داشبورد؛ **تور راهنمای کاربر** (`Tour.tsx`، spotlight روی آیتم‌های سایدبار با `data-tour`، اجرای خودکار اولین ورود + دکمه‌ی ؟ در هدر، کلید `arka_tour_done` در localStorage)؛ **ویزارد راه‌اندازی** (`/setup` — SetupWizard.tsx: شروع/ویدیو → پایگاه دانش → پیام خوش‌آمد → گوینده → ساخت تلفن، با استپر)؛ **ویدیوی آموزشی** (آپلود mp4/webm تا ۳۰۰MB توسط سوپرادمین در تب دموها → `POST/DELETE /api/admin/tutorial-video`؛ استریم ناشناس `GET /api/tutorial-video` با range؛ نمایش در داشبورد کاربر و گام اول ویزارد). nginx `client_max_body_size 300m`؛ FormOptions ۳۵۰MB.
+- ⚠️ **درس عملیاتی:** `docker compose up -d --build` گاهی کانتینر را جایگزین نمی‌کند — همیشه `docker compose build X && docker compose up -d --force-recreate --no-deps X`.
+
+## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار + UX (تور/ویزارد/ویدیو) کامل و پوش‌شده‌اند.
 گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 
 ---

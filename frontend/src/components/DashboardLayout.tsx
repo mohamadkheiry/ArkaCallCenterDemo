@@ -1,32 +1,56 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  BookOpenText,
+  Phone,
+  Mic,
+  History,
+  ShieldCheck,
+  LogOut,
+  Menu,
+  CircleHelp,
+  Sparkles,
+} from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { Logo, cn } from './ui'
+import Tour, { TOUR_DONE_KEY } from './Tour'
 
 interface NavItem {
   to: string
   label: string
-  icon: string
+  icon: React.ComponentType<{ size?: number | string; className?: string }>
+  tour: string
   end?: boolean
   adminOnly?: boolean
 }
 
 const NAV: NavItem[] = [
-  { to: '/', label: 'داشبورد', icon: '🏠', end: true },
-  { to: '/knowledge-base', label: 'پایگاه دانش', icon: '📚' },
-  { to: '/smartphone', label: 'تلفن هوشمند', icon: '☎️' },
-  { to: '/voice', label: 'صدای گوینده', icon: '🎙️' },
-  { to: '/calls', label: 'تماس‌ها', icon: '📞' },
-  { to: '/admin', label: 'پنل سوپرادمین', icon: '🛡️', adminOnly: true },
+  { to: '/', label: 'داشبورد', icon: LayoutDashboard, tour: 'dashboard', end: true },
+  { to: '/setup', label: 'راه‌اندازی سریع', icon: Sparkles, tour: 'setup' },
+  { to: '/knowledge-base', label: 'پایگاه دانش', icon: BookOpenText, tour: 'kb' },
+  { to: '/smartphone', label: 'تلفن هوشمند', icon: Phone, tour: 'smartphone' },
+  { to: '/voice', label: 'صدای گوینده', icon: Mic, tour: 'voice' },
+  { to: '/calls', label: 'تماس‌ها', icon: History, tour: 'calls' },
+  { to: '/admin', label: 'پنل سوپرادمین', icon: ShieldCheck, tour: 'admin', adminOnly: true },
 ]
 
 export default function DashboardLayout() {
   const { me, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
   const isAdmin = me?.role === 'SuperAdmin'
 
   const items = NAV.filter((n) => !n.adminOnly || isAdmin)
+
+  // اولین ورود: تور راهنما به‌صورت خودکار
+  useEffect(() => {
+    if (!localStorage.getItem(TOUR_DONE_KEY)) {
+      const t = setTimeout(() => setTourOpen(true), 600)
+      return () => clearTimeout(t)
+    }
+  }, [])
 
   return (
     <div className="flex min-h-screen">
@@ -47,17 +71,16 @@ export default function DashboardLayout() {
                 key={n.to}
                 to={n.to}
                 end={n.end}
+                data-tour={n.tour}
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-brand-50 text-brand-700'
-                      : 'text-slate-600 hover:bg-slate-50',
+                    isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50',
                   )
                 }
               >
-                <span className="text-lg">{n.icon}</span>
+                <n.icon size={19} className="shrink-0" />
                 {n.label}
               </NavLink>
             ))}
@@ -69,35 +92,46 @@ export default function DashboardLayout() {
             }}
             className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
           >
-            <span className="text-lg">↩</span>
+            <LogOut size={19} className="shrink-0" />
             خروج
           </button>
         </div>
       </aside>
 
       {open && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden"
-          onClick={() => setOpen(false)}
-        />
+        <div className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)} />
       )}
 
       {/* محتوا */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/70 px-5 backdrop-blur-md">
-          <button
-            className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 lg:hidden"
-            onClick={() => setOpen(true)}
-          >
-            ☰
-          </button>
-          <div className="hidden text-sm text-slate-500 lg:block">
-            خوش آمدید، <span className="font-semibold text-slate-800">{me?.firstName} {me?.lastName}</span>
+          <div className="flex items-center gap-3">
+            <button
+              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 lg:hidden"
+              onClick={() => setOpen(true)}
+              aria-label="منو"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="hidden text-sm text-slate-500 lg:block">
+              خوش آمدید،{' '}
+              <span className="font-semibold text-slate-800">
+                {me?.firstName} {me?.lastName}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTourOpen(true)}
+              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600"
+              title="راهنمای سامانه"
+              data-tour="help"
+            >
+              <CircleHelp size={19} />
+            </button>
             <div className="text-left">
               <div className="text-sm font-semibold text-slate-800">{me?.brandName}</div>
-              <div className="text-xs text-slate-400">{me?.role === 'SuperAdmin' ? 'سوپرادمین' : 'کاربر'}</div>
+              <div className="text-xs text-slate-400">{isAdmin ? 'سوپرادمین' : 'کاربر'}</div>
             </div>
             <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
               {me?.firstName?.[0] ?? '؟'}
@@ -109,6 +143,8 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      <Tour open={tourOpen} isAdmin={isAdmin} onClose={() => setTourOpen(false)} />
     </div>
   )
 }

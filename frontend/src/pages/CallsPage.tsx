@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Inbox } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card, cn } from '../components/ui'
 import { toFa } from '../lib/format'
@@ -40,7 +41,9 @@ export default function CallsPage() {
           <p className="text-sm text-slate-400">در حال بارگذاری…</p>
         ) : calls.length === 0 ? (
           <div className="py-10 text-center">
-            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-slate-50 text-2xl">📭</div>
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-slate-50 text-slate-400">
+              <Inbox size={26} />
+            </div>
             <p className="text-sm text-slate-500">هنوز تماسی ثبت نشده است.</p>
           </div>
         ) : (

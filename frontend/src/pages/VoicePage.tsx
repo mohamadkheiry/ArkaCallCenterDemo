@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Check, Mic } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { Button, cn } from '../components/ui'
@@ -61,7 +62,9 @@ export default function VoicePage() {
             )}
           >
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-lg shadow-sm">🎙️</span>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-sm">
+                <Mic size={18} />
+              </span>
               <div>
                 <div className="text-sm font-semibold text-slate-800">{v.displayName}</div>
                 <div className="text-xs text-slate-400" dir="ltr">
@@ -72,11 +75,11 @@ export default function VoicePage() {
             </div>
             <span
               className={cn(
-                'grid h-6 w-6 place-items-center rounded-full border text-xs',
+                'grid h-6 w-6 place-items-center rounded-full border',
                 selected === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
               )}
             >
-              ✓
+              <Check size={13} />
             </span>
           </button>
         ))}

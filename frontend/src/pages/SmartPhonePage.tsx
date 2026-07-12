@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Check as CheckIcon, Dot, PhoneCall } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
@@ -17,11 +18,11 @@ function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
     <div className="flex items-center gap-3">
       <span
         className={cn(
-          'grid h-6 w-6 place-items-center rounded-full text-xs',
+          'grid h-6 w-6 place-items-center rounded-full',
           ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400',
         )}
       >
-        {ok ? '✓' : '•'}
+        {ok ? <CheckIcon size={13} /> : <Dot size={16} />}
       </span>
       <span className={cn('text-sm', ok ? 'text-slate-700' : 'text-slate-400')}>{children}</span>
     </div>
@@ -93,7 +94,9 @@ export default function SmartPhonePage() {
       {isActive && (
         <Card className="animate-in border-emerald-200 bg-gradient-to-l from-emerald-50 to-white">
           <div className="flex items-center gap-4">
-            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-100 text-2xl">☎️</span>
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-100 text-emerald-600">
+              <PhoneCall size={26} />
+            </span>
             <div>
               <div className="text-sm text-slate-500">داخلی اختصاصی شما</div>
               <div className="text-3xl font-extrabold tracking-wider text-emerald-700">{toFa(sp!.extension!)}</div>

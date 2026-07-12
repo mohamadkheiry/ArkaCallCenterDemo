@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Music } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { Button, Card } from '../../components/ui'
 
@@ -119,7 +120,7 @@ export default function ReceptionTab() {
         </p>
         <div className="mt-4 space-y-4">
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-8 text-center hover:border-brand-300">
-            <span className="text-2xl">🎵</span>
+            <Music size={30} className="text-brand-500" />
             <span className="text-sm font-medium text-slate-700">بارگذاری فایل WAV موسیقی انتظار</span>
             <span className="text-xs text-slate-400">{holdHasFile ? 'فایل فعلی موجود است' : 'هنوز فایلی بارگذاری نشده'}</span>
             <input

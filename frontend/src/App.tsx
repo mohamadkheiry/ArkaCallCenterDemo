@@ -5,6 +5,7 @@ import DashboardLayout from './components/DashboardLayout'
 import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardHome from './pages/DashboardHome'
+import SetupWizard from './pages/SetupWizard'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
 import SmartPhonePage from './pages/SmartPhonePage'
 import VoicePage from './pages/VoicePage'
@@ -42,6 +43,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
+        <Route path="setup" element={<SetupWizard />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
         <Route path="smartphone" element={<SmartPhonePage />} />
         <Route path="voice" element={<VoicePage />} />

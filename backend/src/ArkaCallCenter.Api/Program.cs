@@ -18,6 +18,10 @@ builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters
         .Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
+// آپلود ویدیوی آموزشی تا ۳۰۰ مگابایت (سقف per-action با RequestSizeLimit کنترل می‌شود)
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+    o.MultipartBodyLengthLimit = 350_000_000);
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

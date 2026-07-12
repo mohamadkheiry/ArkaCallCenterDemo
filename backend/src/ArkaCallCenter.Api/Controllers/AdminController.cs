@@ -339,6 +339,39 @@ public class AdminController : ControllerBase
         return Ok(new { message = "به‌روزرسانی شد." });
     }
 
+    // ---------------- Tutorial video (uploaded by super admin, shown to users) ----------------
+    [HttpPost("tutorial-video")]
+    [RequestSizeLimit(314_572_800)] // 300MB
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadTutorialVideo(IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".mp4" or ".webm"))
+            return BadRequest(new { error = "فقط فرمت mp4 یا webm مجاز است." });
+
+        // حذف فایل قبلی
+        var old = await _settings.GetAsync(SettingKeys.TutorialVideoPath, null, ct);
+        if (!string.IsNullOrEmpty(old) && System.IO.File.Exists(old))
+            try { System.IO.File.Delete(old); } catch { /* ignore */ }
+
+        var path = Path.Combine(_uploadsPath, $"tutorial{ext}");
+        await using (var fs = System.IO.File.Create(path))
+            await file.CopyToAsync(fs, ct);
+        await _settings.SetAsync(SettingKeys.TutorialVideoPath, path, false, ct);
+        return Ok(new { message = "ویدیوی آموزشی بارگذاری شد.", sizeBytes = file.Length });
+    }
+
+    [HttpDelete("tutorial-video")]
+    public async Task<IActionResult> DeleteTutorialVideo(CancellationToken ct)
+    {
+        var path = await _settings.GetAsync(SettingKeys.TutorialVideoPath, null, ct);
+        if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            try { System.IO.File.Delete(path); } catch { /* ignore */ }
+        await _settings.SetAsync(SettingKeys.TutorialVideoPath, null, false, ct);
+        return Ok(new { message = "ویدیوی آموزشی حذف شد." });
+    }
+
     // ---------------- Token usage reports ----------------
     /// <summary>مصرف توکن به تفکیک کلید API (به‌همراه تاریخ اولین/آخرین استفاده).</summary>
     [HttpGet("usage/keys")]

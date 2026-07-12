@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CloudUpload, FileText, FileType2 } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
 import { Button, Card, cn } from '../components/ui'
@@ -103,8 +104,8 @@ export default function KnowledgeBasePage() {
         <Card className="animate-in">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-lg">
-                {kb.sourceType === 'File' ? '📄' : '📝'}
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
+                {kb.sourceType === 'File' ? <FileType2 size={19} /> : <FileText size={19} />}
               </span>
               <div>
                 <div className="text-sm font-semibold text-slate-800">
@@ -166,7 +167,7 @@ export default function KnowledgeBasePage() {
             }}
             onDragOver={(e) => e.preventDefault()}
           >
-            <span className="text-3xl">☁️</span>
+            <CloudUpload size={34} className="text-brand-500" />
             <span className="text-sm font-medium text-slate-700">فایل را اینجا رها کنید یا کلیک کنید</span>
             <span className="text-xs text-slate-400">txt یا pdf · حداکثر ۱۰۰ کیلوبایت</span>
             <input

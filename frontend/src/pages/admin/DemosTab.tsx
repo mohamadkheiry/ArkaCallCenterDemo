@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { FlaskConical, PlayCircle, Trash2, Video } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { Button, Card, TextInput, cn } from '../../components/ui'
 import { toFa } from '../../lib/format'
@@ -72,7 +73,9 @@ function DemoRow({ demo, voices, onChanged }: { demo: Demo; voices: Voice[]; onC
     <div className="rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-lg">🧪</span>
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600">
+            <FlaskConical size={19} />
+          </span>
           <div>
             <div className="text-sm font-bold text-slate-800">{demo.label}</div>
             <div className="text-xs text-slate-400">
@@ -130,6 +133,89 @@ function DemoRow({ demo, voices, onChanged }: { demo: Demo; voices: Voice[]; onC
   )
 }
 
+function TutorialVideoCard() {
+  const [available, setAvailable] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    api.get('/api/tutorial-video/info').then(({ data }) => setAvailable(!!data.available))
+  }, [refreshKey])
+
+  async function upload(file: File) {
+    setMsg('')
+    const ok = ['.mp4', '.webm'].some((e) => file.name.toLowerCase().endsWith(e))
+    if (!ok) return setMsg('فقط فرمت mp4 یا webm مجاز است.')
+    setBusy(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await api.post('/api/admin/tutorial-video', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setMsg(data.message)
+      setRefreshKey((k) => k + 1)
+    } catch (e) {
+      setMsg(apiError(e))
+    } finally {
+      setBusy(false)
+      if (ref.current) ref.current.value = ''
+    }
+  }
+
+  async function remove() {
+    if (!confirm('ویدیوی آموزشی حذف شود؟')) return
+    setBusy(true)
+    try {
+      await api.delete('/api/admin/tutorial-video')
+      setMsg('ویدیو حذف شد.')
+      setRefreshKey((k) => k + 1)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="animate-in">
+      <div className="flex items-center gap-2">
+        <Video size={19} className="text-brand-600" />
+        <h3 className="text-lg font-bold text-slate-800">ویدیوی آموزشی</h3>
+      </div>
+      <p className="mt-1 text-sm text-slate-500">
+        این ویدیو در داشبورد کاربران و ابتدای ویزارد راه‌اندازی نمایش داده می‌شود (آموزش ساخت دمو / کار با سامانه).
+      </p>
+      <div className="mt-4 space-y-4">
+        {available && (
+          <video key={refreshKey} src={`/api/tutorial-video?v=${refreshKey}`} controls className="w-full rounded-xl" preload="metadata" />
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:text-brand-700">
+            <PlayCircle size={17} />
+            {busy ? 'در حال بارگذاری…' : available ? 'جایگزینی ویدیو' : 'بارگذاری ویدیو (mp4/webm)'}
+            <input
+              ref={ref}
+              type="file"
+              accept=".mp4,.webm"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            />
+          </label>
+          {available && (
+            <Button variant="danger" onClick={remove} loading={busy} className="h-10 px-4 text-xs">
+              <Trash2 size={15} />
+              حذف ویدیو
+            </Button>
+          )}
+          {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function DemosTab() {
   const [demos, setDemos] = useState<Demo[]>([])
   const [voices, setVoices] = useState<Voice[]>([])
@@ -170,6 +256,8 @@ export default function DemosTab() {
 
   return (
     <div className="space-y-6">
+      <TutorialVideoCard />
+
       <Card className="animate-in">
         <h3 className="text-lg font-bold text-slate-800">ساخت دمو جدید</h3>
         <p className="mt-1 text-sm text-slate-500">
