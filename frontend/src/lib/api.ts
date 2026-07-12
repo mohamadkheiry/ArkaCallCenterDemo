@@ -1,0 +1,33 @@
+import axios from 'axios'
+
+export const TOKEN_KEY = 'arka_token'
+
+export const api = axios.create({
+  baseURL: '/',
+  headers: { 'Content-Type': 'application/json' },
+})
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      if (!location.pathname.startsWith('/login')) location.href = '/login'
+    }
+    return Promise.reject(err)
+  },
+)
+
+/** استخراج پیام خطای فارسی از پاسخ سرور. */
+export function apiError(err: unknown, fallback = 'خطایی رخ داد. دوباره تلاش کنید.'): string {
+  if (axios.isAxiosError(err)) {
+    return (err.response?.data as { error?: string })?.error ?? fallback
+  }
+  return fallback
+}

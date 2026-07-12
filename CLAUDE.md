@@ -145,7 +145,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
-- [ ] **فاز ۲ — فرانت پایه:** React+Tailwind+Vazirmatn RTL، صفحه‌ی لاگین/OTP، layout داشبورد.
+- [x] **فاز ۲ — فرانت پایه:** Vite+React+TS، Tailwind v4، Vazirmatn (self-hosted)، RTL، AuthContext (JWT/localStorage)، صفحه‌ی لاگین دو‌مرحله‌ای (موبایل→OTP)، آنبوردینگ (نام/برند)، DashboardLayout (سایدبار ریسپانسیو) + صفحه‌ی اصلی + route guardها. build و رندر تأییدشده.
 - [ ] **فاز ۳ — پایگاه دانش + RAG + Moderation.**
 - [ ] **فاز ۴ — SMS.ir + موتور رویداد→پیامک + پنل سوپرادمین.**
 - [ ] **فاز ۵ — تخصیص داخلی + Provisioning ایزابل.**
