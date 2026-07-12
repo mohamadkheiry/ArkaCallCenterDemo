@@ -144,7 +144,7 @@ export default function DashboardLayout() {
         </main>
       </div>
 
-      <Tour open={tourOpen} isAdmin={isAdmin} onClose={() => setTourOpen(false)} />
+      <Tour open={tourOpen} isAdmin={isAdmin} onClose={() => setTourOpen(false)} onSidebarChange={setOpen} />
     </div>
   )
 }
