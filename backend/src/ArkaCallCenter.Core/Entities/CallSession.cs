@@ -18,4 +18,7 @@ public class CallSession : BaseEntity
 
     /// <summary>رونوشت گفتگو به‌صورت JSON (نوبت‌های caller/assistant).</summary>
     public string? TranscriptJson { get; set; }
+
+    /// <summary>مسیر فایل ضبط‌شده‌ی مکالمه (WAV ۸kHz) برای پخش در پنل.</summary>
+    public string? RecordingPath { get; set; }
 }

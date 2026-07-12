@@ -5,10 +5,12 @@ using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
 using ArkaCallCenter.Core.Enums;
+using ArkaCallCenter.Infrastructure.Audio;
 using ArkaCallCenter.Infrastructure.Data;
 using ArkaCallCenter.Realtime.Audio;
 using ArkaCallCenter.Realtime.Realtime;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,11 +21,17 @@ public class CallHandler
 {
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<CallHandler> _logger;
+    private readonly string _uploadsPath;
 
-    public CallHandler(IServiceScopeFactory scopes, ILogger<CallHandler> logger)
+    /// <summary>یک نوبت گفتگو در رونوشت.</summary>
+    private record TranscriptTurn(string Role, string Text);
+
+    public CallHandler(IServiceScopeFactory scopes, IConfiguration config, ILogger<CallHandler> logger)
     {
         _scopes = scopes;
         _logger = logger;
+        _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
+        Directory.CreateDirectory(_uploadsPath);
     }
 
     public async Task HandleAsync(TcpClient client, CancellationToken ct)
@@ -85,10 +93,17 @@ public class CallHandler
             return;
         }
 
+        var recordingEnabled = (await settings.GetAsync(SettingKeys.CallRecordingEnabled, "true", ct)) != "false";
+
         var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback);
-        var transcript = new StringBuilder();
+        var turns = new List<TranscriptTurn>();
+        var asstBuf = new StringBuilder();
+        var recording = new List<byte>();
+        var recLock = new object();
         var answeredFromKb = true;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
+
+        void Record(byte[] slin) { if (recordingEnabled) lock (recLock) recording.AddRange(slin); }
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model, _logger);
 
@@ -143,15 +158,27 @@ public class CallHandler
         {
             StopHold(); // صدای AI رسید → موسیقی انتظار قطع شود
             var slin8k = AudioResampler.Downsample24kTo8k(pcm24k);
+            Record(slin8k);
             await WriteLockedAsync(slin8k);
         };
         realtime.OnUserSpeechStopped += () => { StartHold(); return Task.CompletedTask; };
-        realtime.OnResponseDone += () => { StopHold(); return Task.CompletedTask; };
-        realtime.OnAssistantText += text =>
+        realtime.OnResponseDone += () =>
         {
-            transcript.Append(text);
-            if (!string.IsNullOrEmpty(fallback) && transcript.ToString().Contains(fallback[..Math.Min(15, fallback.Length)]))
-                answeredFromKb = false;
+            StopHold();
+            if (asstBuf.Length > 0)
+            {
+                var text = asstBuf.ToString().Trim();
+                turns.Add(new TranscriptTurn("assistant", text));
+                if (!string.IsNullOrEmpty(fallback) && text.Contains(fallback[..Math.Min(15, fallback.Length)]))
+                    answeredFromKb = false;
+                asstBuf.Clear();
+            }
+            return Task.CompletedTask;
+        };
+        realtime.OnAssistantText += text => { asstBuf.Append(text); return Task.CompletedTask; };
+        realtime.OnUserTranscript += text =>
+        {
+            if (!string.IsNullOrWhiteSpace(text)) turns.Add(new TranscriptTurn("user", text.Trim()));
             return Task.CompletedTask;
         };
 
@@ -173,6 +200,7 @@ public class CallHandler
                 if (frame is null || frame.Value.Kind == AudioSocketProtocol.KindHangup) break;
                 if (frame.Value.Kind == AudioSocketProtocol.KindAudio)
                 {
+                    Record(frame.Value.Payload); // ضبط صدای caller
                     var pcm24k = AudioResampler.Upsample8kTo24k(frame.Value.Payload);
                     await realtime.AppendAudioAsync(pcm24k, ct);
                 }
@@ -185,7 +213,24 @@ public class CallHandler
 
         sw.Stop();
         StopHold();
-        await LogCallAsync(sp.Id, startedAt, (int)sw.Elapsed.TotalSeconds, answeredFromKb, transcript.ToString());
+
+        // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
+        string? recordingPath = null;
+        if (recordingEnabled && recording.Count > 0)
+        {
+            try
+            {
+                byte[] wav;
+                lock (recLock) wav = AudioConvert.PcmToWav8k(recording.ToArray(), AudioConvert.TelephonyRate);
+                recordingPath = Path.Combine(_uploadsPath, $"call_{Guid.NewGuid():N}.wav");
+                await File.WriteAllBytesAsync(recordingPath, wav, ct);
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to save call recording"); }
+        }
+
+        var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turns,
+            new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        await LogCallAsync(sp.Id, startedAt, (int)sw.Elapsed.TotalSeconds, answeredFromKb, transcriptJson, recordingPath);
 
         if (Interlocked.Read(ref usageTotal) > 0)
         {
@@ -222,7 +267,7 @@ public class CallHandler
         === پایان پایگاه دانش ===
         """;
 
-    private async Task LogCallAsync(int smartPhoneId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript)
+    private async Task LogCallAsync(int smartPhoneId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? recordingPath)
     {
         try
         {
@@ -236,6 +281,7 @@ public class CallHandler
                 DurationSeconds = durationSeconds,
                 AnsweredFromKb = answeredFromKb,
                 TranscriptJson = transcript,
+                RecordingPath = recordingPath,
             });
             await db.SaveChangesAsync();
         }

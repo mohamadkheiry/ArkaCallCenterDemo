@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Inbox } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card, cn } from '../components/ui'
-import { toFa } from '../lib/format'
+import { faDateTime, faDuration, toFa } from '../lib/format'
 
 interface CallRow {
   id: number
@@ -10,12 +10,6 @@ interface CallRow {
   startedAt: string
   durationSeconds: number
   answeredFromKb: boolean
-}
-
-function formatDuration(sec: number) {
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return `${toFa(m)}:${toFa(s.toString().padStart(2, '0'))}`
 }
 
 export default function CallsPage() {
@@ -63,8 +57,8 @@ export default function CallsPage() {
                     <td className="p-3 text-slate-700" dir="ltr">
                       {c.callerId ? toFa(c.callerId) : 'نامشخص'}
                     </td>
-                    <td className="p-3 text-slate-500">{new Date(c.startedAt).toLocaleString('fa-IR')}</td>
-                    <td className="p-3 text-slate-600">{formatDuration(c.durationSeconds)}</td>
+                    <td className="p-3 text-slate-500">{faDateTime(c.startedAt)}</td>
+                    <td className="p-3 text-slate-600">{faDuration(c.durationSeconds)}</td>
                     <td className="p-3">
                       <span
                         className={cn(

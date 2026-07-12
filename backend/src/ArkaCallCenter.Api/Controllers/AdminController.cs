@@ -312,6 +312,102 @@ public class AdminController : ControllerBase
         return Ok(new { message = "اطلاعات کاربر به‌روزرسانی شد." });
     }
 
+    // ---------------- Calls (conversations) ----------------
+    /// <summary>لیست مکالمه‌ها با فیلتر تاریخ و جست‌وجوی شماره/برند.</summary>
+    [HttpGet("calls")]
+    public async Task<IActionResult> GetCalls(
+        [FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? q,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 30, CancellationToken ct = default)
+    {
+        var query = _db.CallSessions.AsNoTracking()
+            .Include(c => c.SmartPhone).ThenInclude(s => s.User)
+            .AsQueryable();
+
+        if (DateTime.TryParse(from, out var fromDt))
+            query = query.Where(c => c.StartedAt >= fromDt.Date.ToUniversalTime());
+        if (DateTime.TryParse(to, out var toDt))
+            query = query.Where(c => c.StartedAt < toDt.Date.AddDays(1).ToUniversalTime());
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            query = query.Where(c =>
+                (c.CallerId != null && c.CallerId.Contains(term)) ||
+                c.SmartPhone.User.PhoneNumber.Contains(term) ||
+                (c.SmartPhone.User.BrandName != null && c.SmartPhone.User.BrandName.Contains(term)));
+        }
+
+        var total = await query.CountAsync(ct);
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var items = await query
+            .OrderByDescending(c => c.StartedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(c => new
+            {
+                c.Id,
+                c.CallerId,
+                c.StartedAt,
+                c.DurationSeconds,
+                c.AnsweredFromKb,
+                extension = c.SmartPhone.Extension,
+                ownerPhone = c.SmartPhone.User.PhoneNumber,
+                ownerName = ((c.SmartPhone.User.FirstName ?? "") + " " + (c.SmartPhone.User.LastName ?? "")).Trim(),
+                brand = c.SmartPhone.User.BrandName,
+                isDemo = c.SmartPhone.User.IsDemo,
+                demoLabel = c.SmartPhone.User.DemoLabel,
+                hasRecording = c.RecordingPath != null,
+            })
+            .ToListAsync(ct);
+
+        return Ok(new { total, page, pageSize, items });
+    }
+
+    [HttpGet("calls/{id:int}")]
+    public async Task<IActionResult> GetCall(int id, CancellationToken ct)
+    {
+        var c = await _db.CallSessions.AsNoTracking()
+            .Include(x => x.SmartPhone).ThenInclude(s => s.User)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c is null) return NotFound();
+        return Ok(new
+        {
+            c.Id,
+            c.CallerId,
+            c.StartedAt,
+            c.EndedAt,
+            c.DurationSeconds,
+            c.AnsweredFromKb,
+            extension = c.SmartPhone.Extension,
+            ownerPhone = c.SmartPhone.User.PhoneNumber,
+            brand = c.SmartPhone.User.BrandName,
+            transcript = c.TranscriptJson,
+            hasRecording = !string.IsNullOrEmpty(c.RecordingPath) && System.IO.File.Exists(c.RecordingPath),
+        });
+    }
+
+    /// <summary>استریم فایل ضبط‌شده‌ی مکالمه (نیازمند نقش سوپرادمین؛ فرانت با blob می‌گیرد).</summary>
+    [HttpGet("calls/{id:int}/recording")]
+    public async Task<IActionResult> GetCallRecording(int id, CancellationToken ct)
+    {
+        var path = await _db.CallSessions.AsNoTracking()
+            .Where(c => c.Id == id).Select(c => c.RecordingPath).FirstOrDefaultAsync(ct);
+        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return NotFound();
+        return PhysicalFile(path, "audio/wav", enableRangeProcessing: true);
+    }
+
+    [HttpDelete("calls/{id:int}")]
+    public async Task<IActionResult> DeleteCall(int id, CancellationToken ct)
+    {
+        var c = await _db.CallSessions.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c is null) return NotFound();
+        if (!string.IsNullOrEmpty(c.RecordingPath) && System.IO.File.Exists(c.RecordingPath))
+            try { System.IO.File.Delete(c.RecordingPath); } catch { /* ignore */ }
+        _db.CallSessions.Remove(c);
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { message = "مکالمه حذف شد." });
+    }
+
     // ---------------- Demos (keys 1..999) ----------------
     [HttpGet("demos")]
     public async Task<IActionResult> GetDemos(CancellationToken ct) => Ok(await _demos.ListAsync(ct));

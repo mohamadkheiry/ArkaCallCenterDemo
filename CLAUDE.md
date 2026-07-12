@@ -173,6 +173,8 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 
 - [x] **افزوده — ویرایش کاربر توسط سوپرادمین:** `PUT /api/admin/users/{id}` (نام، نام‌خانوادگی، برند، وضعیت فعال، محدودیت). `GET admin/users` حالا دموها را حذف می‌کند (`!IsDemo`). فرانت: تب «کاربران» با ردیف‌های آکاردئونی قابل‌ویرایش. تست: تغییر برند/نام/محدودیت یک کاربر واقعی.
 
+- [x] **افزوده — ضبط و مدیریت مکالمه‌ها:** `CallSession.RecordingPath` + migration `CallRecording`. worker حین تماس صدای caller و AI را در یک بافر SLIN ۸k ضبط و در پایان به WAV ذخیره می‌کند؛ رونوشت ساختاریافته (نوبت‌های user/assistant با `input_audio_transcription`) به‌صورت JSON (camelCase). Adminendpointها: `GET admin/calls` (فیلتر `from`/`to`/`q` روی تاریخ و شماره/برند + صفحه‌بندی)، `GET admin/calls/{id}` (رونوشت)، `GET admin/calls/{id}/recording` (استریم WAV، authorized→فرانت با blob می‌گیرد)، `DELETE admin/calls/{id}` (+حذف فایل). فرانت: تب «مکالمه‌ها» با فیلتر تاریخ/شماره، پخش، حذف، نمایش متن گفتگو. تاریخ‌ها شمسی با helperهای `faDateTime`/`faDate`/`faDuration` (در UsageTab و CallsPage هم استفاده شد). تنظیم `call.recordingEnabled`. تست: درج مکالمه‌ی مصنوعی + WAV → لیست/فیلتر/جزئیات/استریم/حذف همه درست.
+
 ## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار + UX + پروفایل/برندینگ کامل و پوش‌شده‌اند.
 گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 

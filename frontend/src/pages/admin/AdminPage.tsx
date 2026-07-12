@@ -9,6 +9,7 @@ import UsageTab from './UsageTab'
 import DemosTab from './DemosTab'
 import ReceptionTab from './ReceptionTab'
 import BrandingTab from './BrandingTab'
+import CallsAdminTab from './CallsAdminTab'
 
 const TABS = [
   { key: 'openai', label: 'OpenAI و RAG' },
@@ -19,6 +20,7 @@ const TABS = [
   { key: 'voices', label: 'گوینده‌ها' },
   { key: 'fallback', label: 'پیام پیش‌فرض' },
   { key: 'demos', label: 'دموها' },
+  { key: 'calls', label: 'مکالمه‌ها' },
   { key: 'usage', label: 'مصرف توکن' },
   { key: 'users', label: 'کاربران' },
 ] as const
@@ -67,6 +69,7 @@ export default function AdminPage() {
       {tab === 'voices' && <VoicesTab />}
       {tab === 'fallback' && <FallbackTab />}
       {tab === 'demos' && <DemosTab />}
+      {tab === 'calls' && <CallsAdminTab />}
       {tab === 'usage' && <UsageTab />}
       {tab === 'users' && <UsersTab />}
     </div>

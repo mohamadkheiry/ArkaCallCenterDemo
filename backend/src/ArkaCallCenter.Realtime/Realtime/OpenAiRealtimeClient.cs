@@ -18,7 +18,8 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     private readonly string _model;
 
     public event Func<byte[], Task>? OnAudioDelta;   // PCM16 24kHz
-    public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار
+    public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار (delta)
+    public event Func<string, Task>? OnUserTranscript; // رونوشت کامل گفته‌ی کاربر
     public event Func<Task>? OnResponseDone;
     public event Func<Task>? OnUserSpeechStopped;     // کاربر حرفش تمام شد → AI در حال «فکر کردن»
     public event Action<int, int, int>? OnUsage;      // prompt, completion, total
@@ -114,6 +115,10 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                 break;
             case "input_audio_buffer.speech_stopped":
                 if (OnUserSpeechStopped is not null) await OnUserSpeechStopped();
+                break;
+            case "conversation.item.input_audio_transcription.completed":
+                if (doc.RootElement.TryGetProperty("transcript", out var ut) && OnUserTranscript is not null)
+                    await OnUserTranscript(ut.GetString() ?? "");
                 break;
             case "response.done":
                 TryEmitUsage(doc.RootElement);

@@ -71,6 +71,7 @@ public class ArkaDbContext : DbContext
         {
             e.Property(x => x.CallerId).HasMaxLength(50);
             e.Property(x => x.TranscriptJson).HasColumnType("longtext");
+            e.Property(x => x.RecordingPath).HasMaxLength(500);
             e.HasOne(x => x.SmartPhone).WithMany(x => x.CallSessions).HasForeignKey(x => x.SmartPhoneId);
         });
 

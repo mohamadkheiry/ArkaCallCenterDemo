@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { Card, cn } from '../../components/ui'
-import { toFa } from '../../lib/format'
+import { faDateTime, toFa } from '../../lib/format'
 
 interface KeyUsage {
   apiKey: string
@@ -24,20 +24,7 @@ interface UserUsage {
   lastUsed: string
 }
 
-/** تاریخ و ساعت شمسی. */
-function jalali(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('fa-IR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return '—'
-  }
-}
+const jalali = faDateTime
 
 function num(n: number) {
   return toFa(n.toLocaleString('en-US'))

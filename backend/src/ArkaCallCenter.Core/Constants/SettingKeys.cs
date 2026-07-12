@@ -47,4 +47,7 @@ public static class SettingKeys
 
     // لوگوی سامانه (آپلود توسط سوپرادمین)
     public const string SystemLogoPath = "branding.logoPath";
+
+    // ضبط مکالمه‌ها
+    public const string CallRecordingEnabled = "call.recordingEnabled";
 }
