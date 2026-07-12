@@ -14,6 +14,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/', label: 'داشبورد', icon: '🏠', end: true },
   { to: '/knowledge-base', label: 'پایگاه دانش', icon: '📚' },
+  { to: '/smartphone', label: 'تلفن هوشمند', icon: '☎️' },
   { to: '/voice', label: 'صدای گوینده', icon: '🎙️' },
   { to: '/calls', label: 'تماس‌ها', icon: '📞' },
   { to: '/admin', label: 'پنل سوپرادمین', icon: '🛡️', adminOnly: true },

@@ -1,7 +1,7 @@
 export type Role = 'User' | 'SuperAdmin'
 
 export interface SmartPhoneInfo {
-  extension: number
+  extension: number | null
   status: string
   welcomeMessageText?: string | null
 }

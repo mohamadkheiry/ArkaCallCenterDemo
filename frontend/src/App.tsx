@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardHome from './pages/DashboardHome'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
+import SmartPhonePage from './pages/SmartPhonePage'
 import VoicePage from './pages/VoicePage'
 import AdminPage from './pages/admin/AdminPage'
 import Placeholder from './pages/Placeholder'
@@ -42,6 +43,7 @@ export default function App() {
       >
         <Route index element={<DashboardHome />} />
         <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="smartphone" element={<SmartPhonePage />} />
         <Route path="voice" element={<VoicePage />} />
         <Route path="calls" element={<Placeholder title="تماس‌ها" phase="فاز ۶" />} />
         <Route

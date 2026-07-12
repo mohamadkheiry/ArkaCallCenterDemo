@@ -30,6 +30,11 @@ public static class DependencyInjection
         services.AddScoped<IFileTextExtractor, FileTextExtractor>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
 
+        // فاز ۵: تخصیص داخلی + provisioning + ساخت تلفن هوشمند
+        services.AddScoped<IExtensionAllocator, ExtensionAllocator>();
+        services.AddScoped<IAsteriskProvisioningService, AsteriskProvisioningService>();
+        services.AddScoped<ISmartPhoneService, SmartPhoneService>();
+
         return services;
     }
 }

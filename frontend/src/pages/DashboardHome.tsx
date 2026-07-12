@@ -21,6 +21,7 @@ function StatCard({ title, value, sub, icon }: { title: string; value: string; s
 export default function DashboardHome() {
   const { me } = useAuth()
   const sp = me?.smartPhone
+  const isActive = sp?.status === 'Active' && sp.extension != null
   const limit = me?.callMinuteLimit ?? null
 
   return (
@@ -30,16 +31,16 @@ export default function DashboardHome() {
         <p className="mt-1 text-sm text-slate-500">وضعیت تلفن هوشمند و پایگاه دانش شما.</p>
       </div>
 
-      {!sp && (
+      {!isActive && (
         <Card className="animate-in border-brand-200 bg-gradient-to-l from-brand-50 to-white">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h3 className="text-lg font-bold text-slate-800">هنوز تلفن هوشمندی نساخته‌اید</h3>
+              <h3 className="text-lg font-bold text-slate-800">هنوز تلفن هوشمندی فعال ندارید</h3>
               <p className="mt-1 text-sm text-slate-500">
                 پایگاه دانش و پیام خوش‌آمد را تنظیم کنید و تلفن هوشمند خود را بسازید.
               </p>
             </div>
-            <Link to="/knowledge-base">
+            <Link to="/smartphone">
               <Button>شروع ساخت تلفن هوشمند</Button>
             </Link>
           </div>
@@ -49,8 +50,8 @@ export default function DashboardHome() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="شماره داخلی"
-          value={sp ? toFa(sp.extension) : '—'}
-          sub={sp ? `وضعیت: ${sp.status}` : 'ساخته نشده'}
+          value={sp?.extension != null ? toFa(sp.extension) : '—'}
+          sub={isActive ? 'فعال' : sp ? 'در حال آماده‌سازی' : 'ساخته نشده'}
           icon="☎️"
         />
         <StatCard
