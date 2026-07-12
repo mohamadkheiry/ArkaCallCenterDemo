@@ -15,6 +15,7 @@ export const SETTING_FIELDS: {
   label: string
   hint?: string
   secret?: boolean
+  control?: 'percentSlider' // اسلایدر ۰ تا ۱۰۰٪ که مقدار ۰ تا ۱ ذخیره می‌کند
   group: 'openai' | 'sms' | 'limits' | 'rag'
 }[] = [
   { key: 'openai.baseUrl', label: 'Base URL', group: 'openai', hint: 'مثلاً https://api.openai.com/v1' },
@@ -30,6 +31,12 @@ export const SETTING_FIELDS: {
   { key: 'limits.defaultCallMinutes', label: 'سقف پیش‌فرض مکالمه (دقیقه)', group: 'limits' },
   { key: 'limits.warningPercent', label: 'درصد هشدار نزدیک شدن به سقف', group: 'limits' },
 
-  { key: 'rag.similarityThreshold', label: 'آستانه شباهت RAG (۰ تا ۱)', group: 'rag' },
+  {
+    key: 'rag.similarityThreshold',
+    label: 'آستانه شباهت RAG',
+    group: 'rag',
+    control: 'percentSlider',
+    hint: '۱۰۰٪ = دقیق‌ترین شباهت (فقط پاسخ‌های بسیار مرتبط) · ۰٪ = خلاقانه‌ترین حالت',
+  },
   { key: 'rag.topK', label: 'تعداد قطعات بازیابی‌شده (topK)', group: 'rag' },
 ]
