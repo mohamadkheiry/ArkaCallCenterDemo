@@ -42,7 +42,8 @@ public class KnowledgeBaseController : ControllerBase
 
     [HttpPost("file")]
     [RequestSizeLimit(1_000_000)]
-    public async Task<IActionResult> SetFile([FromForm] IFormFile file, CancellationToken ct)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SetFile(IFormFile file, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "فایلی ارسال نشد." });

@@ -306,7 +306,8 @@ public class AdminController : ControllerBase
 
     [HttpPost("hold-music")]
     [RequestSizeLimit(5_000_000)]
-    public async Task<IActionResult> UploadHoldMusic([FromForm] IFormFile file, CancellationToken ct)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadHoldMusic(IFormFile file, CancellationToken ct)
     {
         if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
         if (!file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
