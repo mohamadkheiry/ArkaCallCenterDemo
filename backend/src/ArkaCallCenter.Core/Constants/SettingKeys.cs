@@ -44,4 +44,7 @@ public static class SettingKeys
 
     // ویدیوی آموزشی (آپلود توسط سوپرادمین، نمایش به کاربران)
     public const string TutorialVideoPath = "tutorial.videoPath";
+
+    // لوگوی سامانه (آپلود توسط سوپرادمین)
+    public const string SystemLogoPath = "branding.logoPath";
 }

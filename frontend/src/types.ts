@@ -17,5 +17,6 @@ export interface Me {
   voiceName?: string | null
   callMinuteLimit?: number | null
   usedMinutes: number
+  hasAvatar: boolean
   smartPhone?: SmartPhoneInfo | null
 }

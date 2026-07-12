@@ -167,7 +167,9 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **رفع — تور در موبایل:** (۱) باگ وسط‌چین: `translate(-50%,-50%)` با انیمیشن `float-in` (fill: both) تداخل داشت → وسط‌چین با flex wrapper. (۲) در موبایل سایدبار حین گام‌های هدف‌دار خودکار باز می‌شود (`onSidebarChange`) و کارت زیر/بالای آیتم هایلایت‌شده می‌نشیند (وقتی فضای کناری نیست). (۳) اندازه‌گیری rect با polling (تا ۱۰×۱۵۰ms) تا پایان ترنزیشن سایدبار + شنونده‌ی resize. تست شده در viewport ۳۷۵px.
 - ⚠️ **درس عملیاتی:** `docker compose up -d --build` گاهی کانتینر را جایگزین نمی‌کند — همیشه `docker compose build X && docker compose up -d --force-recreate --no-deps X`. تست ترنزیشن‌های CSS در تب مخفیِ مرورگرِ ابزار اجرا نمی‌شود (`visibilityState: hidden`) — برای تست، transition را inline غیرفعال کن.
 
-## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار + UX (تور/ویزارد/ویدیو) کامل و پوش‌شده‌اند.
+- [x] **افزوده — تغییر شماره/لوگو/آواتار:** تغییر شماره‌ی هر کاربر با OTP به شماره‌ی جدید (`IAuthService.RequestPhoneChangeAsync`/`ConfirmPhoneChangeAsync`، endpointهای `me/phone/request-change` و `confirm-change`)؛ آواتار کاربر (`User.AvatarPath`، `POST/DELETE me/avatar`، استریم ناشناس `GET /api/avatars/{id}`)؛ لوگوی سامانه (`SettingKeys.SystemLogoPath`، `POST/DELETE admin/logo`، استریم `GET /api/branding/logo` + `/info`). فرانت: صفحه‌ی `/profile` (آواتار + تغییر شماره دومرحله‌ای)، آواتار کلیک‌پذیر در هدر، `Logo` با fallback به لوگوی آپلودی، تب ادمین «برندینگ». migration `UserAvatarAndLogo`. همه end-to-end تست شد (تغییر شماره، آپلود/استریم آواتار و لوگو).
+
+## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن + IVR/دمو/انتظار + UX + پروفایل/برندینگ کامل و پوش‌شده‌اند.
 گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 
 ---

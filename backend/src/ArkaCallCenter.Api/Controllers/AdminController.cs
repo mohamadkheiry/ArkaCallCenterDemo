@@ -437,6 +437,42 @@ public class AdminController : ControllerBase
         return Ok(new { message = "ویدیوی آموزشی حذف شد." });
     }
 
+    // ---------------- System logo ----------------
+    private static readonly string[] LogoExt = { ".png", ".jpg", ".jpeg", ".webp", ".svg" };
+
+    [HttpPost("logo")]
+    [RequestSizeLimit(4_000_000)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadLogo(IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!LogoExt.Contains(ext))
+            return BadRequest(new { error = "فقط تصویر (png, jpg, webp, svg) مجاز است." });
+
+        var stored = ext == ".jpeg" ? ".jpg" : ext;
+        foreach (var e in LogoExt.Append(".jpg").Distinct())
+        {
+            var p = Path.Combine(_uploadsPath, $"logo{e}");
+            if (System.IO.File.Exists(p)) try { System.IO.File.Delete(p); } catch { /* ignore */ }
+        }
+        var path = Path.Combine(_uploadsPath, $"logo{stored}");
+        await using (var fs = System.IO.File.Create(path))
+            await file.CopyToAsync(fs, ct);
+        await _settings.SetAsync(SettingKeys.SystemLogoPath, path, false, ct);
+        return Ok(new { message = "لوگوی سامانه به‌روزرسانی شد." });
+    }
+
+    [HttpDelete("logo")]
+    public async Task<IActionResult> DeleteLogo(CancellationToken ct)
+    {
+        var path = await _settings.GetAsync(SettingKeys.SystemLogoPath, null, ct);
+        if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            try { System.IO.File.Delete(path); } catch { /* ignore */ }
+        await _settings.SetAsync(SettingKeys.SystemLogoPath, null, false, ct);
+        return Ok(new { message = "لوگو حذف شد." });
+    }
+
     // ---------------- Token usage reports ----------------
     /// <summary>مصرف توکن به تفکیک کلید API (به‌همراه تاریخ اولین/آخرین استفاده).</summary>
     [HttpGet("usage/keys")]

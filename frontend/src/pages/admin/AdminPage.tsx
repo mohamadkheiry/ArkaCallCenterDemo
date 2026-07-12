@@ -8,11 +8,13 @@ import UsersTab from './UsersTab'
 import UsageTab from './UsageTab'
 import DemosTab from './DemosTab'
 import ReceptionTab from './ReceptionTab'
+import BrandingTab from './BrandingTab'
 
 const TABS = [
   { key: 'openai', label: 'OpenAI و RAG' },
   { key: 'sms', label: 'SMS.ir' },
   { key: 'reception', label: 'پذیرش و انتظار' },
+  { key: 'branding', label: 'برندینگ' },
   { key: 'templates', label: 'پیامک‌ها و رویدادها' },
   { key: 'voices', label: 'گوینده‌ها' },
   { key: 'fallback', label: 'پیام پیش‌فرض' },
@@ -60,6 +62,7 @@ export default function AdminPage() {
         <SettingsTab key="sms" groups={['sms']} title="تنظیمات SMS.ir" desc="کلید API و شماره خط سرویس پیامک." />
       )}
       {tab === 'reception' && <ReceptionTab />}
+      {tab === 'branding' && <BrandingTab />}
       {tab === 'templates' && <TemplatesTab />}
       {tab === 'voices' && <VoicesTab />}
       {tab === 'fallback' && <FallbackTab />}

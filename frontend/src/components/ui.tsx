@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react'
 
 export function cn(...parts: (string | false | null | undefined)[]) {
@@ -74,19 +75,41 @@ export function Card({ children, className }: { children: ReactNode; className?:
 }
 
 export function Logo({ size = 40 }: { size?: number }) {
+  const [hasLogo, setHasLogo] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/branding/logo/info')
+      .then((r) => (r.ok ? r.json() : { available: false }))
+      .then((d) => alive && setHasLogo(!!d.available))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
   return (
     <div className="flex items-center gap-3">
-      <div
-        className="grid place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30"
-        style={{ width: size, height: size }}
-      >
-        <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
-          <path
-            d="M6.5 3h2.2c.5 0 .9.3 1 .8l.7 2.6c.1.4 0 .8-.3 1.1L8.4 9.1a12 12 0 0 0 6.5 6.5l1.6-1.7c.3-.3.7-.4 1.1-.3l2.6.7c.5.1.8.5.8 1v2.2c0 1-.8 1.8-1.8 1.7C11.6 19.8 4.2 12.4 4.8 4.8 4.8 3.8 5.6 3 6.5 3Z"
-            fill="currentColor"
-          />
-        </svg>
-      </div>
+      {hasLogo ? (
+        <img
+          src="/api/branding/logo"
+          alt="لوگو"
+          className="rounded-2xl object-contain"
+          style={{ width: size, height: size }}
+          onError={() => setHasLogo(false)}
+        />
+      ) : (
+        <div
+          className="grid place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30"
+          style={{ width: size, height: size }}
+        >
+          <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6.5 3h2.2c.5 0 .9.3 1 .8l.7 2.6c.1.4 0 .8-.3 1.1L8.4 9.1a12 12 0 0 0 6.5 6.5l1.6-1.7c.3-.3.7-.4 1.1-.3l2.6.7c.5.1.8.5.8 1v2.2c0 1-.8 1.8-1.8 1.7C11.6 19.8 4.2 12.4 4.8 4.8 4.8 3.8 5.6 3 6.5 3Z"
+              fill="currentColor"
+            />
+          </svg>
+        </div>
+      )}
       <div className="leading-tight">
         <div className="text-base font-extrabold text-slate-800">آرکا</div>
         <div className="text-[11px] text-slate-400">تلفن هوشمند</div>

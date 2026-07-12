@@ -31,6 +31,7 @@ public class ArkaDbContext : DbContext
             e.Property(x => x.LastName).HasMaxLength(100);
             e.Property(x => x.BrandName).HasMaxLength(200);
             e.Property(x => x.VoiceName).HasMaxLength(100);
+            e.Property(x => x.AvatarPath).HasMaxLength(500);
             e.Property(x => x.DemoLabel).HasMaxLength(150);
             e.HasIndex(x => x.IsDemo);
             e.HasOne(x => x.SmartPhone).WithOne(x => x.User).HasForeignKey<SmartPhone>(x => x.UserId);

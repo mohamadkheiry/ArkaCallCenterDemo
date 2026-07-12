@@ -102,6 +102,69 @@ public class AuthService : IAuthService
         return user;
     }
 
+    public async Task<(bool ok, string? error)> RequestPhoneChangeAsync(int userId, string newPhone, CancellationToken ct = default)
+    {
+        newPhone = NormalizePhone(newPhone);
+        if (!IsValidIranianMobile(newPhone))
+            return (false, "شماره موبایل جدید نامعتبر است.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct);
+        if (user is null) return (false, "کاربر یافت نشد.");
+        if (user.PhoneNumber == newPhone) return (false, "شماره جدید با شماره فعلی یکسان است.");
+        if (await _db.Users.AnyAsync(x => x.PhoneNumber == newPhone && x.Id != userId, ct))
+            return (false, "این شماره قبلاً توسط کاربر دیگری ثبت شده است.");
+
+        var recent = await _db.OtpCodes
+            .Where(x => x.PhoneNumber == newPhone && !x.Consumed && x.CreatedAt > DateTime.UtcNow.AddSeconds(-60))
+            .AnyAsync(ct);
+        if (recent) return (false, "کد قبلاً ارسال شده است؛ کمی صبر کنید.");
+
+        var code = Random.Shared.Next(100000, 1000000).ToString();
+        _db.OtpCodes.Add(new OtpCode
+        {
+            PhoneNumber = newPhone,
+            Code = code,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
+        });
+        await _db.SaveChangesAsync(ct);
+
+        // کد به شماره‌ی جدید ارسال می‌شود تا مالکیت آن تأیید شود.
+        await _sms.SendAsync(newPhone, $"کد تأیید تغییر شماره در سامانه آرکا: {code}", ct);
+        return (true, null);
+    }
+
+    public async Task<(bool ok, string? error)> ConfirmPhoneChangeAsync(int userId, string newPhone, string code, CancellationToken ct = default)
+    {
+        newPhone = NormalizePhone(newPhone);
+        var user = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct);
+        if (user is null) return (false, "کاربر یافت نشد.");
+
+        var otp = await _db.OtpCodes
+            .Where(x => x.PhoneNumber == newPhone && !x.Consumed)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (otp is null) return (false, "کدی برای این شماره یافت نشد.");
+        if (otp.ExpiresAt < DateTime.UtcNow) return (false, "کد منقضی شده است.");
+        if (otp.Attempts >= MaxVerifyAttempts) return (false, "تعداد تلاش‌ها بیش از حد مجاز است.");
+
+        otp.Attempts++;
+        if (otp.Code != code)
+        {
+            await _db.SaveChangesAsync(ct);
+            return (false, "کد وارد شده نادرست است.");
+        }
+
+        // بازبینی نهایی یکتایی (رقابت احتمالی)
+        if (await _db.Users.AnyAsync(x => x.PhoneNumber == newPhone && x.Id != userId, ct))
+            return (false, "این شماره در این فاصله توسط کاربر دیگری ثبت شد.");
+
+        otp.Consumed = true;
+        user.PhoneNumber = newPhone;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return (true, null);
+    }
+
     // ---- helpers ----
     private static string NormalizePhone(string phone)
     {

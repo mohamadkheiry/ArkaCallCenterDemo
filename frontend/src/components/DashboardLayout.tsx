@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   BookOpenText,
@@ -133,9 +133,15 @@ export default function DashboardLayout() {
               <div className="text-sm font-semibold text-slate-800">{me?.brandName}</div>
               <div className="text-xs text-slate-400">{isAdmin ? 'سوپرادمین' : 'کاربر'}</div>
             </div>
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
-              {me?.firstName?.[0] ?? '؟'}
-            </div>
+            <Link to="/profile" title="پروفایل" className="block h-10 w-10 overflow-hidden rounded-full ring-2 ring-transparent transition hover:ring-brand-200">
+              {me?.hasAvatar ? (
+                <img src={`/api/avatars/${me.id}?v=${me.hasAvatar}`} alt="پروفایل" className="h-full w-full object-cover" />
+              ) : (
+                <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
+                  {me?.firstName?.[0] ?? '؟'}
+                </div>
+              )}
+            </Link>
           </div>
         </header>
 

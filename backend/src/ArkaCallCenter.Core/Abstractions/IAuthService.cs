@@ -14,4 +14,10 @@ public interface IAuthService
 
     /// <summary>تکمیل پروفایل (نام/نام‌خانوادگی/برند) پس از اولین ورود.</summary>
     Task<User?> CompleteProfileAsync(int userId, string firstName, string lastName, string brandName, CancellationToken ct = default);
+
+    /// <summary>ارسال کد تأیید به شماره‌ی جدید برای تغییر شماره‌ی کاربر.</summary>
+    Task<(bool ok, string? error)> RequestPhoneChangeAsync(int userId, string newPhone, CancellationToken ct = default);
+
+    /// <summary>تأیید کد و اعمال تغییر شماره.</summary>
+    Task<(bool ok, string? error)> ConfirmPhoneChangeAsync(int userId, string newPhone, string code, CancellationToken ct = default);
 }

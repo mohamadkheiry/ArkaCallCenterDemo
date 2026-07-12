@@ -18,6 +18,9 @@ public class User : BaseEntity
     /// <summary>گوینده‌ی انتخابی کاربر برای صدای تلفن هوشمند (از VoiceOption).</summary>
     public string? VoiceName { get; set; }
 
+    /// <summary>مسیر فایل تصویر پروفایل کاربر.</summary>
+    public string? AvatarPath { get; set; }
+
     /// <summary>override محدودیت مکالمه بر حسب دقیقه؛ null یعنی استفاده از مقدار پیش‌فرض سراسری.</summary>
     public int? CallMinuteLimit { get; set; }
 
