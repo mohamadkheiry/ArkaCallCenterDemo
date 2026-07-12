@@ -288,7 +288,8 @@ sequenceDiagram
     W->>W: یافتن SmartPhone/دمو + KB + گوینده + سقف دقیقه
     W->>O: session.update (instructions=KB + قانون fallback) + greet
     loop مکالمه
-      C->>PBX->>W: صدای caller (SLIN 8k)
+      C->>PBX: صدای caller (SLIN 8k)
+      PBX->>W: هدایت صدا
       W->>O: upsample 24k → append
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
