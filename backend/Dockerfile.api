@@ -1,0 +1,20 @@
+# ---------- build ----------
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+COPY ArkaCallCenter.sln ./
+COPY src/ArkaCallCenter.Core/*.csproj src/ArkaCallCenter.Core/
+COPY src/ArkaCallCenter.Infrastructure/*.csproj src/ArkaCallCenter.Infrastructure/
+COPY src/ArkaCallCenter.Api/*.csproj src/ArkaCallCenter.Api/
+COPY src/ArkaCallCenter.Realtime/*.csproj src/ArkaCallCenter.Realtime/
+RUN dotnet restore src/ArkaCallCenter.Api/ArkaCallCenter.Api.csproj
+COPY . .
+RUN dotnet publish src/ArkaCallCenter.Api/ArkaCallCenter.Api.csproj -c Release -o /app --no-restore
+
+# ---------- runtime ----------
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+COPY --from=build /app ./
+ENV ASPNETCORE_URLS=http://+:8080
+ENV Storage__UploadsPath=/app/uploads
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "ArkaCallCenter.Api.dll"]

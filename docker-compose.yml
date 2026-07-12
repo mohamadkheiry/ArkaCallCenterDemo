@@ -1,0 +1,63 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-arka_root_pass}
+      MYSQL_DATABASE: arka_callcenter
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-arka_root_pass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Default: "Server=db;Port=3306;Database=arka_callcenter;User=root;Password=${MYSQL_ROOT_PASSWORD:-arka_root_pass};TreatTinyAsBoolean=true;"
+      Jwt__Secret: ${JWT_SECRET:-change_me_please_use_a_32char_min_secret}
+      Jwt__Issuer: ArkaCallCenter
+      Jwt__Audience: ArkaCallCenter
+      SuperAdmin__PhoneNumber: ${SUPERADMIN_PHONE:-}
+      FrontendOrigin: ${FRONTEND_ORIGIN:-http://localhost:8081}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "${API_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  realtime:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.realtime
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: "Server=db;Port=3306;Database=arka_callcenter;User=root;Password=${MYSQL_ROOT_PASSWORD:-arka_root_pass};TreatTinyAsBoolean=true;"
+      Realtime__AudioSocketHost: "0.0.0.0"
+      Realtime__AudioSocketPort: "9092"
+    ports:
+      - "${AUDIOSOCKET_PORT:-9092}:9092"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  uploads:
