@@ -1,0 +1,51 @@
+# ============ Secrets — NEVER COMMIT ============
+.env
+.env.*
+!.env.example
+**/appsettings.Secrets.json
+**/appsettings.Local.json
+*.pem
+*.key
+secrets/
+
+# ============ .NET ============
+bin/
+obj/
+*.user
+*.suo
+.vs/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+project.lock.json
+*.nupkg
+TestResults/
+
+# ============ Node / React ============
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+coverage/
+.eslintcache
+
+# ============ Logs / OS ============
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# ============ IDE ============
+.idea/
+*.swp
+
+# ============ Uploads / runtime data ============
+backend/uploads/
+backend/data/
+*.db
+*.db-shm
+*.db-wal
