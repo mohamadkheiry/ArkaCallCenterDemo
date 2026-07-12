@@ -7,6 +7,7 @@ import OnboardingPage from './pages/OnboardingPage'
 import DashboardHome from './pages/DashboardHome'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
 import VoicePage from './pages/VoicePage'
+import AdminPage from './pages/admin/AdminPage'
 import Placeholder from './pages/Placeholder'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -47,7 +48,7 @@ export default function App() {
           path="admin"
           element={
             <RequireAdmin>
-              <Placeholder title="پنل سوپرادمین" phase="فاز ۴" />
+              <AdminPage />
             </RequireAdmin>
           }
         />

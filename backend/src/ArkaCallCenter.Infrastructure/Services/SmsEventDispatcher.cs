@@ -41,9 +41,15 @@ public class SmsEventDispatcher : ISmsEventDispatcher
         foreach (var r in recipients)
         {
             if (r.UseUserOwnNumber && !string.IsNullOrWhiteSpace(relatedUserPhone))
+            {
                 numbers.Add(relatedUserPhone!);
+            }
             else if (!string.IsNullOrWhiteSpace(r.PhoneNumber))
-                numbers.Add(r.PhoneNumber!);
+            {
+                // چند شماره‌ی جداشده با , ، یا خط جدید
+                foreach (var n in r.PhoneNumber.Split(new[] { ',', '،', '\n', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    numbers.Add(n);
+            }
         }
 
         foreach (var number in numbers)

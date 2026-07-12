@@ -147,7 +147,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
 - [x] **فاز ۲ — فرانت پایه:** Vite+React+TS، Tailwind v4، Vazirmatn (self-hosted)، RTL، AuthContext (JWT/localStorage)، صفحه‌ی لاگین دو‌مرحله‌ای (موبایل→OTP)، آنبوردینگ (نام/برند)، DashboardLayout (سایدبار ریسپانسیو) + صفحه‌ی اصلی + route guardها. build و رندر تأییدشده.
 - [x] **فاز ۳ — پایگاه دانش + RAG + Moderation:** OpenAiService (embeddings/chat/TTS via HttpClient، creds از تنظیمات)، FileTextExtractor (txt + pdf/PdfPig)، ModerationService (fail-closed، JSON)، RagService (chunk/embed/cosine + آستانه)، KnowledgeBaseService (اعتبارسنجی حجم/کاراکتر، moderation، حذف فایل مغایر، indexing، رویدادها)، SmsEventDispatcher. کنترلرها: `knowledge-base` (GET/POST text/POST file/DELETE)، `voices`، `me/voice`. فرانت: صفحات پایگاه دانش (متن/فایل drag-drop) و انتخاب گوینده. ⚠️ تست زنده نیاز به MySQL + کلید OpenAI دارد.
-- [ ] **فاز ۴ — SMS.ir + موتور رویداد→پیامک + پنل سوپرادمین.**
+- [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** SmsIrSender (REST v1، fallback به لاگ در نبود کلید)، AdminController (settings با ماسک سِری، sms-templates، sms-events با چند شماره، voices + پیش‌فرض، fallback-message + تولید TTS، users + محدودیت). فرانت: AdminPage شش‌تب (OpenAI/RAG، SMS.ir، پیامک‌ها/رویدادها، گوینده‌ها، پیام fallback، کاربران).
 - [ ] **فاز ۵ — تخصیص داخلی + Provisioning ایزابل.**
 - [ ] **فاز ۶ — پل تلفنی realtime (gpt-realtime ⇄ Asterisk).**
 
