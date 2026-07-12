@@ -45,4 +45,21 @@ public class MeController : ControllerBase
             },
         });
     }
+
+    public record SetVoiceRequest(string VoiceName);
+
+    /// <summary>انتخاب گوینده‌ی صدای کاربر (باید از گوینده‌های فعال باشد).</summary>
+    [HttpPut("voice")]
+    public async Task<IActionResult> SetVoice(SetVoiceRequest req, CancellationToken ct)
+    {
+        var exists = await _db.VoiceOptions.AnyAsync(v => v.Enabled && v.Name == req.VoiceName, ct);
+        if (!exists) return BadRequest(new { error = "گوینده‌ی انتخابی معتبر نیست." });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
+        if (user is null) return NotFound();
+        user.VoiceName = req.VoiceName;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { user.VoiceName });
+    }
 }

@@ -5,6 +5,8 @@ import DashboardLayout from './components/DashboardLayout'
 import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import DashboardHome from './pages/DashboardHome'
+import KnowledgeBasePage from './pages/KnowledgeBasePage'
+import VoicePage from './pages/VoicePage'
 import Placeholder from './pages/Placeholder'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -38,8 +40,8 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
-        <Route path="knowledge-base" element={<Placeholder title="پایگاه دانش" phase="فاز ۳" />} />
-        <Route path="voice" element={<Placeholder title="صدای گوینده" phase="فاز ۳" />} />
+        <Route path="knowledge-base" element={<KnowledgeBasePage />} />
+        <Route path="voice" element={<VoicePage />} />
         <Route path="calls" element={<Placeholder title="تماس‌ها" phase="فاز ۶" />} />
         <Route
           path="admin"

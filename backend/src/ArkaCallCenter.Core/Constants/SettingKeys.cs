@@ -9,6 +9,7 @@ public static class SettingKeys
     public const string OpenAiEmbeddingModel = "openai.embeddingModel";
     public const string OpenAiRealtimeModel = "openai.realtimeModel";
     public const string OpenAiTtsModel = "openai.ttsModel";
+    public const string OpenAiChatModel = "openai.chatModel";           // برای moderation و ابزارهای متنی
 
     // SMS.ir
     public const string SmsIrApiKey = "smsir.apiKey";                   // secret

@@ -21,6 +21,14 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ISmsSender, LoggingSmsSender>(); // فاز ۴: SmsIrSender
+        services.AddScoped<ISmsEventDispatcher, SmsEventDispatcher>();
+
+        // فاز ۳: پایگاه دانش + RAG + moderation
+        services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddScoped<IModerationService, ModerationService>();
+        services.AddScoped<IRagService, RagService>();
+        services.AddScoped<IFileTextExtractor, FileTextExtractor>();
+        services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
 
         return services;
     }
