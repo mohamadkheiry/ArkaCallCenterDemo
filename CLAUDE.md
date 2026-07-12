@@ -149,7 +149,12 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **فاز ۳ — پایگاه دانش + RAG + Moderation:** OpenAiService (embeddings/chat/TTS via HttpClient، creds از تنظیمات)، FileTextExtractor (txt + pdf/PdfPig)، ModerationService (fail-closed، JSON)، RagService (chunk/embed/cosine + آستانه)، KnowledgeBaseService (اعتبارسنجی حجم/کاراکتر، moderation، حذف فایل مغایر، indexing، رویدادها)، SmsEventDispatcher. کنترلرها: `knowledge-base` (GET/POST text/POST file/DELETE)، `voices`، `me/voice`. فرانت: صفحات پایگاه دانش (متن/فایل drag-drop) و انتخاب گوینده. ⚠️ تست زنده نیاز به MySQL + کلید OpenAI دارد.
 - [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** SmsIrSender (REST v1، fallback به لاگ در نبود کلید)، AdminController (settings با ماسک سِری، sms-templates، sms-events با چند شماره، voices + پیش‌فرض، fallback-message + تولید TTS، users + محدودیت). فرانت: AdminPage شش‌تب (OpenAI/RAG، SMS.ir، پیامک‌ها/رویدادها، گوینده‌ها، پیام fallback، کاربران).
 - [x] **فاز ۵ — تخصیص داخلی + Provisioning + ساخت تلفن هوشمند:** ExtensionAllocator (تصادفی آزاد ۱۰۰۰–۹۹۹۹، Extension حالا nullable + migration)، AsteriskProvisioningService (SSH.NET، نوشتن بلوک PJSIP + reload؛ در نبود SSH شبیه‌سازی)، SmartPhoneService (پیش‌نیازها، تخصیص، provisioning، SIP secret، تولید وویس خوش‌آمد TTS، پیامک SmartPhoneCreated). کنترلر `smartphone` (GET/POST/PUT welcome). فرانت: SmartPhonePage (پیام خوش‌آمد + چک‌لیست پیش‌نیاز + دکمه ساخت + نمایش داخلی) + آیتم منو. ⚠️ بلوک PJSIP ممکن است بسته به پیکربندی ایزابل نیاز به تنظیم داشته باشد.
-- [ ] **فاز ۶ — پل تلفنی realtime (gpt-realtime ⇄ Asterisk).**
+- [x] **فاز ۶ — پل تلفنی realtime:** پروژه‌ی `ArkaCallCenter.Realtime` (worker): AudioSocketServer (TCP:9092)، AudioSocketProtocol (فریم‌بندی + استخراج داخلی از UUID)، AudioResampler (۸k↔۲۴k)، OpenAiRealtimeClient (WebSocket، session.update، greet، append/receive audio)، CallHandler (یافتن SmartPhone، instructions با KB + قانون fallback، سقف دقیقه، ثبت CallSession). dialplan نمونه در `telephony/extensions_arka.conf`. کنترلر `calls` + صفحه‌ی تماس‌ها در فرانت. ⚠️ نیازمند تنظیم زنده: app_audiosocket، کلید OpenAI، هماهنگی context ایزابل.
+
+---
+
+## 🎯 وضعیت کلی: همه‌ی ۷ فاز کامل و پوش‌شده‌اند.
+گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 
 ---
 
