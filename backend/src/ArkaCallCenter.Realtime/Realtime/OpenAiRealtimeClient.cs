@@ -20,6 +20,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     public event Func<byte[], Task>? OnAudioDelta;   // PCM16 24kHz
     public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار
     public event Func<Task>? OnResponseDone;
+    public event Action<int, int, int>? OnUsage;      // prompt, completion, total
 
     public OpenAiRealtimeClient(string apiKey, string baseUrl, string model, ILogger logger)
     {
@@ -111,12 +112,26 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                     await OnAssistantText(t.GetString() ?? "");
                 break;
             case "response.done":
+                TryEmitUsage(doc.RootElement);
                 if (OnResponseDone is not null) await OnResponseDone();
                 break;
             case "error":
                 _logger.LogError("Realtime error: {Json}", json);
                 break;
         }
+    }
+
+    private void TryEmitUsage(JsonElement root)
+    {
+        if (OnUsage is null) return;
+        if (!root.TryGetProperty("response", out var resp) ||
+            !resp.TryGetProperty("usage", out var usage)) return;
+        int Get(string n) => usage.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+        var input = Get("input_tokens");
+        var output = Get("output_tokens");
+        var total = Get("total_tokens");
+        if (total == 0) total = input + output;
+        OnUsage(input, output, total);
     }
 
     private async Task SendAsync(object payload, CancellationToken ct)

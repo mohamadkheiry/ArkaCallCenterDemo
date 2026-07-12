@@ -79,8 +79,16 @@ public class CallHandler
         var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback);
         var transcript = new StringBuilder();
         var answeredFromKb = true;
+        long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model, _logger);
+
+        realtime.OnUsage += (p, c, t) =>
+        {
+            Interlocked.Add(ref usagePrompt, p);
+            Interlocked.Add(ref usageCompletion, c);
+            Interlocked.Add(ref usageTotal, t);
+        };
 
         realtime.OnAudioDelta += async pcm24k =>
         {
@@ -125,6 +133,30 @@ public class CallHandler
 
         sw.Stop();
         await LogCallAsync(sp.Id, startedAt, (int)sw.Elapsed.TotalSeconds, answeredFromKb, transcript.ToString());
+
+        if (Interlocked.Read(ref usageTotal) > 0)
+        {
+            await RecordUsageAsync(sp.User.Id, sp.User.PhoneNumber, model, apiKey!,
+                (int)usagePrompt, (int)usageCompletion, (int)usageTotal);
+        }
+    }
+
+    private async Task RecordUsageAsync(int userId, string phone, string model, string apiKey,
+        int prompt, int completion, int total)
+    {
+        try
+        {
+            using var scope = _scopes.CreateScope();
+            var ctx = scope.ServiceProvider.GetRequiredService<IUsageContext>();
+            ctx.UserId = userId;
+            ctx.PhoneNumber = phone;
+            var tracker = scope.ServiceProvider.GetRequiredService<ITokenUsageTracker>();
+            await tracker.RecordAsync("Realtime", model, ApiKeyFingerprint.Of(apiKey), prompt, completion, total);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record realtime token usage.");
+        }
     }
 
     private static string BuildInstructions(string? brand, string kbText, string fallback) => $"""

@@ -17,6 +17,7 @@ public class ArkaDbContext : DbContext
     public DbSet<SmsTemplate> SmsTemplates => Set<SmsTemplate>();
     public DbSet<SmsEventRecipient> SmsEventRecipients => Set<SmsEventRecipient>();
     public DbSet<VoiceOption> VoiceOptions => Set<VoiceOption>();
+    public DbSet<TokenUsage> TokenUsages => Set<TokenUsage>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -94,6 +95,17 @@ public class ArkaDbContext : DbContext
             e.Property(x => x.Name).HasMaxLength(100).IsRequired();
             e.Property(x => x.DisplayName).HasMaxLength(150).IsRequired();
             e.Property(x => x.Provider).HasMaxLength(50);
+        });
+
+        b.Entity<TokenUsage>(e =>
+        {
+            e.Property(x => x.ApiKeyFingerprint).HasMaxLength(80);
+            e.Property(x => x.PhoneNumber).HasMaxLength(20);
+            e.Property(x => x.Model).HasMaxLength(80);
+            e.Property(x => x.Operation).HasMaxLength(30);
+            e.HasIndex(x => x.ApiKeyFingerprint);
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => x.CreatedAt);
         });
     }
 }

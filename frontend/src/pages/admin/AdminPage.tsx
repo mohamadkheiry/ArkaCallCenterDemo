@@ -5,6 +5,7 @@ import TemplatesTab from './TemplatesTab'
 import VoicesTab from './VoicesTab'
 import FallbackTab from './FallbackTab'
 import UsersTab from './UsersTab'
+import UsageTab from './UsageTab'
 
 const TABS = [
   { key: 'openai', label: 'OpenAI و RAG' },
@@ -12,6 +13,7 @@ const TABS = [
   { key: 'templates', label: 'پیامک‌ها و رویدادها' },
   { key: 'voices', label: 'گوینده‌ها' },
   { key: 'fallback', label: 'پیام پیش‌فرض' },
+  { key: 'usage', label: 'مصرف توکن' },
   { key: 'users', label: 'کاربران' },
 ] as const
 
@@ -56,6 +58,7 @@ export default function AdminPage() {
       {tab === 'templates' && <TemplatesTab />}
       {tab === 'voices' && <VoicesTab />}
       {tab === 'fallback' && <FallbackTab />}
+      {tab === 'usage' && <UsageTab />}
       {tab === 'users' && <UsersTab />}
     </div>
   )

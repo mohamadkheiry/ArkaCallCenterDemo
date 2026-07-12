@@ -222,4 +222,70 @@ public class AdminController : ControllerBase
         await _db.SaveChangesAsync(ct);
         return Ok(new { message = "محدودیت کاربر به‌روزرسانی شد." });
     }
+
+    // ---------------- Token usage reports ----------------
+    /// <summary>مصرف توکن به تفکیک کلید API (به‌همراه تاریخ اولین/آخرین استفاده).</summary>
+    [HttpGet("usage/keys")]
+    public async Task<IActionResult> UsageByKey(CancellationToken ct)
+    {
+        var rows = await _db.TokenUsages.AsNoTracking()
+            .GroupBy(u => u.ApiKeyFingerprint)
+            .Select(g => new
+            {
+                apiKey = g.Key,
+                totalTokens = g.Sum(x => (long)x.TotalTokens),
+                promptTokens = g.Sum(x => (long)x.PromptTokens),
+                completionTokens = g.Sum(x => (long)x.CompletionTokens),
+                calls = g.Count(),
+                firstUsed = g.Min(x => x.CreatedAt),
+                lastUsed = g.Max(x => x.CreatedAt),
+            })
+            .OrderByDescending(x => x.totalTokens)
+            .ToListAsync(ct);
+        return Ok(rows);
+    }
+
+    /// <summary>مصرف توکن به تفکیک کاربر / شماره موبایل.</summary>
+    [HttpGet("usage/users")]
+    public async Task<IActionResult> UsageByUser(CancellationToken ct)
+    {
+        var usage = await _db.TokenUsages.AsNoTracking()
+            .GroupBy(u => new { u.UserId, u.PhoneNumber })
+            .Select(g => new
+            {
+                g.Key.UserId,
+                g.Key.PhoneNumber,
+                totalTokens = g.Sum(x => (long)x.TotalTokens),
+                promptTokens = g.Sum(x => (long)x.PromptTokens),
+                completionTokens = g.Sum(x => (long)x.CompletionTokens),
+                calls = g.Count(),
+                lastUsed = g.Max(x => x.CreatedAt),
+            })
+            .OrderByDescending(x => x.totalTokens)
+            .ToListAsync(ct);
+
+        // افزودن نام برند/کاربر
+        var ids = usage.Where(u => u.UserId != null).Select(u => u.UserId!.Value).Distinct().ToList();
+        var users = await _db.Users.AsNoTracking()
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { u.Id, u.FirstName, u.LastName, u.BrandName })
+            .ToListAsync(ct);
+        var map = users.ToDictionary(u => u.Id);
+
+        var result = usage.Select(u => new
+        {
+            u.UserId,
+            u.PhoneNumber,
+            name = u.UserId != null && map.TryGetValue(u.UserId.Value, out var us)
+                ? $"{us.FirstName} {us.LastName}".Trim()
+                : null,
+            brand = u.UserId != null && map.TryGetValue(u.UserId.Value, out var ub) ? ub.BrandName : null,
+            u.totalTokens,
+            u.promptTokens,
+            u.completionTokens,
+            u.calls,
+            u.lastUsed,
+        });
+        return Ok(result);
+    }
 }

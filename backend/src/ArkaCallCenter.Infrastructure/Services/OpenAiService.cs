@@ -13,13 +13,16 @@ public class OpenAiService : IOpenAiService
     private readonly HttpClient _http;
     private readonly ISettingsService _settings;
     private readonly IConfiguration _config;
+    private readonly ITokenUsageTracker _usage;
     private readonly ILogger<OpenAiService> _logger;
 
-    public OpenAiService(HttpClient http, ISettingsService settings, IConfiguration config, ILogger<OpenAiService> logger)
+    public OpenAiService(HttpClient http, ISettingsService settings, IConfiguration config,
+        ITokenUsageTracker usage, ILogger<OpenAiService> logger)
     {
         _http = http;
         _settings = settings;
         _config = config;
+        _usage = usage;
         _logger = logger;
     }
 
@@ -60,6 +63,7 @@ public class OpenAiService : IOpenAiService
             var vec = item.GetProperty("embedding").EnumerateArray().Select(x => x.GetSingle()).ToArray();
             result.Add(vec);
         }
+        await RecordUsageAsync("Embedding", model ?? "", doc.RootElement, ct);
         return result;
     }
 
@@ -93,8 +97,24 @@ public class OpenAiService : IOpenAiService
         using var res = await _http.SendAsync(req, ct);
         await EnsureOkAsync(res, ct);
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+        await RecordUsageAsync("Chat", model ?? "", doc.RootElement, ct);
         return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
     }
+
+    /// <summary>استخراج بخش usage از پاسخ و ثبت مصرف توکن.</summary>
+    private async Task RecordUsageAsync(string operation, string model, JsonElement root, CancellationToken ct)
+    {
+        if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object) return;
+        var prompt = GetInt(usage, "prompt_tokens");
+        var completion = GetInt(usage, "completion_tokens");
+        var total = GetInt(usage, "total_tokens");
+        if (total == 0) total = prompt + completion;
+        var (_, apiKey) = await CredsAsync(ct);
+        await _usage.RecordAsync(operation, model, ApiKeyFingerprint.Of(apiKey), prompt, completion, total, ct);
+    }
+
+    private static int GetInt(JsonElement obj, string name)
+        => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
 
     public async Task<byte[]> TextToSpeechAsync(string text, string voice, CancellationToken ct = default)
     {

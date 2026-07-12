@@ -153,7 +153,9 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 
 ---
 
-## 🎯 وضعیت کلی: همه‌ی ۷ فاز کامل و پوش‌شده‌اند.
+- [x] **افزوده — رهگیری مصرف توکن:** موجودیت `TokenUsage` + migration، `IUsageContext`/`ITokenUsageTracker`، ثبت مصرف در `OpenAiService` (embedding/chat) و worker realtime، میدل‌ورِ انتساب کاربر از JWT. Adminendpointها: `usage/keys` (به تفکیک کلید API + تاریخ) و `usage/users` (به تفکیک کاربر/موبایل). فرانت: تب «مصرف توکن» با تاریخ شمسی.
+
+## 🎯 وضعیت کلی: همه‌ی ۷ فاز + رهگیری توکن کامل و پوش‌شده‌اند.
 گام‌های باقی‌مانده برای بهره‌برداری واقعی (نه توسعه‌ی کد): راه‌اندازی MySQL و اعمال migrationها، ثبت کلید OpenAI و اطلاعات SMS.ir در پنل سوپرادمین، تنظیم SSH/dialplan ایزابل، و تست end-to-end تماس. جزئیات در همین فایل و `docs/TELEPHONY.md`.
 
 ---

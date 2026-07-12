@@ -19,6 +19,8 @@ public static class DependencyInjection
 
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IUsageContext, UsageContext>();
+        services.AddScoped<ITokenUsageTracker, TokenUsageTracker>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddHttpClient<ISmsSender, SmsIrSender>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddScoped<ISmsEventDispatcher, SmsEventDispatcher>();
