@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +84,15 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // مستندات Scalar (UI مدرن) روی همان OpenAPI که Swagger تولید می‌کند: مسیر /scalar
+    app.MapScalarApiReference("/scalar", options =>
+    {
+        options
+            .WithTitle("Arka Call Center API")
+            .WithOpenApiRoutePattern("/swagger/v1/swagger.json")
+            .WithTheme(ScalarTheme.Purple);
+    });
 }
 
 app.UseCors();

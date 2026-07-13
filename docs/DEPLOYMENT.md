@@ -29,6 +29,8 @@ docker compose logs -f api          # API به‌صورت خودکار migration
 پس از بالا آمدن:
 - **وب/داشبورد:** `http://SERVER_IP:8081`
 - **API/Swagger (اگر ASPNETCORE_ENVIRONMENT=Development):** `http://SERVER_IP:8080/swagger`
+- **API/Scalar (UI مدرن، همان OpenAPI):** `http://SERVER_IP:8080/scalar`
+  (باندل Scalar از CDN بارگذاری می‌شود؛ مرورگر باید اینترنت داشته باشد. Swagger کاملاً آفلاین کار می‌کند.)
 - **سلامت API:** `http://SERVER_IP:8080/health`
 - **AudioSocket تلفن:** پورت TCP `9092` (در dialplan استریسک به این پورت وصل شوید)
 
