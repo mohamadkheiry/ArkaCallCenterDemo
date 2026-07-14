@@ -27,6 +27,14 @@ public static class AudioConvert
         return ShortsToBytes(resampled);
     }
 
+    /// <summary>فایل WAV (هر نرخ/کانال) → فایل WAV ۸kHz mono ۱۶بیت (فرمت «wav» ایزابل).</summary>
+    public static byte[] WavToWav8k(byte[] wav)
+    {
+        var (samples, rate) = ParseWav(wav);
+        var resampled = Resample(samples, rate, TelephonyRate);
+        return WriteWav(resampled, TelephonyRate);
+    }
+
     // ---------- WAV ----------
     public static byte[] WriteWav(short[] samples, int rate)
     {

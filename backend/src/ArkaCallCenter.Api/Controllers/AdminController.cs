@@ -477,6 +477,42 @@ public class AdminController : ControllerBase
         }
     }
 
+    /// <summary>آپلود فایل صوتی دلخواه به‌عنوان پیام پذیرش (تبدیل خودکار به WAV ۸kHz و آپلود روی ایزابل).</summary>
+    [HttpPost("main-greeting/file")]
+    [RequestSizeLimit(30_000_000)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UploadMainGreeting(IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0) return BadRequest(new { error = "فایلی ارسال نشد." });
+        if (!file.FileName.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "فقط فایل WAV (۱۶ بیت PCM) مجاز است." });
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var wav8k = Infrastructure.Audio.AudioConvert.WavToWav8k(ms.ToArray());
+            var localPath = Path.Combine(_uploadsPath, "main-greeting.wav");
+            await System.IO.File.WriteAllBytesAsync(localPath, wav8k, ct);
+            await _settings.SetAsync(SettingKeys.MainGreetingAudioPath, localPath, false, ct);
+
+            var soundName = await _asterisk.UploadSoundAsync(wav8k, "main-greeting", ct);
+            if (soundName is not null)
+                await _settings.SetAsync(SettingKeys.MainGreetingAsteriskSound, soundName, false, ct);
+
+            return Ok(new
+            {
+                message = soundName is not null
+                    ? "فایل صوتی تبدیل و روی ایزابل آپلود شد."
+                    : "فایل ذخیره شد؛ آپلود به ایزابل انجام نشد (SSH را بررسی کنید).",
+                asteriskSound = soundName,
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = "پردازش فایل ناموفق بود (فقط WAV ۱۶بیت PCM پشتیبانی می‌شود): " + ex.Message });
+        }
+    }
+
     // ---------------- Hold music (while AI is thinking) ----------------
     [HttpGet("hold-music")]
     public async Task<IActionResult> GetHoldMusic(CancellationToken ct)

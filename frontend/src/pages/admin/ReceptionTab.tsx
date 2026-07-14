@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Music } from 'lucide-react'
+import { Music, Upload } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { Button, Card } from '../../components/ui'
 
@@ -15,6 +15,8 @@ export default function ReceptionTab() {
   const [sound, setSound] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+
+  const greetingFileRef = useRef<HTMLInputElement>(null)
 
   const [holdEnabled, setHoldEnabled] = useState(false)
   const [holdHasFile, setHoldHasFile] = useState(false)
@@ -48,6 +50,26 @@ export default function ReceptionTab() {
     }
   }
 
+  async function uploadGreetingFile(file: File) {
+    setMsg('')
+    if (!file.name.toLowerCase().endsWith('.wav')) return setMsg('فقط فایل WAV (۱۶ بیت PCM) مجاز است.')
+    setBusy(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const { data } = await api.post('/api/admin/main-greeting/file', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setMsg(data.message)
+      setSound(data.asteriskSound ?? sound)
+    } catch (e) {
+      setMsg(apiError(e))
+    } finally {
+      setBusy(false)
+      if (greetingFileRef.current) greetingFileRef.current.value = ''
+    }
+  }
+
   async function uploadHold(file: File) {
     setHoldMsg('')
     if (!file.name.toLowerCase().endsWith('.wav')) return setHoldMsg('فقط فایل WAV مجاز است.')
@@ -76,9 +98,31 @@ export default function ReceptionTab() {
         <h3 className="text-lg font-bold text-slate-800">پیام پذیرش اصلی (IVR)</h3>
         <p className="mt-1 text-sm text-slate-500">
           هنگام تماس با شماره‌ی اصلی شرکت، این پیام پخش می‌شود و سپس منتظر دریافت شماره داخلی می‌ماند.
-          پس از ذخیره، صوت تولید و روی سرور ایزابل آپلود می‌شود.
+          یا متن را با هوش مصنوعی به صوت تبدیل کنید، یا یک فایل صوتی دلخواه (WAV) بارگذاری کنید.
         </p>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <Upload size={16} className="text-brand-600" />
+            بارگذاری فایل صوتی دلخواه (به‌جای تولید با هوش مصنوعی)
+          </div>
+          <p className="mt-1 text-xs text-slate-400">فایل WAV (۱۶ بیت PCM) — به‌صورت خودکار به ۸kHz مونو تبدیل و روی ایزابل آپلود می‌شود.</p>
+          <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-brand-300 hover:text-brand-700">
+            <Upload size={15} />
+            {busy ? 'در حال پردازش…' : 'انتخاب و آپلود فایل WAV'}
+            <input
+              ref={greetingFileRef}
+              type="file"
+              accept=".wav"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => e.target.files?.[0] && uploadGreetingFile(e.target.files[0])}
+            />
+          </label>
+        </div>
+
         <div className="mt-4 space-y-4">
+          <span className="block text-sm font-medium text-slate-700">یا: تولید از روی متن (هوش مصنوعی)</span>
           <textarea
             rows={3}
             value={text}
