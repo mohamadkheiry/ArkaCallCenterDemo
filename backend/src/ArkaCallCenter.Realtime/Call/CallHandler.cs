@@ -114,9 +114,21 @@ public class CallHandler
             Interlocked.Add(ref usageTotal, t);
         };
 
-        // نوشتن روی AudioSocket باید هماهنگ باشد (صدای AI و موسیقی انتظار همزمان تلاش می‌کنند بنویسند)
+        // === مسیر خروجی صدا به سمت Asterisk ===
+        // AudioSocket نیازمند جریانِ پیوسته‌ی صدا (هر ۲۰ms یک فریم) است؛ اگر worker
+        // ساکت بماند، Asterisk با خطای «Failed to read data from AudioSocket» تماس را
+        // قطع می‌کند. پس یک «پمپ» داریم که هر ۲۰ms دقیقاً ۳۲۰ بایت می‌فرستد: یا صدای
+        // AI از صف، یا موسیقی انتظار حین فکر کردن، یا سکوت. این هم اتصال را زنده نگه
+        // می‌دارد و هم پخش را با آهنگِ درست (real-time) هماهنگ می‌کند.
+        using var callCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var writeLock = new SemaphoreSlim(1, 1);
-        CancellationTokenSource? holdCts = null;
+        var outChunks = new LinkedList<byte[]>();   // صف صدای AI (SLIN 8kHz)
+        var outLock = new object();
+        var outHead = 0;                            // آفست خواندن در اولین قطعه‌ی صف
+        var thinking = 0;                           // ۱ = کاربر حرفش تمام شده، منتظر پاسخ AI
+        var holdPos = 0;                            // موقعیت پخش موسیقی انتظار (لوپ)
+
+        void EnqueueOut(byte[] slin) { lock (outLock) outChunks.AddLast(slin); }
 
         async Task WriteLockedAsync(byte[] slin)
         {
@@ -130,46 +142,61 @@ public class CallHandler
             finally { writeLock.Release(); }
         }
 
-        void StopHold() { try { holdCts?.Cancel(); } catch { } holdCts = null; }
-
-        void StartHold()
+        // یک فریم ۳۲۰ بایتی (۲۰ms) بساز: اول از صف صدای AI؛ اگر خالی بود و AI در حال
+        // فکر کردن است، موسیقی انتظار (لوپ)؛ در غیر این صورت سکوت.
+        byte[] NextOutFrame()
         {
-            if (holdMusic is null || holdMusic.Length == 0) return;
-            StopHold();
-            holdCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var token = holdCts.Token;
-            _ = Task.Run(async () =>
+            const int frameLen = 320;
+            var frame = new byte[frameLen];
+            var filled = 0;
+            lock (outLock)
             {
-                try
+                while (filled < frameLen && outChunks.First is not null)
                 {
-                    const int frame = 320; // ۲۰ms در SLIN 8kHz
-                    while (!token.IsCancellationRequested)
-                    {
-                        for (var off = 0; off < holdMusic.Length && !token.IsCancellationRequested; off += frame)
-                        {
-                            var size = Math.Min(frame, holdMusic.Length - off);
-                            var chunk = new byte[size];
-                            Array.Copy(holdMusic, off, chunk, 0, size);
-                            await WriteLockedAsync(chunk);
-                            await Task.Delay(20, token); // پخش هم‌زمان (real-time)
-                        }
-                    }
+                    var chunk = outChunks.First.Value;
+                    var avail = chunk.Length - outHead;
+                    var take = Math.Min(avail, frameLen - filled);
+                    Array.Copy(chunk, outHead, frame, filled, take);
+                    filled += take; outHead += take;
+                    if (outHead >= chunk.Length) { outChunks.RemoveFirst(); outHead = 0; }
                 }
-                catch (OperationCanceledException) { }
-            }, token);
+            }
+            if (filled == 0 && holdMusic is { Length: > 0 } && Volatile.Read(ref thinking) == 1)
+            {
+                for (var i = 0; i < frameLen; i++)
+                {
+                    frame[i] = holdMusic[holdPos];
+                    if (++holdPos >= holdMusic.Length) holdPos = 0;
+                }
+            }
+            // در غیر این صورت فریمِ سکوت (صفر) می‌ماند
+            return frame;
         }
 
-        realtime.OnAudioDelta += async pcm24k =>
+        // پمپِ خروجی: تا پایان تماس، هر ۲۰ms یک فریم به Asterisk می‌فرستد.
+        async Task PumpAsync()
         {
-            StopHold(); // صدای AI رسید → موسیقی انتظار قطع شود
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(20));
+                while (await timer.WaitForNextTickAsync(callCts.Token))
+                    await WriteLockedAsync(NextOutFrame());
+            }
+            catch (OperationCanceledException) { }
+        }
+
+        realtime.OnAudioDelta += pcm24k =>
+        {
+            Volatile.Write(ref thinking, 0); // صدای AI رسید → دیگر «فکر کردن» نیست
             var slin8k = AudioResampler.Downsample24kTo8k(pcm24k);
             Record(slin8k);
-            await WriteLockedAsync(slin8k);
+            EnqueueOut(slin8k); // به‌جای نوشتن مستقیم، وارد صف می‌شود؛ پمپ آن را با آهنگ درست می‌فرستد
+            return Task.CompletedTask;
         };
-        realtime.OnUserSpeechStopped += () => { StartHold(); return Task.CompletedTask; };
+        realtime.OnUserSpeechStopped += () => { Volatile.Write(ref thinking, 1); return Task.CompletedTask; };
         realtime.OnResponseDone += () =>
         {
-            StopHold();
+            Volatile.Write(ref thinking, 0);
             if (asstBuf.Length > 0)
             {
                 var text = asstBuf.ToString().Trim();
@@ -187,13 +214,16 @@ public class CallHandler
             return Task.CompletedTask;
         };
 
-        await realtime.ConnectAsync(instructions, voice, ct);
-        await realtime.GreetAsync(welcome, ct);
-
+        // پمپ را از همان ابتدا (پیش از اتصال به OpenAI) شروع کن تا سکوت بلافاصله به
+        // Asterisk جاری شود و در طول هندشیک WebSocket هم اتصال زنده بماند.
+        var pumpTask = PumpAsync();
         var sw = Stopwatch.StartNew();
         var startedAt = DateTime.UtcNow;
         try
         {
+            await realtime.ConnectAsync(instructions, voice, ct);
+            await realtime.GreetAsync(welcome, ct);
+
             while (!ct.IsCancellationRequested)
             {
                 if (sw.Elapsed.TotalMinutes >= limitMinutes)
@@ -215,9 +245,12 @@ public class CallHandler
         {
             _logger.LogError(ex, "Error during call on ext {Ext}", extension);
         }
-
-        sw.Stop();
-        StopHold();
+        finally
+        {
+            sw.Stop();
+            callCts.Cancel();                // پمپ خروجی را متوقف کن
+            try { await pumpTask; } catch { }
+        }
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
         string? recordingPath = null;
