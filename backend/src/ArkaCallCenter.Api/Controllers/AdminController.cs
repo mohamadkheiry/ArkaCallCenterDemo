@@ -52,7 +52,9 @@ public class AdminController : ControllerBase
         {
             // مقدار ماسک‌شده را نادیده بگیر تا سِری با ماسک بازنویسی نشود.
             if (kv.Value == "********") continue;
-            await _settings.SetAsync(kv.Key, kv.Value, SecretKeys.Contains(kv.Key), ct);
+            // حذف فاصله‌های اضافی (کپی/پیست) — به‌ویژه برای baseURL/کلید/نام مدل‌ها.
+            var value = kv.Value?.Trim();
+            await _settings.SetAsync(kv.Key, value, SecretKeys.Contains(kv.Key), ct);
         }
         return Ok(new { message = "تنظیمات ذخیره شد." });
     }

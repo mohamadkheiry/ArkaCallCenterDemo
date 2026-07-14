@@ -32,7 +32,16 @@ public class OpenAiService : IOpenAiService
             ?? _config["OpenAI:BaseUrl"] ?? "https://api.openai.com/v1";
         var apiKey = await _settings.GetAsync(SettingKeys.OpenAiApiKey, null, ct)
             ?? _config["OpenAI:ApiKey"] ?? "";
-        return (baseUrl.TrimEnd('/'), apiKey);
+        // فاصله‌های اضافی (کپی/پیست) نباید درخواست را خراب کنند.
+        return (baseUrl.Trim().TrimEnd('/'), apiKey.Trim());
+    }
+
+    /// <summary>خواندن نام مدل با حذف فاصله‌های اضافی (تا « gpt-4o» خطای invalid model ندهد).</summary>
+    private async Task<string> ModelAsync(string key, string def, CancellationToken ct)
+    {
+        var v = await _settings.GetAsync(key, def, ct);
+        v = v?.Trim();
+        return string.IsNullOrEmpty(v) ? def : v;
     }
 
     private async Task<HttpRequestMessage> BuildAsync(HttpMethod method, string path, object body, CancellationToken ct)
@@ -51,7 +60,7 @@ public class OpenAiService : IOpenAiService
 
     public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct = default)
     {
-        var model = await _settings.GetAsync(SettingKeys.OpenAiEmbeddingModel, "text-embedding-3-small", ct);
+        var model = await ModelAsync(SettingKeys.OpenAiEmbeddingModel, "text-embedding-3-small", ct);
         var req = await BuildAsync(HttpMethod.Post, "/embeddings", new { model, input = texts }, ct);
         using var res = await _http.SendAsync(req, ct);
         await EnsureOkAsync(res, ct);
@@ -69,7 +78,7 @@ public class OpenAiService : IOpenAiService
 
     public async Task<string> ChatAsync(string systemPrompt, string userPrompt, bool jsonMode = false, CancellationToken ct = default)
     {
-        var model = await _settings.GetAsync(SettingKeys.OpenAiChatModel, "gpt-4o-mini", ct);
+        var model = await ModelAsync(SettingKeys.OpenAiChatModel, "gpt-4o-mini", ct);
         object body = jsonMode
             ? new
             {
@@ -118,7 +127,7 @@ public class OpenAiService : IOpenAiService
 
     public async Task<byte[]> TextToSpeechAsync(string text, string voice, string format = "mp3", CancellationToken ct = default)
     {
-        var model = await _settings.GetAsync(SettingKeys.OpenAiTtsModel, "gpt-4o-mini-tts", ct);
+        var model = await ModelAsync(SettingKeys.OpenAiTtsModel, "gpt-4o-mini-tts", ct);
         var req = await BuildAsync(HttpMethod.Post, "/audio/speech",
             new { model, voice, input = text, response_format = format }, ct);
         using var res = await _http.SendAsync(req, ct);
