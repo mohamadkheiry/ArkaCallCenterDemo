@@ -46,8 +46,8 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(ct);
 
-        // TODO(فاز ۴): از طریق ISmsEventDispatcher با قالب OtpRequested ارسال شود.
-        await _sms.SendAsync(phoneNumber, $"کد ورود شما به سامانه آرکا: {code}", ct);
+        // ارسال کد از طریق قالب verify سرویس SMS.ir.
+        await _sms.SendVerifyCodeAsync(phoneNumber, code, ct);
         return (true, null);
     }
 
@@ -128,8 +128,8 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(ct);
 
-        // کد به شماره‌ی جدید ارسال می‌شود تا مالکیت آن تأیید شود.
-        await _sms.SendAsync(newPhone, $"کد تأیید تغییر شماره در سامانه آرکا: {code}", ct);
+        // کد به شماره‌ی جدید (از طریق قالب verify) ارسال می‌شود تا مالکیت آن تأیید شود.
+        await _sms.SendVerifyCodeAsync(newPhone, code, ct);
         return (true, null);
     }
 

@@ -26,7 +26,8 @@ export const SETTING_FIELDS: {
   { key: 'openai.ttsModel', label: 'مدل TTS', group: 'openai' },
 
   { key: 'smsir.apiKey', label: 'API Key سرویس SMS.ir', group: 'sms', secret: true },
-  { key: 'smsir.lineNumber', label: 'شماره خط SMS.ir', group: 'sms' },
+  { key: 'smsir.verifyTemplateId', label: 'شناسه قالب کد تأیید (Template ID)', group: 'sms', hint: 'قالب /send/verify با پارامتر CODE — برای ارسال کد ورود' },
+  { key: 'smsir.lineNumber', label: 'شماره خط SMS.ir (پیامک رویدادها)', group: 'sms' },
 
   { key: 'limits.defaultCallMinutes', label: 'سقف پیش‌فرض مکالمه (دقیقه)', group: 'limits' },
   { key: 'limits.warningPercent', label: 'درصد هشدار نزدیک شدن به سقف', group: 'limits' },

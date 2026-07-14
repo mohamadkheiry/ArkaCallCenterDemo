@@ -62,4 +62,47 @@ public class SmsIrSender : ISmsSender
             return false;
         }
     }
+
+    public async Task<bool> SendVerifyCodeAsync(string phoneNumber, string code, CancellationToken ct = default)
+    {
+        var apiKey = await _settings.GetAsync(SettingKeys.SmsIrApiKey, null, ct);
+        var templateId = await _settings.GetAsync(SettingKeys.SmsIrVerifyTemplateId, null, ct);
+
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(templateId)
+            || !long.TryParse(templateId, out var tid))
+        {
+            // پیکربندی نشده → حالت توسعه: کد در لاگ چاپ می‌شود.
+            _logger.LogInformation("[SMS(dev)→{Phone}] کد تأیید: {Code}", phoneNumber, code);
+            return true;
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.sms.ir/v1/send/verify")
+            {
+                Content = JsonContent.Create(new
+                {
+                    mobile = phoneNumber,
+                    templateId = tid,
+                    parameters = new[] { new { name = "CODE", value = code } },
+                }),
+            };
+            req.Headers.Add("X-API-KEY", apiKey);
+            req.Headers.Add("Accept", "application/json");
+
+            using var res = await _http.SendAsync(req, ct);
+            var body = await res.Content.ReadAsStringAsync(ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                _logger.LogError("SMS.ir verify error {Status}: {Body}", res.StatusCode, body);
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SMS.ir verify send failed for {Phone}", phoneNumber);
+            return false;
+        }
+    }
 }

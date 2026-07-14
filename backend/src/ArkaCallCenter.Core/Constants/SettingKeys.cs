@@ -13,7 +13,8 @@ public static class SettingKeys
 
     // SMS.ir
     public const string SmsIrApiKey = "smsir.apiKey";                   // secret
-    public const string SmsIrLineNumber = "smsir.lineNumber";
+    public const string SmsIrLineNumber = "smsir.lineNumber";           // برای پیامک‌های bulk رویدادها
+    public const string SmsIrVerifyTemplateId = "smsir.verifyTemplateId"; // قالب ارسال کد تأیید (/send/verify)
 
     // Voice / defaults
     public const string DefaultVoiceName = "voice.default";

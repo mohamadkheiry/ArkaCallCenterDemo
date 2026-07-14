@@ -2,10 +2,17 @@ using ArkaCallCenter.Core.Enums;
 
 namespace ArkaCallCenter.Core.Abstractions;
 
-/// <summary>ارسال پیامک خام. پیاده‌سازی واقعی SMS.ir در فاز ۴.</summary>
+/// <summary>ارسال پیامک از طریق SMS.ir.</summary>
 public interface ISmsSender
 {
+    /// <summary>ارسال پیامک متنی خام (bulk با شماره خط) — برای پیامک رویدادها.</summary>
     Task<bool> SendAsync(string phoneNumber, string text, CancellationToken ct = default);
+
+    /// <summary>
+    /// ارسال کد تأیید از طریق قالب SMS.ir (endpoint /send/verify، پارامتر CODE).
+    /// برای کدهای ورود و تغییر شماره استفاده می‌شود.
+    /// </summary>
+    Task<bool> SendVerifyCodeAsync(string phoneNumber, string code, CancellationToken ct = default);
 }
 
 /// <summary>
