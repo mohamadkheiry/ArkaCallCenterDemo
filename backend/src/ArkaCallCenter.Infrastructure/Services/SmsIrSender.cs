@@ -97,6 +97,7 @@ public class SmsIrSender : ISmsSender
                 _logger.LogError("SMS.ir verify error {Status}: {Body}", res.StatusCode, body);
                 return false;
             }
+            _logger.LogInformation("SMS.ir verify sent to {Phone}: {Body}", phoneNumber, body);
             return true;
         }
         catch (Exception ex)
