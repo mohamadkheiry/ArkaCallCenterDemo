@@ -3,6 +3,8 @@
 سامانه‌ای چند-مستأجری (multi-tenant) که به هر کاربر یک «تلفن هوشمند» می‌دهد: یک داخلی روی سرور ایزابل (Asterisk) که تماس‌ها را با هوش مصنوعی (OpenAI `gpt-realtime`) و بر پایه‌ی **پایگاه دانش اختصاصی هر کاربر (RAG)** پاسخ می‌دهد.
 
 > برای توسعه‌ی گام‌به‌گام، **حتماً ابتدا [`CLAUDE.md`](./CLAUDE.md) را بخوانید** — نقشه‌ی کامل معماری، قراردادها و وضعیت فازها آنجاست.
+>
+> 🚀 برای **استقرار (روی Ubuntu یا هر سیستم با Docker)** به **[`deployment.md`](./deployment.md)** مراجعه کنید — راه سریع تک‌دستوری با `deploy.sh` و راهنمای کامل.
 
 ## قابلیت‌ها (خلاصه)
 
@@ -35,6 +37,17 @@ ArkaCallCenterDemo/
 ├── CLAUDE.md           # راهنمای توسعه (منبع حقیقت)
 └── README.md
 ```
+
+## استقرار (Deployment)
+
+کل سامانه با Docker Compose (چندسکویی — Ubuntu/لینوکس و ویندوز) بالا می‌آید:
+
+```bash
+unzip ArkaCallCenter-deploy.zip && cd ArkaCallCenterDemo
+chmod +x deploy.sh && ./deploy.sh
+```
+
+راهنمای کامل: **[`deployment.md`](./deployment.md)** · زیپ آماده: [`release/ArkaCallCenter-deploy.zip`](./release/ArkaCallCenter-deploy.zip)
 
 ## شروع سریع (توسعه)
 
