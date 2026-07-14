@@ -2,10 +2,34 @@
 
 کل سامانه (MySQL + API + Realtime worker + فرانت nginx) با یک دستور بالا می‌آید.
 
+> **چندسکویی:** همه‌ی ایمیج‌ها Linux-based هستند (dotnet، node، nginx، mysql)، پس این استک
+> عیناً روی **Ubuntu / هر لینوکسی** و همچنین ویندوز (با Docker Desktop) اجرا می‌شود. وابستگی به
+> ویندوز وجود ندارد.
+
 ## پیش‌نیاز روی سرور
 - Docker و Docker Compose (v2)
 - دسترسی به اینترنت برای pull ایمیج‌ها و restore پکیج‌ها
 - پورت‌های آزاد: `8081` (وب)، `8080` (API)، `9092` (AudioSocket تلفن)
+
+## راه سریع روی Ubuntu (اسکریپت)
+
+```bash
+# نصب Docker (اگر ندارید)
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER" && newgrp docker   # تا بدون sudo کار کند
+
+# دریافت پروژه — یکی از دو راه:
+#   الف) از زیپِ روی گیت:
+unzip ArkaCallCenter-deploy.zip && cd ArkaCallCenterDemo
+#   ب) یا clone:
+# git clone https://github.com/mohamadkheiry/ArkaCallCenterDemo.git && cd ArkaCallCenterDemo
+
+# اجرا با یک دستور (اسکریپت .env می‌سازد و استک را build و up می‌کند)
+chmod +x deploy.sh && ./deploy.sh
+```
+
+فایل زیپِ آماده‌ی استقرار در ریشه‌ی ریپو، مسیر [`release/ArkaCallCenter-deploy.zip`](../release/ArkaCallCenter-deploy.zip)
+قرار دارد (سورس + compose + Dockerfileها + deploy.sh، بدون node_modules/bin).
 
 ## گام‌ها
 
