@@ -85,7 +85,7 @@ export default function DashboardHome() {
         <StatCard
           title="دقایق مصرف‌شده"
           value={toFa(me?.usedMinutes ?? 0)}
-          sub={limit ? `از ${toFa(limit)} دقیقه` : 'محدودیت پیش‌فرض'}
+          sub={me?.role === 'SuperAdmin' ? 'نامحدود' : limit ? `از ${toFa(limit)} دقیقه` : 'محدودیت پیش‌فرض'}
           icon={Timer}
         />
         <StatCard title="گوینده" value={me?.voiceName ?? 'پیش‌فرض'} sub="قابل تغییر در بخش صدا" icon={Mic} />

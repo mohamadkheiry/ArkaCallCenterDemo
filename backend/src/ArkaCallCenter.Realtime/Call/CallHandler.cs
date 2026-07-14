@@ -72,6 +72,8 @@ public class CallHandler
         var fallback = await settings.GetAsync(SettingKeys.FallbackMessageText, defaultFallback, ct) ?? defaultFallback;
         var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
         var voice = sp.User.VoiceName ?? await settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
+        // سوپر ادمین نامحدود است (سقف دقیقه اعمال نمی‌شود)؛ دقایق مصرف‌شده همچنان برای نمایش ثبت می‌شود.
+        var unlimited = sp.User.Role == UserRole.SuperAdmin;
         var limitMinutes = sp.User.CallMinuteLimit
             ?? await settings.GetIntAsync(SettingKeys.DefaultCallMinuteLimit, 30, ct);
 
@@ -129,6 +131,10 @@ public class CallHandler
         var holdPos = 0;                            // موقعیت پخش موسیقی انتظار (لوپ)
 
         void EnqueueOut(byte[] slin) { lock (outLock) outChunks.AddLast(slin); }
+
+        // خالی‌کردن فوریِ صف پخش — برای barge-in: وقتی کاربر وسط حرف AI شروع به صحبت می‌کند،
+        // صدای بافرشده‌ی AI باید بلافاصله قطع شود تا AI ساکت شود و به کاربر گوش دهد.
+        void ClearOut() { lock (outLock) { outChunks.Clear(); outHead = 0; } }
 
         async Task WriteLockedAsync(byte[] slin)
         {
@@ -193,6 +199,13 @@ public class CallHandler
             EnqueueOut(slin8k); // به‌جای نوشتن مستقیم، وارد صف می‌شود؛ پمپ آن را با آهنگ درست می‌فرستد
             return Task.CompletedTask;
         };
+        realtime.OnUserSpeechStarted += () =>
+        {
+            ClearOut();                      // barge-in: صدای در حال پخشِ AI را فوراً قطع کن
+            Volatile.Write(ref thinking, 0);
+            _logger.LogInformation("Barge-in: user started speaking on ext {Ext}; cleared AI audio buffer.", extension);
+            return Task.CompletedTask;
+        };
         realtime.OnUserSpeechStopped += () => { Volatile.Write(ref thinking, 1); return Task.CompletedTask; };
         realtime.OnResponseDone += () =>
         {
@@ -226,7 +239,7 @@ public class CallHandler
 
             while (!ct.IsCancellationRequested)
             {
-                if (sw.Elapsed.TotalMinutes >= limitMinutes)
+                if (!unlimited && sw.Elapsed.TotalMinutes >= limitMinutes)
                 {
                     _logger.LogInformation("Call on ext {Ext} reached limit ({Min} min).", extension, limitMinutes);
                     break;
@@ -268,12 +281,35 @@ public class CallHandler
 
         var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turns,
             new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
-        await LogCallAsync(sp.Id, startedAt, (int)sw.Elapsed.TotalSeconds, answeredFromKb, transcriptJson, recordingPath);
+        var durationSeconds = (int)sw.Elapsed.TotalSeconds;
+        await LogCallAsync(sp.Id, startedAt, durationSeconds, answeredFromKb, transcriptJson, recordingPath);
+
+        // افزودن دقایق مصرف‌شده به کاربر (هر تماس به بالاترین دقیقه گرد می‌شود؛ مثل صورتحساب مخابراتی).
+        // برای سوپر ادمین که نامحدود است هم فقط جهت نمایش انباشته می‌شود.
+        if (durationSeconds > 0)
+            await AddUsedMinutesAsync(sp.User.Id, (int)Math.Ceiling(durationSeconds / 60.0));
 
         if (Interlocked.Read(ref usageTotal) > 0)
         {
             await RecordUsageAsync(sp.User.Id, sp.User.PhoneNumber, model, apiKey!,
                 (int)usagePrompt, (int)usageCompletion, (int)usageTotal);
+        }
+    }
+
+    private async Task AddUsedMinutesAsync(int userId, int minutes)
+    {
+        try
+        {
+            using var scope = _scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user is null) return;
+            user.UsedMinutes += minutes;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update used minutes for user {UserId}", userId);
         }
     }
 

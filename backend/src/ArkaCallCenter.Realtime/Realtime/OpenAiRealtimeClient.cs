@@ -21,6 +21,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار (delta)
     public event Func<string, Task>? OnUserTranscript; // رونوشت کامل گفته‌ی کاربر
     public event Func<Task>? OnResponseDone;
+    public event Func<Task>? OnUserSpeechStarted;     // کاربر شروع به صحبت کرد → باید AI ساکت شود (barge-in)
     public event Func<Task>? OnUserSpeechStopped;     // کاربر حرفش تمام شد → AI در حال «فکر کردن»
     public event Action<int, int, int>? OnUsage;      // prompt, completion, total
 
@@ -53,7 +54,15 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                     input = new
                     {
                         format = new { type = "audio/pcm", rate = 24000 },
-                        turn_detection = new { type = "server_vad", threshold = 0.5, silence_duration_ms = 600 },
+                        // server VAD: با شروع صحبتِ کاربر، پاسخِ در حال پخشِ AI قطع شود (barge-in)
+                        turn_detection = new
+                        {
+                            type = "server_vad",
+                            threshold = 0.5,
+                            silence_duration_ms = 600,
+                            interrupt_response = true,
+                            create_response = true,
+                        },
                         transcription = new { model = "whisper-1" },
                     },
                     output = new
@@ -126,6 +135,9 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
             case "response.text.delta":
                 if (doc.RootElement.TryGetProperty("delta", out var t) && OnAssistantText is not null)
                     await OnAssistantText(t.GetString() ?? "");
+                break;
+            case "input_audio_buffer.speech_started":
+                if (OnUserSpeechStarted is not null) await OnUserSpeechStarted();
                 break;
             case "input_audio_buffer.speech_stopped":
                 if (OnUserSpeechStopped is not null) await OnUserSpeechStopped();
