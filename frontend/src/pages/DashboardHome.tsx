@@ -91,6 +91,26 @@ export default function DashboardHome() {
         <StatCard title="گوینده" value={me?.voiceName ?? 'پیش‌فرض'} sub="قابل تغییر در بخش صدا" icon={Mic} />
       </div>
 
+      {isActive && (
+        <Card className="animate-in border-emerald-200 bg-gradient-to-l from-emerald-50 to-white">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-600">
+              <Phone size={21} />
+            </span>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">چطور با تلفن هوشمند خود تماس بگیرید؟</h3>
+              <p className="mt-1 text-sm leading-7 text-slate-600">
+                ابتدا با شماره‌ی{' '}
+                <span dir="ltr" className="font-bold text-emerald-700">{toFa(me?.receptionNumber ?? '02191008288')}</span>{' '}
+                تماس بگیرید، سپس پس از پخش پیام پذیرش، شماره داخلی اختصاصی خود{' '}
+                <span dir="ltr" className="font-bold text-emerald-700">{toFa(sp!.extension!)}</span>{' '}
+                را شماره‌گیری کنید.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {videoAvailable && (
         <Card className="animate-in">
           <div className="mb-3 flex items-center gap-2">

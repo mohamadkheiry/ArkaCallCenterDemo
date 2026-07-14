@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Play, Pause, Trash2, ChevronDown, MessageSquare, Phone } from 'lucide-react'
+import { Play, Pause, Trash2, ChevronDown, MessageSquare, Phone } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
-import { Button, Card, cn } from '../../components/ui'
+import { Card, cn } from '../../components/ui'
 import { faDateTime, faDuration, toFa } from '../../lib/format'
 
 interface CallRow {
@@ -201,10 +201,12 @@ export default function CallsAdminTab() {
       setLoading(false)
     }
   }
+  // سرچ زنده: با تغییر جست‌وجو یا تاریخ‌ها، پس از ۳۵۰ms خودکار بارگذاری می‌شود.
   useEffect(() => {
-    load()
+    const t = setTimeout(load, 350)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [q, from, to])
 
   return (
     <div className="space-y-5">
@@ -223,20 +225,16 @@ export default function CallsAdminTab() {
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand-400" />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1.5 block text-xs text-slate-500">جست‌وجو (شماره موبایل / برند)</label>
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} placeholder="مثلاً 0912…" dir="rtl" className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand-400" />
+            <label className="mb-1.5 block text-xs text-slate-500">جست‌وجوی زنده (نام، برند، شماره موبایل، شماره داخلی، تماس‌گیرنده)</label>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="همین‌طور که تایپ می‌کنید فیلتر می‌شود…" dir="rtl" className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand-400" />
           </div>
         </div>
         <div className="mt-4 flex items-center gap-3">
-          <Button onClick={load} loading={loading}>
-            <Search size={16} /> اعمال فیلتر
-          </Button>
           <button
             onClick={() => {
               setFrom('')
               setTo('')
               setQ('')
-              setTimeout(load, 0)
             }}
             className="text-sm text-slate-500 hover:text-brand-600"
           >

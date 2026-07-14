@@ -2,6 +2,7 @@ using ArkaCallCenter.Api.Models;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
+using ArkaCallCenter.Core.Enums;
 using ArkaCallCenter.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,16 +27,18 @@ public class AdminController : ControllerBase
     private readonly IOpenAiService _openai;
     private readonly IDemoService _demos;
     private readonly IAsteriskProvisioningService _asterisk;
+    private readonly ITokenService _tokens;
     private readonly string _uploadsPath;
 
     public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai,
-        IDemoService demos, IAsteriskProvisioningService asterisk, IConfiguration config)
+        IDemoService demos, IAsteriskProvisioningService asterisk, ITokenService tokens, IConfiguration config)
     {
         _db = db;
         _settings = settings;
         _openai = openai;
         _demos = demos;
         _asterisk = asterisk;
+        _tokens = tokens;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -314,6 +317,23 @@ public class AdminController : ControllerBase
         return Ok(new { message = "اطلاعات کاربر به‌روزرسانی شد." });
     }
 
+    /// <summary>
+    /// ورود سوپرادمین به پنل یک کاربر (impersonation): یک توکن برای همان کاربر تولید
+    /// می‌شود تا سوپرادمین پنل او را ببیند و تغییرات لازم را اعمال کند.
+    /// </summary>
+    [HttpPost("users/{id:int}/impersonate")]
+    public async Task<IActionResult> Impersonate(int id, CancellationToken ct)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && !u.IsDemo, ct);
+        if (user is null) return NotFound();
+        if (user.Role == UserRole.SuperAdmin)
+            return BadRequest(new { error = "ورود به پنل یک سوپرادمین ممکن نیست." });
+
+        var token = _tokens.CreateToken(user);
+        var name = ((user.FirstName ?? "") + " " + (user.LastName ?? "")).Trim();
+        return Ok(new { token, name = string.IsNullOrWhiteSpace(name) ? user.PhoneNumber : name, phone = user.PhoneNumber });
+    }
+
     // ---------------- Calls (conversations) ----------------
     /// <summary>لیست مکالمه‌ها با فیلتر تاریخ و جست‌وجوی شماره/برند.</summary>
     [HttpGet("calls")]
@@ -332,10 +352,15 @@ public class AdminController : ControllerBase
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
+            var isNum = int.TryParse(term, out var extNum);
             query = query.Where(c =>
                 (c.CallerId != null && c.CallerId.Contains(term)) ||
                 c.SmartPhone.User.PhoneNumber.Contains(term) ||
-                (c.SmartPhone.User.BrandName != null && c.SmartPhone.User.BrandName.Contains(term)));
+                (c.SmartPhone.User.BrandName != null && c.SmartPhone.User.BrandName.Contains(term)) ||
+                (c.SmartPhone.User.FirstName != null && c.SmartPhone.User.FirstName.Contains(term)) ||
+                (c.SmartPhone.User.LastName != null && c.SmartPhone.User.LastName.Contains(term)) ||
+                (c.SmartPhone.User.DemoLabel != null && c.SmartPhone.User.DemoLabel.Contains(term)) ||
+                (isNum && c.SmartPhone.Extension == extNum));
         }
 
         var total = await query.CountAsync(ct);

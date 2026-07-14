@@ -33,6 +33,9 @@ public static class SettingKeys
     public const string FallbackMessageVoice = "fallback.voice";
     public const string FallbackAudioPath = "fallback.audioPath";
 
+    // شماره‌ی پذیرش شرکت که کاربران باید ابتدا با آن تماس بگیرند، سپس داخلی خود را شماره‌گیری کنند.
+    public const string ReceptionNumber = "reception.number";
+
     // پیام پذیرش اصلی شرکت (IVR): پخش می‌شود و سپس منتظر دریافت داخلی می‌ماند.
     public const string MainGreetingText = "main.greetingText";
     public const string MainGreetingVoice = "main.greetingVoice";

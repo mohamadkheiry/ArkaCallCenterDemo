@@ -1,5 +1,6 @@
 using ArkaCallCenter.Api.Extensions;
 using ArkaCallCenter.Core.Abstractions;
+using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +18,14 @@ public class MeController : ControllerBase
 
     private readonly ArkaDbContext _db;
     private readonly IAuthService _auth;
+    private readonly ISettingsService _settings;
     private readonly string _uploadsPath;
 
-    public MeController(ArkaDbContext db, IAuthService auth, IConfiguration config)
+    public MeController(ArkaDbContext db, IAuthService auth, ISettingsService settings, IConfiguration config)
     {
         _db = db;
         _auth = auth;
+        _settings = settings;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -38,6 +41,9 @@ public class MeController : ControllerBase
             .FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return NotFound();
 
+        // شماره‌ی پذیرش که کاربر باید ابتدا با آن تماس بگیرد (پیش‌فرض 02191008288).
+        var receptionNumber = await _settings.GetAsync(SettingKeys.ReceptionNumber, "02191008288", ct);
+
         return Ok(new
         {
             user.Id,
@@ -50,6 +56,7 @@ public class MeController : ControllerBase
             user.VoiceName,
             user.CallMinuteLimit,
             user.UsedMinutes,
+            receptionNumber,
             hasAvatar = !string.IsNullOrEmpty(user.AvatarPath),
             smartPhone = user.SmartPhone == null ? null : new
             {

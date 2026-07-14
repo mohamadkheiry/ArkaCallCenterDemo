@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { ChevronDown, Pencil, ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, Pencil, ShieldCheck, LogIn, Search } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
+import { useAuth } from '../../context/AuthContext'
 import { Button, Card, TextInput, cn } from '../../components/ui'
 import { toFa } from '../../lib/format'
 
@@ -22,6 +24,22 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
   const [u, setU] = useState(user)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
+  const [entering, setEntering] = useState(false)
+  const { impersonate } = useAuth()
+  const navigate = useNavigate()
+
+  async function enterPanel() {
+    setEntering(true)
+    setMsg('')
+    try {
+      const { data } = await api.post<{ token: string; name: string }>(`/api/admin/users/${user.id}/impersonate`)
+      impersonate(data.token, data.name)
+      navigate('/', { replace: true })
+    } catch (e) {
+      setMsg(apiError(e))
+      setEntering(false)
+    }
+  }
 
   async function save() {
     setBusy(true)
@@ -90,10 +108,15 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
               </label>
             </div>
           </div>
-          <div className="mt-4 flex items-center gap-4">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button onClick={save} loading={busy}>
               <Pencil size={15} /> ذخیره تغییرات
             </Button>
+            {user.role !== 'SuperAdmin' && (
+              <Button variant="outline" onClick={enterPanel} loading={entering}>
+                <LogIn size={15} /> ورود به پنل کاربر
+              </Button>
+            )}
             {msg && <span className="text-sm text-emerald-600">{msg}</span>}
           </div>
         </div>
@@ -105,6 +128,7 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
 export default function UsersTab() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
 
   async function load() {
     const { data } = await api.get<AdminUser[]>('/api/admin/users')
@@ -115,17 +139,37 @@ export default function UsersTab() {
     load()
   }, [])
 
+  // سرچ زنده روی نام، نام‌خانوادگی، برند، شماره و داخلی
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return users
+    return users.filter((u) =>
+      [u.firstName, u.lastName, u.brandName, u.phoneNumber, u.extension?.toString()]
+        .some((f) => f?.toLowerCase().includes(term)),
+    )
+  }, [users, q])
+
   return (
     <Card className="animate-in">
       <h3 className="text-lg font-bold text-slate-800">کاربران</h3>
       <p className="mt-1 text-sm text-slate-500">
-        روی هر کاربر بزنید تا نام، نام‌خانوادگی، برند، وضعیت فعال و محدودیت مکالمه‌ی او را ویرایش کنید.
+        روی هر کاربر بزنید تا اطلاعات او را ویرایش کنید یا وارد پنلش شوید.
       </p>
 
-      <div className="mt-5 space-y-2">
+      <div className="relative mt-4">
+        <Search size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="جست‌وجوی زنده: نام، برند، شماره یا داخلی…"
+          className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-10 pl-3 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+        />
+      </div>
+
+      <div className="mt-4 space-y-2">
         {loading && <p className="text-sm text-slate-400">در حال بارگذاری…</p>}
-        {!loading && users.length === 0 && <p className="text-sm text-slate-400">کاربری یافت نشد.</p>}
-        {users.map((u) => (
+        {!loading && filtered.length === 0 && <p className="text-sm text-slate-400">کاربری یافت نشد.</p>}
+        {filtered.map((u) => (
           <UserRow key={u.id} user={u} onSaved={load} />
         ))}
       </div>

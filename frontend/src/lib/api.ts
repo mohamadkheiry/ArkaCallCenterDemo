@@ -1,6 +1,9 @@
 import axios from 'axios'
 
 export const TOKEN_KEY = 'arka_token'
+// هنگام ورود سوپرادمین به پنل یک کاربر (impersonation)، توکن اصلیِ سوپرادمین اینجا نگه داشته می‌شود.
+export const ADMIN_TOKEN_KEY = 'arka_admin_token'
+export const IMPERSONATING_KEY = 'arka_impersonating'
 
 export const api = axios.create({
   baseURL: '/',
