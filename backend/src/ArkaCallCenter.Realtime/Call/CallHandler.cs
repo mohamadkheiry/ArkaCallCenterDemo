@@ -120,8 +120,13 @@ public class CallHandler
 
         async Task WriteLockedAsync(byte[] slin)
         {
+            if (ct.IsCancellationRequested) return;
             await writeLock.WaitAsync(ct);
             try { await AudioSocketProtocol.WriteAudioAsync(stream, slin, ct); }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or System.Net.Sockets.SocketException)
+            {
+                // تماس‌گیرنده قطع کرد / سوکت بسته شد — عادی است، نادیده بگیر.
+            }
             finally { writeLock.Release(); }
         }
 

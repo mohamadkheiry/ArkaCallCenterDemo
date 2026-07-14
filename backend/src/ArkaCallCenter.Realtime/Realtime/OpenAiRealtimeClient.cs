@@ -37,21 +37,31 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         var host = new Uri(_baseUrl).Host; // مثلاً api.openai.com
         var uri = new Uri($"wss://{host}/v1/realtime?model={_model}");
         _ws.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-        _ws.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
         await _ws.ConnectAsync(uri, ct);
 
+        // ساختار GA (نه beta): audio تودرفو + type=realtime. فرمت صوت PCM16 24kHz.
         await SendAsync(new
         {
             type = "session.update",
             session = new
             {
-                modalities = new[] { "audio", "text" },
+                type = "realtime",
                 instructions,
-                voice,
-                input_audio_format = "pcm16",
-                output_audio_format = "pcm16",
-                input_audio_transcription = new { model = "whisper-1" },
-                turn_detection = new { type = "server_vad", threshold = 0.5, silence_duration_ms = 600 },
+                output_modalities = new[] { "audio" },
+                audio = new
+                {
+                    input = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        turn_detection = new { type = "server_vad", threshold = 0.5, silence_duration_ms = 600 },
+                        transcription = new { model = "whisper-1" },
+                    },
+                    output = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        voice,
+                    },
+                },
             },
         }, ct);
 
@@ -104,11 +114,15 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         var type = doc.RootElement.GetProperty("type").GetString();
         switch (type)
         {
+            // نام‌های GA و beta هر دو پشتیبانی می‌شوند.
+            case "response.output_audio.delta":
             case "response.audio.delta":
                 if (doc.RootElement.TryGetProperty("delta", out var d) && OnAudioDelta is not null)
                     await OnAudioDelta(Convert.FromBase64String(d.GetString()!));
                 break;
+            case "response.output_audio_transcript.delta":
             case "response.audio_transcript.delta":
+            case "response.output_text.delta":
             case "response.text.delta":
                 if (doc.RootElement.TryGetProperty("delta", out var t) && OnAssistantText is not null)
                     await OnAssistantText(t.GetString() ?? "");
