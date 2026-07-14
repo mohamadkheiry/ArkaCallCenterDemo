@@ -76,7 +76,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
     if (app.Configuration.GetValue("Database:AutoMigrate", true))
         await db.Database.MigrateAsync();
-    await DbSeeder.SeedAsync(db, app.Configuration["SuperAdmin:PhoneNumber"]);
+    await DbSeeder.SeedAsync(db, app.Configuration);
 }
 
 // ---- Pipeline ----

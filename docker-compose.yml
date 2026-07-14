@@ -31,6 +31,17 @@ services:
       Asterisk__Host: ${ASTERISK_HOST:-}
       Asterisk__SshUser: ${ASTERISK_SSH_USER:-}
       Asterisk__SshPassword: ${ASTERISK_SSH_PASSWORD:-}
+      # کلیدها/تنظیمات AI و پیامک — در اولین اجرا (DB خالی) از env در تنظیمات seed می‌شوند.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-}
+      OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-}
+      SMSIR_API_KEY: ${SMSIR_API_KEY:-}
+      SMSIR_VERIFY_TEMPLATE_ID: ${SMSIR_VERIFY_TEMPLATE_ID:-}
+      SMSIR_LINE_NUMBER: ${SMSIR_LINE_NUMBER:-}
+      DEFAULT_VOICE: ${DEFAULT_VOICE:-}
     volumes:
       - uploads:/app/uploads
     ports:
