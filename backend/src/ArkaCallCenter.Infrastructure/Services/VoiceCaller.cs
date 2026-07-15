@@ -23,7 +23,7 @@ public class VoiceCaller : IVoiceCaller
         _logger = logger;
     }
 
-    public async Task<bool> CallAndSpeakAsync(string phoneNumber, string text, CancellationToken ct = default)
+    public async Task<bool> CallAndSpeakAsync(string phoneNumber, string text, bool rawText = false, CancellationToken ct = default)
     {
         var url = _config["VoiceService:Url"];
         var secret = _config["VoiceService:Secret"];
@@ -35,7 +35,7 @@ public class VoiceCaller : IVoiceCaller
         try
         {
             // StringContent با Content-Length صریح (سرویسِ ساده‌ی مقصد chunked را نمی‌فهمد).
-            var json = JsonSerializer.Serialize(new { secret, phone = phoneNumber, text });
+            var json = JsonSerializer.Serialize(new { secret, phone = phoneNumber, text, raw = rawText });
             using var req = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),

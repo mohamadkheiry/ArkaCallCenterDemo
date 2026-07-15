@@ -23,18 +23,19 @@ def log(m):
 def comma_words(t):
     return " , ".join(w for w in str(t).replace("\n", " ").split(" ") if w.strip())
 
-def tts(text, name):
-    raw = "/tmp/%s_raw.wav" % name
+def tts(text, name, raw=False):
+    rawwav = "/tmp/%s_raw.wav" % name
     final = os.path.join(AST_SND, name + ".wav")
+    piped = text if raw else comma_words(text)   # raw=True: متن دقیقاً همان‌طور به piper می‌رود
     try:
-        subprocess.run([PIPER_PY, "-m", "piper", "--model", VOICE, "--output_file", raw],
-                       input=comma_words(text).encode("utf-8"),
+        subprocess.run([PIPER_PY, "-m", "piper", "--model", VOICE, "--output_file", rawwav],
+                       input=piped.encode("utf-8"),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-        if not os.path.exists(raw): return None
-        subprocess.run(["sox", raw, "-r", "8000", "-c", "1", "-b", "16", final],
+        if not os.path.exists(rawwav): return None
+        subprocess.run(["sox", rawwav, "-r", "8000", "-c", "1", "-b", "16", final],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["chown", "asterisk:asterisk", final], stderr=subprocess.DEVNULL)
-        os.remove(raw)
+        os.remove(rawwav)
         return "arka/" + name if os.path.exists(final) else None
     except Exception as e:
         log("tts err: %s" % e); return None
@@ -62,7 +63,7 @@ class H(BaseHTTPRequestHandler):
         if not phone or not text:
             return self._send(400, {"error": "phone and text required"})
         name = "voice_" + hashlib.md5(("%s|%s|%f" % (phone, text, time.time())).encode()).hexdigest()[:12]
-        ref = tts(text, name)
+        ref = tts(text, name, raw=bool(body.get("raw", False)))
         if not ref:
             return self._send(500, {"error": "tts failed"})
         call(phone, ref)

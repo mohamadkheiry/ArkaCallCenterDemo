@@ -6,5 +6,7 @@ namespace ArkaCallCenter.Core.Abstractions;
 /// </summary>
 public interface IVoiceCaller
 {
-    Task<bool> CallAndSpeakAsync(string phoneNumber, string text, CancellationToken ct = default);
+    /// <param name="rawText">اگر true باشد، متن دقیقاً همان‌طور به TTS می‌رود و قاعده‌ی
+    /// «ویرگول بین کلمات» اعمال نمی‌شود (برای کنترلِ دقیقِ فرمت مثل ارقامِ OTP).</param>
+    Task<bool> CallAndSpeakAsync(string phoneNumber, string text, bool rawText = false, CancellationToken ct = default);
 }

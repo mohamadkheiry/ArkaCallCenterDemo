@@ -17,9 +17,6 @@ public class AuthService : IAuthService
     private readonly ITokenService _tokens;
     private readonly ILogger<AuthService> _logger;
 
-    private static readonly string[] FaDigits =
-        { "صفر", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه" };
-
     public AuthService(ArkaDbContext db, ISmsSender sms, IVoiceCaller voice, ITokenService tokens, ILogger<AuthService> logger)
     {
         _db = db;
@@ -80,10 +77,11 @@ public class AuthService : IAuthService
             await _db.SaveChangesAsync(ct);
         }
 
-        // ارقام به‌صورت کلمه و جدا (سرویس صوتی بین کلمات ویرگول می‌گذارد تا تفکیک شود).
-        var spoken = string.Join(" ", otp.Code.Where(char.IsDigit).Select(c => FaDigits[c - '0']));
-        var text = "سلام کد ورود شما به سامانه آرکا به این صورت است " + spoken;
-        var ok = await _voice.CallAndSpeakAsync(phoneNumber, text, ct);
+        // ارقام به‌صورت عددی و با ویرگول به TTS داده می‌شوند: «1، 2، 3، 4، 5، 6»
+        // تا رقم‌به‌رقم و جدا خوانده شوند. کلِ متن هم با ویرگول ساخته و raw فرستاده می‌شود.
+        var digits = string.Join("، ", otp.Code.Where(char.IsDigit).Select(c => c.ToString()));
+        var text = "سلام، کد، ورود، شما، به، سامانه، آرکا، به، این، صورت، است، " + digits;
+        var ok = await _voice.CallAndSpeakAsync(phoneNumber, text, rawText: true, ct);
         return ok ? (true, null) : (false, "برقراری تماس ممکن نشد؛ لطفاً دوباره تلاش کنید.");
     }
 
