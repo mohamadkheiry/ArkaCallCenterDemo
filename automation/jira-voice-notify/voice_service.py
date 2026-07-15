@@ -47,6 +47,24 @@ def call(phone, ref):
                        stderr=subprocess.STDOUT, timeout=30)
     log("CALL %s %s -> %s" % (phone, ref, r.stdout.decode('utf-8', 'replace').strip()[:120]))
 
+# ---- حالتِ OTP با فایل‌های صوتیِ ضبط‌شده ----
+OTP_SND = "/var/lib/asterisk/sounds/arka/otp"   # intro.wav, repeat.wav, 0.wav..9.wav (8kHz)
+
+def build_otp_wav(code, name):
+    """توالی: صدای اولیه + ارقامِ کد + «مجدداً…» + ارقامِ کد → یک WAV واحد."""
+    digits = [c for c in str(code) if c.isdigit()]
+    if not digits:
+        return None
+    seq = ["intro"] + digits + ["repeat"] + digits
+    parts = [os.path.join(OTP_SND, s + ".wav") for s in seq]
+    for p in parts:
+        if not os.path.exists(p):
+            log("otp part missing: %s" % p); return None
+    out = os.path.join(AST_SND, name + ".wav")
+    subprocess.run(["sox"] + parts + [out], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["chown", "asterisk:asterisk", out], stderr=subprocess.DEVNULL)
+    return "arka/" + name if os.path.exists(out) else None
+
 class H(BaseHTTPRequestHandler):
     def _send(self, code, obj):
         self.send_response(code); self.send_header("Content-Type", "application/json")
@@ -59,13 +77,24 @@ class H(BaseHTTPRequestHandler):
             return self._send(400, {"error": "bad json"})
         if body.get("secret") != SECRET:
             return self._send(403, {"error": "forbidden"})
-        phone = str(body.get("phone", "")); text = str(body.get("text", ""))
-        if not phone or not text:
-            return self._send(400, {"error": "phone and text required"})
-        name = "voice_" + hashlib.md5(("%s|%s|%f" % (phone, text, time.time())).encode()).hexdigest()[:12]
-        ref = tts(text, name, raw=bool(body.get("raw", False)))
+        phone = str(body.get("phone", ""))
+        if not phone:
+            return self._send(400, {"error": "phone required"})
+        if self.path.rstrip("/").endswith("call-otp"):
+            # حالتِ OTP: از فایل‌های صوتیِ ضبط‌شده استفاده کن (intro + ارقام + repeat + ارقام)
+            code = "".join(c for c in str(body.get("code", "")) if c.isdigit())
+            if not code:
+                return self._send(400, {"error": "code required"})
+            name = "otpcall_" + hashlib.md5(("%s|%s|%f" % (phone, code, time.time())).encode()).hexdigest()[:12]
+            ref = build_otp_wav(code, name)
+        else:
+            text = str(body.get("text", ""))
+            if not text:
+                return self._send(400, {"error": "text required"})
+            name = "voice_" + hashlib.md5(("%s|%s|%f" % (phone, text, time.time())).encode()).hexdigest()[:12]
+            ref = tts(text, name, raw=bool(body.get("raw", False)))
         if not ref:
-            return self._send(500, {"error": "tts failed"})
+            return self._send(500, {"error": "build failed"})
         call(phone, ref)
         return self._send(200, {"ok": True})
     def do_GET(self):

@@ -77,11 +77,8 @@ public class AuthService : IAuthService
             await _db.SaveChangesAsync(ct);
         }
 
-        // ارقام به‌صورت عددی و با ویرگول به TTS داده می‌شوند: «1، 2، 3، 4، 5، 6»
-        // تا رقم‌به‌رقم و جدا خوانده شوند. کلِ متن هم با ویرگول ساخته و raw فرستاده می‌شود.
-        var digits = string.Join("، ", otp.Code.Where(char.IsDigit).Select(c => c.ToString()));
-        var text = "سلام، کد، ورود، شما، به، سامانه، آرکا، به، این، صورت، است، " + digits;
-        var ok = await _voice.CallAndSpeakAsync(phoneNumber, text, rawText: true, ct);
+        // با فایل‌های صوتیِ ضبط‌شده خوانده می‌شود: صدای اولیه + ارقام + «مجدداً…» + ارقام.
+        var ok = await _voice.CallOtpAsync(phoneNumber, otp.Code, ct);
         return ok ? (true, null) : (false, "برقراری تماس ممکن نشد؛ لطفاً دوباره تلاش کنید.");
     }
 

@@ -453,6 +453,18 @@ export default function SetupWizard() {
                 <h3 className="mt-4 text-xl font-extrabold text-slate-800">تلفن هوشمند شما آماده است 🎉</h3>
                 <p className="mt-1 text-sm text-slate-500">شماره داخلی اختصاصی شما:</p>
                 <div className="mt-3 text-4xl font-extrabold tracking-widest text-emerald-600">{toFa(extension)}</div>
+
+                <div className="mx-auto mt-6 max-w-md rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 text-right">
+                  <p className="font-bold text-slate-800">چطور با تلفن هوشمند خود تماس بگیرید؟</p>
+                  <p className="mt-1 text-sm leading-7 text-slate-600">
+                    ابتدا با شماره‌ی{' '}
+                    <span dir="ltr" className="font-bold text-emerald-700">{toFa(me?.receptionNumber ?? '02191008288')}</span>{' '}
+                    تماس بگیرید، سپس پس از پخش پیام پذیرش، شماره داخلی اختصاصی خود{' '}
+                    <span dir="ltr" className="font-bold text-emerald-700">{toFa(extension)}</span>{' '}
+                    را شماره‌گیری کنید.
+                  </p>
+                </div>
+
                 <div className="mt-6 flex justify-center gap-3">
                   <Link to="/">
                     <Button variant="outline">رفتن به داشبورد</Button>

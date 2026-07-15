@@ -139,13 +139,10 @@ def check_user(u):
     new = [ev for ev in events if ev["eid"] not in seen and (now - ev["ts"]) < 1800]
     new.sort(key=lambda e: e["ts"])
     for ev in new:
-        text = ("سلام، یک ایشوی جدید به شما اساین شد. اساین‌کننده: %s. عنوان ایشو: %s"
-                % (ev["assigner"], ev["summary"]))
-        name = "jira_%s_%s" % (u["name"], hashlib.md5(ev["eid"].encode()).hexdigest()[:8])
-        ref = tts(text, name)
-        if ref:
-            call(u["phone"], ref)
-            log("NOTIFIED %s issue=%s by=%s" % (u["name"], ev["key"], ev["assigner"]))
+        # طبق درخواست: هنگام اساین‌شدنِ ایشوی جدید، فقط صوتِ ثابتِ «چک کردن جیرا»
+        # پخش می‌شود (بدون خواندنِ متن با TTS).
+        call(u["phone"], "arka/jira_check")
+        log("NOTIFIED %s issue=%s by=%s (played jira_check)" % (u["name"], ev["key"], ev["assigner"]))
         seen.add(ev["eid"])
         time.sleep(2)
     # همه‌ی رویدادهای فعلی را هم دیده‌شده کن (تا دوباره زنگ نزند)
