@@ -1,0 +1,19 @@
+{
+  "jira_base": "https://JIRA_HOST",
+  "users": [
+    {
+      "name": "someuser",
+      "jira_user": "SomeUser",
+      "jira_key": "JIRAUSERXXXXX",
+      "token": "<JIRA_PERSONAL_ACCESS_TOKEN>",
+      "phone": "09xxxxxxxxx"
+    }
+  ],
+  "daily_reminder": {
+    "phone": "09xxxxxxxxx",
+    "hour": 9,
+    "minute": 29,
+    "skip_weekdays": [3, 4],
+    "text": "سلام وقت بخیر یک دقیقه تا آغاز دیلی باقی مانده است"
+  }
+}

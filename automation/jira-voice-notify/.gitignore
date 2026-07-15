@@ -1,0 +1,5 @@
+config.json
+state/
+*.wav
+cron.log
+notify.log
