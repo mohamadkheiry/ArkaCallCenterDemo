@@ -21,6 +21,14 @@ public class AuthController : ControllerBase
         return ok ? Ok(new { message = "کد ارسال شد." }) : BadRequest(new { error });
     }
 
+    /// <summary>خواندنِ کد تأیید از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>
+    [HttpPost("request-otp-call")]
+    public async Task<IActionResult> RequestOtpByCall(RequestOtpRequest req, CancellationToken ct)
+    {
+        var (ok, error) = await _auth.RequestOtpByCallAsync(req.PhoneNumber, ct);
+        return ok ? Ok(new { message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود." }) : BadRequest(new { error });
+    }
+
     /// <summary>اعتبارسنجی کد و صدور توکن.</summary>
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp(VerifyOtpRequest req, CancellationToken ct)

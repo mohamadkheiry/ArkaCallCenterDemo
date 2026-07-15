@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<ITokenUsageTracker, TokenUsageTracker>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddHttpClient<ISmsSender, SmsIrSender>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<IVoiceCaller, VoiceCaller>(c => c.Timeout = TimeSpan.FromSeconds(35));
         services.AddScoped<ISmsEventDispatcher, SmsEventDispatcher>();
 
         // فاز ۳: پایگاه دانش + RAG + moderation

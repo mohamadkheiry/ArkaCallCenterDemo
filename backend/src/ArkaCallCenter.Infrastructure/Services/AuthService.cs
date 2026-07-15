@@ -13,13 +13,18 @@ public class AuthService : IAuthService
 
     private readonly ArkaDbContext _db;
     private readonly ISmsSender _sms;
+    private readonly IVoiceCaller _voice;
     private readonly ITokenService _tokens;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ArkaDbContext db, ISmsSender sms, ITokenService tokens, ILogger<AuthService> logger)
+    private static readonly string[] FaDigits =
+        { "صفر", "یک", "دو", "سه", "چهار", "پنج", "شش", "هفت", "هشت", "نه" };
+
+    public AuthService(ArkaDbContext db, ISmsSender sms, IVoiceCaller voice, ITokenService tokens, ILogger<AuthService> logger)
     {
         _db = db;
         _sms = sms;
+        _voice = voice;
         _tokens = tokens;
         _logger = logger;
     }
@@ -49,6 +54,37 @@ public class AuthService : IAuthService
         // ارسال کد از طریق قالب verify سرویس SMS.ir.
         await _sms.SendVerifyCodeAsync(phoneNumber, code, ct);
         return (true, null);
+    }
+
+    public async Task<(bool ok, string? error)> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default)
+    {
+        phoneNumber = NormalizePhone(phoneNumber);
+        if (!IsValidIranianMobile(phoneNumber))
+            return (false, "شماره موبایل نامعتبر است.");
+
+        // کدِ فعالِ موجود (همان کدی که با پیامک رفته) را بردار؛ اگر نبود، بساز.
+        var otp = await _db.OtpCodes
+            .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed && x.ExpiresAt > DateTime.UtcNow)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (otp is null)
+        {
+            var code = Random.Shared.Next(100000, 1000000).ToString();
+            otp = new OtpCode
+            {
+                PhoneNumber = phoneNumber,
+                Code = code,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
+            };
+            _db.OtpCodes.Add(otp);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        // ارقام به‌صورت کلمه و جدا (سرویس صوتی بین کلمات ویرگول می‌گذارد تا تفکیک شود).
+        var spoken = string.Join(" ", otp.Code.Where(char.IsDigit).Select(c => FaDigits[c - '0']));
+        var text = "سلام کد ورود شما به سامانه آرکا به این صورت است " + spoken;
+        var ok = await _voice.CallAndSpeakAsync(phoneNumber, text, ct);
+        return ok ? (true, null) : (false, "برقراری تماس ممکن نشد؛ لطفاً دوباره تلاش کنید.");
     }
 
     public async Task<VerifyOtpResult> VerifyOtpAsync(string phoneNumber, string code, CancellationToken ct = default)

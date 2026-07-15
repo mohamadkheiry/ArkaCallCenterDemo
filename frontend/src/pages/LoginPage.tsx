@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Phone } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toEn, toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
@@ -11,8 +12,24 @@ export default function LoginPage() {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [callLoading, setCallLoading] = useState(false)
+  const [callMsg, setCallMsg] = useState('')
   const { setToken } = useAuth()
   const navigate = useNavigate()
+
+  async function requestOtpByCall() {
+    setError('')
+    setCallMsg('')
+    setCallLoading(true)
+    try {
+      await api.post('/api/auth/request-otp-call', { phoneNumber: toEn(phone) })
+      setCallMsg('در حال تماس با شما… کد به‌صورت صوتی و رقم‌به‌رقم خوانده می‌شود.')
+    } catch (err) {
+      setError(apiError(err))
+    } finally {
+      setCallLoading(false)
+    }
+  }
 
   async function requestOtp(e: React.FormEvent) {
     e.preventDefault()
@@ -129,12 +146,31 @@ export default function LoginPage() {
               <Button type="submit" loading={loading} className="w-full">
                 ورود
               </Button>
+
+              <div className="flex items-center gap-3 py-1 text-xs text-slate-400">
+                <span className="h-px flex-1 bg-slate-200" />
+                یا
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                loading={callLoading}
+                onClick={requestOtpByCall}
+                className="w-full"
+              >
+                <Phone size={16} />
+                دریافت کد تأیید با تماس تلفنی
+              </Button>
+              {callMsg && <p className="text-sm text-emerald-600">{callMsg}</p>}
+
               <button
                 type="button"
                 onClick={() => {
                   setStep('phone')
                   setCode('')
                   setError('')
+                  setCallMsg('')
                 }}
                 className="w-full text-center text-sm text-slate-500 hover:text-brand-600"
               >

@@ -9,6 +9,9 @@ public interface IAuthService
     /// <summary>تولید و ارسال کد OTP برای شماره‌ی موبایل.</summary>
     Task<(bool ok, string? error)> RequestOtpAsync(string phoneNumber, CancellationToken ct = default);
 
+    /// <summary>خواندنِ کد OTP برای کاربر از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>
+    Task<(bool ok, string? error)> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default);
+
     /// <summary>اعتبارسنجی کد و صدور JWT.</summary>
     Task<VerifyOtpResult> VerifyOtpAsync(string phoneNumber, string code, CancellationToken ct = default);
 
