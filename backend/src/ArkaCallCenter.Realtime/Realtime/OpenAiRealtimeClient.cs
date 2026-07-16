@@ -33,16 +33,16 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         _logger = logger;
     }
 
-    public async Task ConnectAsync(string instructions, string voice, double temperature, CancellationToken ct)
+    public async Task ConnectAsync(string instructions, string voice, CancellationToken ct)
     {
         var host = new Uri(_baseUrl).Host; // مثلاً api.openai.com
         var uri = new Uri($"wss://{host}/v1/realtime?model={_model}");
         _ws.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
         await _ws.ConnectAsync(uri, ct);
 
-        // Realtime API فقط temperature در بازه‌ی [0.6, 1.2] را می‌پذیرد.
-        var temp = Math.Clamp(temperature, 0.6, 1.2);
-
+        // نکته: Realtime API نسخه‌ی GA پارامترِ temperature را حذف کرده است؛ اگر ارسال شود کلِ
+        // session.update با «unknown parameter: session.temperature» رد می‌شود و transcription هم اعمال
+        // نمی‌شود. کنترلِ «دقت/پایبندی» به‌جای temperature از طریقِ instructions (پرامپت) انجام می‌شود.
         // ساختار GA (نه beta): audio تودرفو + type=realtime. فرمت صوت PCM16 24kHz.
         await SendAsync(new
         {
@@ -51,7 +51,6 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
             {
                 type = "realtime",
                 instructions,
-                temperature = temp,
                 output_modalities = new[] { "audio" },
                 audio = new
                 {

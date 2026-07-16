@@ -78,11 +78,9 @@ public class CallHandler
         var fallback = await settings.GetAsync(SettingKeys.FallbackMessageText, defaultFallback, ct) ?? defaultFallback;
         var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
         var voice = sp.User.VoiceName ?? await settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
-        // درصدِ دقت (پایبندی به پایگاه دانش) → temperature: درصدِ بالاتر = temperature پایین‌تر (پاسخِ دقیق‌تر).
-        // Realtime API فقط بازه‌ی [0.6, 1.2] را می‌پذیرد؛ بنابراین کلِ اسلایدرِ ۱۰..۱۰۰٪ را به‌صورت خطی
-        // روی همین بازه نگاشت می‌کنیم تا تمامِ اسلایدر مؤثر باشد: ۱۰۰٪→۰.۶ (دقیق‌ترین)، ۱۰٪→۱.۲ (خلاقانه‌ترین).
+        // درصدِ دقت/پایبندی به پایگاه دانش (۱۰..۱۰۰). چون Realtime GA دیگر temperature ندارد،
+        // این پارامتر از طریقِ instructions (پرامپت) به مدل منتقل می‌شود؛ درصدِ بالاتر = پایبندیِ سخت‌گیرانه‌تر.
         var accuracy = Math.Clamp(sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent, 10, 100);
-        var temperature = 0.6 + (100 - accuracy) / 90.0 * 0.6;
         // سوپر ادمین نامحدود است (سقف دقیقه اعمال نمی‌شود)؛ دقایق مصرف‌شده همچنان برای نمایش ثبت می‌شود.
         var unlimited = sp.User.Role == UserRole.SuperAdmin;
         var limitMinutes = sp.User.CallMinuteLimit
@@ -116,7 +114,7 @@ public class CallHandler
 
         var recordingEnabled = (await settings.GetAsync(SettingKeys.CallRecordingEnabled, "true", ct)) != "false";
 
-        var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback);
+        var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
@@ -268,7 +266,7 @@ public class CallHandler
         var startedAt = DateTime.UtcNow;
         try
         {
-            await realtime.ConnectAsync(instructions, voice, temperature, ct);
+            await realtime.ConnectAsync(instructions, voice, ct);
             await realtime.GreetAsync(welcome, ct);
 
             while (!ct.IsCancellationRequested)
@@ -380,15 +378,26 @@ public class CallHandler
         }
     }
 
-    private static string BuildInstructions(string? brand, string kbText, string fallback) => $"""
+    private static string BuildInstructions(string? brand, string kbText, string fallback, int accuracyPercent)
+    {
+        // «دقتِ پاسخ‌ها» (۱۰..۱۰۰) via پرامپت اعمال می‌شود چون Realtime GA دیگر temperature ندارد.
+        var faithfulness = accuracyPercent switch
+        {
+            >= 80 => "پایبندیِ تو باید بسیار سخت‌گیرانه باشد: فقط از پایگاه دانش استفاده کن، هیچ حدس، برداشت یا افزوده‌ی شخصی نزن، و در کوچک‌ترین تردید همان جمله‌ی بالا را بگو.",
+            >= 40 => "عمدتاً بر اساس پایگاه دانش پاسخ بده؛ اگر موضوع خیلی نزدیک بود می‌توانی مختصر توضیح دهی، اما از اطلاعاتِ نامطمئن و حدس پرهیز کن.",
+            _ => "اولویت با پایگاه دانش است، اما برای روان‌تر شدنِ گفتگو می‌توانی کمی از دانشِ عمومی و خلاقیت هم کمک بگیری؛ با این حال هرگز چیزی خلافِ پایگاه دانش نگو.",
+        };
+        return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
         فقط و فقط بر اساس «پایگاه دانش» زیر پاسخ بده. اگر پاسخ سوالِ تماس‌گیرنده در پایگاه
         دانش وجود نداشت، دقیقاً و بدون تغییر این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
+        میزانِ پایبندی به پایگاه دانش: {faithfulness}
 
         === پایگاه دانش ===
         {kbText}
         === پایان پایگاه دانش ===
         """;
+    }
 
     private async Task LogCallAsync(int smartPhoneId, string? callerId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? unansweredJson, string? recordingPath)
     {
