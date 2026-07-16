@@ -55,16 +55,21 @@ public static class AudioSocketProtocol
     }
 
     /// <summary>
-    /// استخراج شماره‌ی تماس‌گیرنده از UUID. dialplan ۲۰ رقمِ اولِ UUID (بایت‌های ۰..۹)
-    /// را برابر شماره‌ی تماس‌گیرنده‌ی صفرپرشده قرار می‌دهد؛ اگر صفر باشد یعنی نامشخص.
-    /// مثلاً 00000000-9891-2123-4567-000000009410 → تماس‌گیرنده «989121234567».
+    /// استخراج شماره‌ی تماس‌گیرنده از UUID. dialplan ۲۰ رقمِ اولِ UUID (بایت‌های ۰..۹) را
+    /// برابرِ «۱ + شماره‌ی تماس‌گیرنده»ِ صفرپرشده قرار می‌دهد. رقمِ نگهبانِ «۱» تضمین می‌کند که
+    /// صفرهای ابتداییِ خودِ شماره (مثل موبایلِ ایرانی 09xx) با صفرهای padding اشتباه نشوند.
+    /// مثلاً «09121234567» → ...00109121234567 → پس از حذفِ padding و نگهبان: «09121234567».
+    /// نبودِ نگهبان (رشته‌ی خالی یا فقط صفر) یعنی تماس‌گیرنده‌ی نامشخص.
     /// </summary>
     public static string? ParseCaller(byte[] uuid16)
     {
         if (uuid16.Length < 16) return null;
         var first10 = uuid16.AsSpan(0, 10);        // ۲۰ کاراکتر hex
-        var digits = Convert.ToHexString(first10).TrimStart('0');
-        return string.IsNullOrEmpty(digits) ? null : digits;
+        var raw = Convert.ToHexString(first10).TrimStart('0');
+        // رقمِ نگهبانِ ابتدایی را حذف کن؛ باقی‌مانده شماره‌ی واقعی است (با صفرهای ابتداییِ حفظ‌شده).
+        if (raw.Length == 0 || raw[0] != '1') return null;
+        var number = raw[1..];
+        return string.IsNullOrEmpty(number) ? null : number;
     }
 
     private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken ct)

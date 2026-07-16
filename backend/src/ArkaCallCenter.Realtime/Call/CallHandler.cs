@@ -67,6 +67,11 @@ public class CallHandler
             _logger.LogWarning("No active smart phone for extension {Ext}.", extension);
             return;
         }
+        if (!sp.User.IsActive)
+        {
+            _logger.LogWarning("Ext {Ext}: owner user {UserId} is deactivated; rejecting call.", extension, sp.User.Id);
+            return;
+        }
 
         var kbText = sp.User.KnowledgeBase?.RawText ?? "";
         const string defaultFallback = "پاسخ این سوال در پایگاه دانش من موجود نیست.";
@@ -82,6 +87,14 @@ public class CallHandler
         var unlimited = sp.User.Role == UserRole.SuperAdmin;
         var limitMinutes = sp.User.CallMinuteLimit
             ?? await settings.GetIntAsync(SettingKeys.DefaultCallMinuteLimit, 30, ct);
+        var alreadyUsedMinutes = sp.User.UsedMinutes;   // مصرفِ انباشته پیش از این تماس (snapshot).
+        // اگر سقفِ دقیقه قبلاً پر شده، اصلاً تماس را برقرار نکن (اتلافِ توکنِ OpenAI بی‌مورد).
+        if (!unlimited && alreadyUsedMinutes >= limitMinutes)
+        {
+            _logger.LogInformation("Ext {Ext}: minute limit already reached ({Used}/{Limit}); rejecting call.",
+                extension, alreadyUsedMinutes, limitMinutes);
+            return;
+        }
 
         // موسیقی انتظار (حین فکر کردن AI) — SLIN 8kHz خام از تنظیمات
         byte[]? holdMusic = null;
@@ -105,6 +118,7 @@ public class CallHandler
 
         var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback);
         var turns = new List<TranscriptTurn>();
+        var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
         var recording = new List<byte>();
         var recLock = new object();
@@ -219,7 +233,7 @@ public class CallHandler
             if (asstBuf.Length > 0)
             {
                 var text = asstBuf.ToString().Trim();
-                turns.Add(new TranscriptTurn("assistant", text));
+                lock (turnsLock) turns.Add(new TranscriptTurn("assistant", text));
                 if (!string.IsNullOrEmpty(fallback) && text.Contains(fallback[..Math.Min(15, fallback.Length)]))
                     answeredFromKb = false;
                 asstBuf.Clear();
@@ -229,7 +243,7 @@ public class CallHandler
         realtime.OnAssistantText += text => { asstBuf.Append(text); return Task.CompletedTask; };
         realtime.OnUserTranscript += text =>
         {
-            if (!string.IsNullOrWhiteSpace(text)) turns.Add(new TranscriptTurn("user", text.Trim()));
+            if (!string.IsNullOrWhiteSpace(text)) lock (turnsLock) turns.Add(new TranscriptTurn("user", text.Trim()));
             return Task.CompletedTask;
         };
 
@@ -245,9 +259,11 @@ public class CallHandler
 
             while (!ct.IsCancellationRequested)
             {
-                if (!unlimited && sw.Elapsed.TotalMinutes >= limitMinutes)
+                // سقف بر مبنای مصرفِ انباشته + مدتِ همین تماس (نه فقط همین تماس).
+                if (!unlimited && alreadyUsedMinutes + sw.Elapsed.TotalMinutes >= limitMinutes)
                 {
-                    _logger.LogInformation("Call on ext {Ext} reached limit ({Min} min).", extension, limitMinutes);
+                    _logger.LogInformation("Call on ext {Ext} reached limit ({Used}+{Cur:F1}/{Min} min).",
+                        extension, alreadyUsedMinutes, sw.Elapsed.TotalMinutes, limitMinutes);
                     break;
                 }
                 var frame = await AudioSocketProtocol.ReadFrameAsync(stream, ct);
@@ -288,7 +304,9 @@ public class CallHandler
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to save call recording"); }
         }
 
-        var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turns,
+        List<TranscriptTurn> turnsSnapshot;
+        lock (turnsLock) turnsSnapshot = new List<TranscriptTurn>(turns);
+        var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turnsSnapshot,
             new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
         var durationSeconds = (int)sw.Elapsed.TotalSeconds;
         await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, recordingPath);

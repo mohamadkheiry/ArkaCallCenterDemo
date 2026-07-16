@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Camera, Trash2, Phone, ShieldCheck, UserRound } from 'lucide-react'
 import { api, apiError } from '../lib/api'
+import { useFlash } from '../lib/flash'
 import { toEn, toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
 import { Button, Card, TextInput, cn } from '../components/ui'
@@ -31,7 +32,7 @@ export default function ProfilePage() {
   const { me, refresh } = useAuth()
   const [ver, setVer] = useState(Date.now())
   const [busy, setBusy] = useState(false)
-  const [avatarMsg, setAvatarMsg] = useState('')
+  const { flash: avatarFlash, ok: avatarOk, fail: avatarFail, clear: avatarClear } = useFlash()
   const fileRef = useRef<HTMLInputElement>(null)
 
   // phone change
@@ -44,9 +45,9 @@ export default function ProfilePage() {
   if (!me) return null
 
   async function uploadAvatar(file: File) {
-    setAvatarMsg('')
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return setAvatarMsg('فقط تصویر jpg/png/webp مجاز است.')
-    if (file.size > 3 * 1024 * 1024) return setAvatarMsg('حجم تصویر حداکثر ۳ مگابایت.')
+    avatarClear()
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return avatarFail('فقط تصویر jpg/png/webp مجاز است.')
+    if (file.size > 3 * 1024 * 1024) return avatarFail('حجم تصویر حداکثر ۳ مگابایت.')
     setBusy(true)
     try {
       const form = new FormData()
@@ -54,9 +55,9 @@ export default function ProfilePage() {
       await api.post('/api/me/avatar', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       await refresh()
       setVer(Date.now())
-      setAvatarMsg('تصویر پروفایل به‌روزرسانی شد.')
+      avatarOk('تصویر پروفایل به‌روزرسانی شد.')
     } catch (e) {
-      setAvatarMsg(apiError(e))
+      avatarFail(apiError(e))
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -69,7 +70,7 @@ export default function ProfilePage() {
       await api.delete('/api/me/avatar')
       await refresh()
       setVer(Date.now())
-      setAvatarMsg('تصویر حذف شد.')
+      avatarOk('تصویر حذف شد.')
     } finally {
       setBusy(false)
     }
@@ -142,7 +143,7 @@ export default function ProfilePage() {
               )}
             </div>
             <p className="text-xs text-slate-400">jpg، png یا webp · حداکثر ۳ مگابایت</p>
-            {avatarMsg && <p className="text-sm text-emerald-600">{avatarMsg}</p>}
+            {avatarFlash && <p className={cn('text-sm', avatarFlash.ok ? 'text-emerald-600' : 'text-rose-600')}>{avatarFlash.text}</p>}
           </div>
         </div>
       </Card>

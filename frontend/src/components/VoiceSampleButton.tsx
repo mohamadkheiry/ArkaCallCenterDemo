@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Play, Square, Loader2 } from 'lucide-react'
 import { cn } from './ui'
 
@@ -16,12 +16,14 @@ export default function VoiceSampleButton({
   className?: string
 }) {
   const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle')
+  const myAudioRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     return () => {
-      // آنمانت: اگر این دکمه در حال پخش بود، متوقفش کن
-      if (currentAudio && currentStop) currentStop()
+      // آنمانت: اگر همین دکمه در حال پخش است، صوت را واقعاً متوقف کن (نه فقط setState).
+      if (currentAudio && currentAudio === myAudioRef.current) stop()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function stop() {
@@ -45,6 +47,7 @@ export default function VoiceSampleButton({
     stop() // نمونه‌ی دیگری اگر پخش است
     const audio = new Audio(`/api/voices/${voiceName}/sample`)
     currentAudio = audio
+    myAudioRef.current = audio
     currentStop = () => setState('idle')
     setState('loading')
     audio.oncanplay = () => setState('playing')

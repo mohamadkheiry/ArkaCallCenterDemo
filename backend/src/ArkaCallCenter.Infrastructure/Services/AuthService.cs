@@ -108,6 +108,12 @@ public class AuthService : IAuthService
 
         var user = await _db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber, ct);
         var isNew = user is null;
+        if (user is not null && !user.IsActive)
+        {
+            // کد مصرف‌شده تلقی می‌شود ولی ورود مجاز نیست (حساب غیرفعال‌شده توسط ادمین).
+            await _db.SaveChangesAsync(ct);
+            return new VerifyOtpResult(false, null, false, false, "حساب کاربری شما غیرفعال است. با پشتیبانی تماس بگیرید.");
+        }
         if (user is null)
         {
             user = new User { PhoneNumber = phoneNumber, ProfileCompleted = false };

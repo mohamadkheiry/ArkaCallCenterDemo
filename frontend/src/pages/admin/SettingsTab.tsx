@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card, TextInput } from '../../components/ui'
 import { toFa } from '../../lib/format'
 import { SETTING_FIELDS } from './adminData'
@@ -47,7 +48,7 @@ export default function SettingsTab({ groups, title, desc }: { groups: string[];
   const fields = SETTING_FIELDS.filter((f) => groups.includes(f.group))
   const [values, setValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
     api.get<Record<string, string | null>>('/api/admin/settings').then(({ data }) => {
@@ -60,12 +61,12 @@ export default function SettingsTab({ groups, title, desc }: { groups: string[];
 
   async function save() {
     setBusy(true)
-    setMsg('')
+    clear()
     try {
       await api.put('/api/admin/settings', { settings: values })
-      setMsg('تنظیمات ذخیره شد.')
+      ok('تنظیمات ذخیره شد.')
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -103,7 +104,7 @@ export default function SettingsTab({ groups, title, desc }: { groups: string[];
         <Button onClick={save} loading={busy}>
           ذخیره
         </Button>
-        {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        {flash && <span className={`text-sm ${flash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{flash.text}</span>}
       </div>
     </Card>
   )

@@ -153,7 +153,7 @@ export default function DashboardLayout() {
             </div>
             <Link to="/profile" title="پروفایل" className="block h-10 w-10 overflow-hidden rounded-full ring-2 ring-transparent transition hover:ring-brand-200">
               {me?.hasAvatar ? (
-                <img src={`/api/avatars/${me.id}?v=${me.hasAvatar}`} alt="پروفایل" className="h-full w-full object-cover" />
+                <img src={`/api/avatars/${me.id}?v=${me.avatarVersion ?? 0}`} alt="پروفایل" className="h-full w-full object-cover" />
               ) : (
                 <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
                   {me?.firstName?.[0] ?? '؟'}

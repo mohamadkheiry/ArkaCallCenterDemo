@@ -23,6 +23,7 @@ function RecordingPlayer({ id }: { id: number }) {
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
 
   async function toggle() {
+    if (loading) return   // از دو بار کلیکِ پشت‌سرهم و فچِ تکراری جلوگیری کن
     if (playing) {
       audioRef.current?.pause()
       return
@@ -52,7 +53,8 @@ function RecordingPlayer({ id }: { id: number }) {
   return (
     <button
       onClick={toggle}
-      className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100"
+      disabled={loading}
+      className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-60"
     >
       {loading ? (
         <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" />

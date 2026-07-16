@@ -96,7 +96,7 @@ export default function KnowledgeBasePage() {
         <h1 className="text-2xl font-extrabold text-slate-800">پایگاه دانش</h1>
         <p className="mt-1 text-sm text-slate-500">
           محتوایی که هوش مصنوعی برای پاسخ به تماس‌ها از آن استفاده می‌کند. حداکثر یک متن {toFa(MAX_CHARS)} کاراکتری
-          یا یک فایل {toFa(100)} کیلوبایتی (txt/pdf).
+          یا یک فایل {toFa(100)} کیلوبایتی (txt یا Word).
         </p>
       </div>
 
@@ -169,7 +169,7 @@ export default function KnowledgeBasePage() {
           >
             <CloudUpload size={34} className="text-brand-500" />
             <span className="text-sm font-medium text-slate-700">فایل را اینجا رها کنید یا کلیک کنید</span>
-            <span className="text-xs text-slate-400">txt یا pdf · حداکثر ۱۰۰ کیلوبایت</span>
+            <span className="text-xs text-slate-400">txt یا Word (docx) · حداکثر ۱۰۰ کیلوبایت</span>
             <input
               ref={fileRef}
               type="file"

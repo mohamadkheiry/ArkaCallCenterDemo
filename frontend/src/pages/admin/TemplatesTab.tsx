@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card } from '../../components/ui'
 import { SMS_EVENTS } from './adminData'
 
@@ -28,7 +29,7 @@ export default function TemplatesTab() {
   const [templates, setTemplates] = useState<Record<string, Template>>({})
   const [recipients, setRecipients] = useState<Record<string, Recipient>>({})
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
     async function load() {
@@ -51,13 +52,13 @@ export default function TemplatesTab() {
 
   async function save() {
     setBusy(true)
-    setMsg('')
+    clear()
     try {
       await api.put('/api/admin/sms-templates', { templates: Object.values(templates) })
       await api.put('/api/admin/sms-events', { recipients: Object.values(recipients) })
-      setMsg('پیامک‌ها و گیرندگان ذخیره شد.')
+      ok('پیامک‌ها و گیرندگان ذخیره شد.')
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -125,7 +126,7 @@ export default function TemplatesTab() {
         <Button onClick={save} loading={busy}>
           ذخیره همه
         </Button>
-        {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        {flash && <span className={`text-sm ${flash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{flash.text}</span>}
       </div>
     </Card>
   )

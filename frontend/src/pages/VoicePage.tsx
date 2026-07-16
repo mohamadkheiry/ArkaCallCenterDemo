@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Mic } from 'lucide-react'
 import { api, apiError } from '../lib/api'
+import { useFlash } from '../lib/flash'
 import { useAuth } from '../context/AuthContext'
 import { Button, cn } from '../components/ui'
 import VoiceSampleButton from '../components/VoiceSampleButton'
@@ -18,7 +19,7 @@ export default function VoicePage() {
   const [selected, setSelected] = useState<string>('')
   const [defaultVoice, setDefaultVoice] = useState<string>('')
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
+  const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
     api.get<{ voices: Voice[]; defaultVoice: string }>('/api/voices').then(({ data }) => {
@@ -30,13 +31,13 @@ export default function VoicePage() {
 
   async function save() {
     setBusy(true)
-    setMsg(null)
+    clear()
     try {
       await api.put('/api/me/voice', { voiceName: selected })
       await refresh()
-      setMsg('گوینده ذخیره شد.')
+      ok('گوینده ذخیره شد.')
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -94,7 +95,7 @@ export default function VoicePage() {
         <Button onClick={save} loading={busy}>
           ذخیره گوینده
         </Button>
-        {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
       </div>
     </div>
   )

@@ -35,18 +35,64 @@ public class ModerationService : IModerationService
         if (string.IsNullOrWhiteSpace(content))
             return new ModerationResult(false, "محتوا خالی است.");
 
+        // تا دو بار تلاش می‌کنیم؛ خطاهای گذرای شبکه (به‌ویژه از داخل ایران) نباید محتوای سالم را رد کنند.
+        Exception? last = null;
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                var raw = await _openai.ChatAsync(SystemPrompt, content, jsonMode: true, ct);
+                if (TryParse(raw, out var result)) return result;
+                _logger.LogWarning("Moderation returned unparsable content (attempt {Attempt}): {Raw}", attempt, Trunc(raw));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                last = ex;
+                _logger.LogWarning(ex, "Moderation call failed (attempt {Attempt}/2).", attempt);
+            }
+        }
+
+        _logger.LogError(last, "Moderation failed after retries; rejecting content (fail-closed).");
+        return new ModerationResult(false, "بررسی محتوا ممکن نشد؛ لطفاً کمی بعد دوباره تلاش کنید.");
+    }
+
+    /// <summary>خواندنِ مقاومِ پاسخِ مدل: مقدارِ allowed می‌تواند boolean یا رشته‌ی «true»/«false» باشد؛
+    /// در صورت وجودِ حصارِ ```json نیز پاک‌سازی می‌شود.</summary>
+    private static bool TryParse(string? raw, out ModerationResult result)
+    {
+        result = new ModerationResult(false, "محتوا مغایر با قوانین است.");
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        var json = raw.Trim();
+        if (json.StartsWith("```"))
+        {
+            var start = json.IndexOf('{');
+            var end = json.LastIndexOf('}');
+            if (start >= 0 && end > start) json = json[start..(end + 1)];
+        }
+
         try
         {
-            var raw = await _openai.ChatAsync(SystemPrompt, content, jsonMode: true, ct);
-            using var doc = JsonDocument.Parse(raw);
-            var allowed = doc.RootElement.TryGetProperty("allowed", out var a) && a.ValueKind == JsonValueKind.True;
-            var reason = doc.RootElement.TryGetProperty("reason", out var r) ? r.GetString() : null;
-            return new ModerationResult(allowed, allowed ? null : (reason ?? "محتوا مغایر با قوانین است."));
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("allowed", out var a)) return false;
+            var allowed = a.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.String => bool.TryParse(a.GetString(), out var b) && b,
+                _ => false,
+            };
+            var reason = doc.RootElement.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String
+                ? r.GetString() : null;
+            result = new ModerationResult(allowed, allowed ? null : (string.IsNullOrWhiteSpace(reason) ? "محتوا مغایر با قوانین است." : reason));
+            return true;
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            _logger.LogError(ex, "Moderation failed; rejecting content (fail-closed).");
-            return new ModerationResult(false, "بررسی محتوا ممکن نشد؛ لطفاً دوباره تلاش کنید.");
+            return false;
         }
     }
+
+    private static string Trunc(string? s) => string.IsNullOrEmpty(s) ? "" : (s.Length <= 200 ? s : s[..200]);
 }

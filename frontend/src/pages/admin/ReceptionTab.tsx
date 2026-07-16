@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Music, Upload } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card } from '../../components/ui'
 
 interface Voice {
@@ -14,13 +15,13 @@ export default function ReceptionTab() {
   const [voices, setVoices] = useState<Voice[]>([])
   const [sound, setSound] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash: gFlash, ok: gOk, fail: gFail, clear: gClear } = useFlash()
 
   const greetingFileRef = useRef<HTMLInputElement>(null)
 
   const [holdEnabled, setHoldEnabled] = useState(false)
   const [holdHasFile, setHoldHasFile] = useState(false)
-  const [holdMsg, setHoldMsg] = useState('')
+  const { flash: hFlash, ok: hOk, fail: hFail, clear: hClear } = useFlash()
   const holdRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -38,21 +39,21 @@ export default function ReceptionTab() {
 
   async function saveGreeting() {
     setBusy(true)
-    setMsg('')
+    gClear()
     try {
       const { data } = await api.put('/api/admin/main-greeting', { text, voice })
-      setMsg(data.message)
+      gOk(data.message)
       setSound(data.asteriskSound ?? sound)
     } catch (e) {
-      setMsg(apiError(e))
+      gFail(apiError(e))
     } finally {
       setBusy(false)
     }
   }
 
   async function uploadGreetingFile(file: File) {
-    setMsg('')
-    if (!file.name.toLowerCase().endsWith('.wav')) return setMsg('فقط فایل WAV (۱۶ بیت PCM) مجاز است.')
+    gClear()
+    if (!file.name.toLowerCase().endsWith('.wav')) return gFail('فقط فایل WAV (۱۶ بیت PCM) مجاز است.')
     setBusy(true)
     try {
       const form = new FormData()
@@ -60,10 +61,10 @@ export default function ReceptionTab() {
       const { data } = await api.post('/api/admin/main-greeting/file', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      setMsg(data.message)
+      gOk(data.message)
       setSound(data.asteriskSound ?? sound)
     } catch (e) {
-      setMsg(apiError(e))
+      gFail(apiError(e))
     } finally {
       setBusy(false)
       if (greetingFileRef.current) greetingFileRef.current.value = ''
@@ -71,25 +72,37 @@ export default function ReceptionTab() {
   }
 
   async function uploadHold(file: File) {
-    setHoldMsg('')
-    if (!file.name.toLowerCase().endsWith('.wav')) return setHoldMsg('فقط فایل WAV مجاز است.')
+    hClear()
+    if (!file.name.toLowerCase().endsWith('.wav')) return hFail('فقط فایل WAV مجاز است.')
     try {
       const form = new FormData()
       form.append('file', file)
       const { data } = await api.post('/api/admin/hold-music', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-      setHoldMsg(data.message)
+      hOk(data.message)
       setHoldHasFile(true)
       setHoldEnabled(true)
     } catch (e) {
-      setHoldMsg(apiError(e))
+      hFail(apiError(e))
     } finally {
       if (holdRef.current) holdRef.current.value = ''
     }
   }
 
   async function toggleHold(enabled: boolean) {
-    setHoldEnabled(enabled)
-    await api.put('/api/admin/hold-music/enabled', { enabled })
+    // بدون فایلِ موسیقی نمی‌توان انتظار را فعال کرد.
+    if (enabled && !holdHasFile) {
+      hFail('ابتدا یک فایل موسیقی انتظار بارگذاری کنید.')
+      return
+    }
+    hClear()
+    const prev = holdEnabled
+    setHoldEnabled(enabled) // خوش‌بینانه
+    try {
+      await api.put('/api/admin/hold-music/enabled', { enabled })
+    } catch (e) {
+      setHoldEnabled(prev) // در صورت خطا به حالت قبل برگرد
+      hFail(apiError(e))
+    }
   }
 
   return (
@@ -152,7 +165,7 @@ export default function ReceptionTab() {
             <Button onClick={saveGreeting} loading={busy}>
               ذخیره، تولید صوت و آپلود
             </Button>
-            {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+            {gFlash && <span className={`text-sm ${gFlash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{gFlash.text}</span>}
           </div>
         </div>
       </Card>
@@ -179,7 +192,7 @@ export default function ReceptionTab() {
             <input type="checkbox" checked={holdEnabled} onChange={(e) => toggleHold(e.target.checked)} />
             پخش موسیقی انتظار فعال باشد
           </label>
-          {holdMsg && <span className="text-sm text-emerald-600">{holdMsg}</span>}
+          {hFlash && <span className={`text-sm ${hFlash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{hFlash.text}</span>}
         </div>
       </Card>
     </div>

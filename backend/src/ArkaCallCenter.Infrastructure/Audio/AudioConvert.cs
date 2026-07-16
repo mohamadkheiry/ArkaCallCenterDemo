@@ -75,7 +75,8 @@ public static class AudioConvert
             var id = s.Slice(pos, 4);
             var size = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(pos + 4, 4));
             var body = pos + 8;
-            if (id.SequenceEqual("fmt "u8))
+            // بدنه‌ی fmt حداقل ۱۶ بایت است؛ اگر فایل بریده باشد نباید از بافر بیرون بخوانیم.
+            if (id.SequenceEqual("fmt "u8) && body + 16 <= wav.Length)
             {
                 channels = BinaryPrimitives.ReadInt16LittleEndian(s.Slice(body + 2, 2));
                 rate = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(body + 4, 4));

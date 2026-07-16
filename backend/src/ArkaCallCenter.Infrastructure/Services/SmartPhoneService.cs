@@ -73,6 +73,10 @@ public class SmartPhoneService : ISmartPhoneService
         return sp;
     }
 
+    // تخصیصِ داخلی TOCTOU-safe نیست (خواندنِ لیست → انتخاب → ذخیره). این قفلِ درون‌پردازه‌ای
+    // دو درخواستِ همزمانِ «ساخت» را ترتیبی می‌کند تا شماره‌ی تکراری provision/ذخیره نشود.
+    private static readonly SemaphoreSlim _createLock = new(1, 1);
+
     public async Task<SmartPhoneResult> CreateAsync(int userId, CancellationToken ct = default)
     {
         var user = await _db.Users
@@ -93,33 +97,41 @@ public class SmartPhoneService : ISmartPhoneService
         if (sp.Extension is not null && sp.Status == SmartPhoneStatus.Active)
             return new SmartPhoneResult(true, null, sp);
 
-        var extension = await _allocator.AllocateAsync(ct);
-        var secret = GenerateSecret();
-
-        var provision = await _asterisk.ProvisionExtensionAsync(extension, secret, ct);
-        if (!provision.Success)
+        await _createLock.WaitAsync(ct);
+        try
         {
-            sp.Status = SmartPhoneStatus.Failed;
+            var extension = await _allocator.AllocateAsync(ct);
+            var secret = GenerateSecret();
+
+            var provision = await _asterisk.ProvisionExtensionAsync(extension, secret, ct);
+            if (!provision.Success)
+            {
+                sp.Status = SmartPhoneStatus.Failed;
+                await _db.SaveChangesAsync(ct);
+                return new SmartPhoneResult(false, provision.Error ?? "ساخت داخلی ناموفق بود.", null);
+            }
+
+            sp.Extension = extension;
+            sp.SipSecret = secret;
+            sp.Status = SmartPhoneStatus.Active;
+            sp.UpdatedAt = DateTime.UtcNow;
+
+            // اطمینان از وجود وویس خوش‌آمد
+            if (string.IsNullOrEmpty(sp.WelcomeAudioPath))
+                await GenerateWelcomeAudioAsync(userId, sp, ct);
+
             await _db.SaveChangesAsync(ct);
-            return new SmartPhoneResult(false, provision.Error ?? "ساخت داخلی ناموفق بود.", null);
+
+            await _sms.DispatchAsync(SmsEventType.SmartPhoneCreated,
+                new Dictionary<string, string> { ["extension"] = extension.ToString(), ["firstName"] = user.FirstName ?? "" },
+                user.PhoneNumber, ct);
+
+            return new SmartPhoneResult(true, null, sp);
         }
-
-        sp.Extension = extension;
-        sp.SipSecret = secret;
-        sp.Status = SmartPhoneStatus.Active;
-        sp.UpdatedAt = DateTime.UtcNow;
-
-        // اطمینان از وجود وویس خوش‌آمد
-        if (string.IsNullOrEmpty(sp.WelcomeAudioPath))
-            await GenerateWelcomeAudioAsync(userId, sp, ct);
-
-        await _db.SaveChangesAsync(ct);
-
-        await _sms.DispatchAsync(SmsEventType.SmartPhoneCreated,
-            new Dictionary<string, string> { ["extension"] = extension.ToString(), ["firstName"] = user.FirstName ?? "" },
-            user.PhoneNumber, ct);
-
-        return new SmartPhoneResult(true, null, sp);
+        finally
+        {
+            _createLock.Release();
+        }
     }
 
     // ---- helpers ----

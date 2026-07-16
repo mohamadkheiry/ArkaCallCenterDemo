@@ -58,6 +58,8 @@ public class MeController : ControllerBase
             user.UsedMinutes,
             receptionNumber,
             hasAvatar = !string.IsNullOrEmpty(user.AvatarPath),
+            // نسخه‌ی تصویر برای cache-busting در هدر (پس از تغییرِ عکس، مقدارش عوض می‌شود).
+            avatarVersion = (user.UpdatedAt ?? user.CreatedAt).Ticks,
             smartPhone = user.SmartPhone == null ? null : new
             {
                 user.SmartPhone.Extension,

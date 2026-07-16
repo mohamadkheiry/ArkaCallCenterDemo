@@ -19,5 +19,6 @@ export interface Me {
   usedMinutes: number
   receptionNumber?: string | null
   hasAvatar: boolean
+  avatarVersion?: number
   smartPhone?: SmartPhoneInfo | null
 }

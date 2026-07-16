@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Pencil, ShieldCheck, LogIn, Search } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { useAuth } from '../../context/AuthContext'
 import { Button, Card, TextInput, cn } from '../../components/ui'
-import { toFa } from '../../lib/format'
+import { toFa, toEn } from '../../lib/format'
 
 interface AdminUser {
   id: number
@@ -23,27 +24,27 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
   const [open, setOpen] = useState(false)
   const [u, setU] = useState(user)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
   const [entering, setEntering] = useState(false)
   const { impersonate } = useAuth()
   const navigate = useNavigate()
 
   async function enterPanel() {
     setEntering(true)
-    setMsg('')
+    clear()
     try {
       const { data } = await api.post<{ token: string; name: string }>(`/api/admin/users/${user.id}/impersonate`)
       impersonate(data.token, data.name)
       navigate('/', { replace: true })
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
       setEntering(false)
     }
   }
 
   async function save() {
     setBusy(true)
-    setMsg('')
+    clear()
     try {
       await api.put(`/api/admin/users/${user.id}`, {
         firstName: u.firstName,
@@ -52,10 +53,10 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
         isActive: u.isActive,
         callMinuteLimit: u.callMinuteLimit,
       })
-      setMsg('ذخیره شد.')
+      ok('ذخیره شد.')
       onSaved()
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -117,7 +118,7 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
                 <LogIn size={15} /> ورود به پنل کاربر
               </Button>
             )}
-            {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+            {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
           </div>
         </div>
       )}
@@ -141,7 +142,8 @@ export default function UsersTab() {
 
   // سرچ زنده روی نام، نام‌خانوادگی، برند، شماره و داخلی
   const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
+    // ارقامِ فارسیِ ورودی را به انگلیسی نرمال کن تا جستجوی شماره/داخلی هم کار کند.
+    const term = toEn(q.trim()).toLowerCase()
     if (!term) return users
     return users.filter((u) =>
       [u.firstName, u.lastName, u.brandName, u.phoneNumber, u.extension?.toString()]

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { ImageUp, Trash2, Image as ImageIcon } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card } from '../../components/ui'
 
 export default function BrandingTab() {
   const [hasLogo, setHasLogo] = useState(false)
   const [ver, setVer] = useState(Date.now())
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
   const ref = useRef<HTMLInputElement>(null)
 
   function loadInfo() {
@@ -16,20 +17,20 @@ export default function BrandingTab() {
   useEffect(loadInfo, [])
 
   async function upload(file: File) {
-    setMsg('')
+    clear()
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
-      return setMsg('فقط تصویر png/jpg/webp/svg مجاز است.')
+      return fail('فقط تصویر png/jpg/webp/svg مجاز است.')
     }
     setBusy(true)
     try {
       const form = new FormData()
       form.append('file', file)
       const { data } = await api.post('/api/admin/logo', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-      setMsg(data.message)
+      ok(data.message)
       setHasLogo(true)
       setVer(Date.now())
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
       if (ref.current) ref.current.value = ''
@@ -42,7 +43,7 @@ export default function BrandingTab() {
     try {
       await api.delete('/api/admin/logo')
       setHasLogo(false)
-      setMsg('لوگو حذف شد.')
+      ok('لوگو حذف شد.')
       setVer(Date.now())
     } finally {
       setBusy(false)
@@ -87,7 +88,7 @@ export default function BrandingTab() {
               </Button>
             )}
           </div>
-          {msg && <p className="text-sm text-emerald-600">{msg}</p>}
+          {flash && <p className={`text-sm ${flash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{flash.text}</p>}
         </div>
       </div>
     </Card>

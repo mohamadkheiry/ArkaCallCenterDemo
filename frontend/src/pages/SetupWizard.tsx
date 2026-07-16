@@ -53,9 +53,11 @@ export default function SetupWizard() {
   const [welcomeSaved, setWelcomeSaved] = useState(false)
   const [voices, setVoices] = useState<Voice[]>([])
   const [voice, setVoice] = useState('')
+  const [defaultVoice, setDefaultVoice] = useState('')
   const [extension, setExtension] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // بارگذاری فقط یک‌بار در mount؛ نباید با تغییرِ me دوباره اجرا شود و ورودی‌های در حالِ ویرایشِ کاربر را بازنویسی کند.
   useEffect(() => {
     api.get('/api/tutorial-video/info').then(({ data }) => setVideoAvailable(!!data.available)).catch(() => {})
     api.get('/api/knowledge-base').then(({ data }) => {
@@ -73,9 +75,15 @@ export default function SetupWizard() {
     })
     api.get<{ voices: Voice[]; defaultVoice: string }>('/api/voices').then(({ data }) => {
       setVoices(data.voices)
-      setVoice(me?.voiceName ?? data.defaultVoice)
+      setDefaultVoice(data.defaultVoice)
     })
-  }, [me?.voiceName])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // مقداردهیِ اولیه‌ی گوینده وقتی me/لیست آماده شد — فقط اگر کاربر هنوز چیزی انتخاب نکرده.
+  useEffect(() => {
+    setVoice((v) => v || me?.voiceName || defaultVoice)
+  }, [me?.voiceName, defaultVoice])
 
   function next() {
     setError('')
@@ -305,7 +313,7 @@ export default function SetupWizard() {
                 >
                   <CloudUpload size={32} className="text-brand-500" />
                   <span className="text-sm font-medium text-slate-700">فایل را اینجا رها کنید یا کلیک کنید</span>
-                  <span className="text-xs text-slate-400">txt یا pdf · حداکثر ۱۰۰ کیلوبایت</span>
+                  <span className="text-xs text-slate-400">txt یا Word (docx) · حداکثر ۱۰۰ کیلوبایت</span>
                   <input
                     ref={fileRef}
                     type="file"

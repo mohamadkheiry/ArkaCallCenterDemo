@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AudioLines, Sparkles, Upload } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card, cn } from '../../components/ui'
 import VoiceSampleButton from '../../components/VoiceSampleButton'
 
@@ -17,7 +18,7 @@ export default function VoicesTab() {
   const [sampleText, setSampleText] = useState('')
   const [busy, setBusy] = useState(false)
   const [sampleBusy, setSampleBusy] = useState<string | null>(null)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
   const uploadRef = useRef<HTMLInputElement>(null)
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
 
@@ -39,12 +40,12 @@ export default function VoicesTab() {
 
   async function save() {
     setBusy(true)
-    setMsg('')
+    clear()
     try {
       await api.put('/api/admin/voices', { voices })
-      setMsg('گوینده‌ها ذخیره شد.')
+      ok('گوینده‌ها ذخیره شد.')
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -52,13 +53,13 @@ export default function VoicesTab() {
 
   async function generateSample(name: string) {
     setSampleBusy(name)
-    setMsg('')
+    clear()
     try {
       const { data } = await api.post(`/api/admin/voices/${name}/sample-generate`, { text: sampleText })
-      setMsg(data.message)
+      ok(data.message)
       await load()
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setSampleBusy(null)
     }
@@ -72,17 +73,17 @@ export default function VoicesTab() {
   async function uploadSample(file: File) {
     if (!uploadTarget) return
     setSampleBusy(uploadTarget)
-    setMsg('')
+    clear()
     try {
       const form = new FormData()
       form.append('file', file)
       const { data } = await api.post(`/api/admin/voices/${uploadTarget}/sample-file`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      setMsg(data.message)
+      ok(data.message)
       await load()
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setSampleBusy(null)
       setUploadTarget(null)
@@ -170,7 +171,7 @@ export default function VoicesTab() {
         <Button onClick={save} loading={busy}>
           ذخیره
         </Button>
-        {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
       </div>
     </Card>
   )

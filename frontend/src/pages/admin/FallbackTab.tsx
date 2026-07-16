@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
+import { useFlash } from '../../lib/flash'
 import { Button, Card } from '../../components/ui'
 
 interface Voice {
@@ -13,7 +14,7 @@ export default function FallbackTab() {
   const [voices, setVoices] = useState<Voice[]>([])
   const [hasAudio, setHasAudio] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
     api.get('/api/admin/fallback-message').then(({ data }) => {
@@ -26,13 +27,13 @@ export default function FallbackTab() {
 
   async function save() {
     setBusy(true)
-    setMsg('')
+    clear()
     try {
       const { data } = await api.put('/api/admin/fallback-message', { text, voice })
-      setMsg(data.message)
+      ok(data.message)
       setHasAudio(!!data.audioGenerated || hasAudio)
     } catch (e) {
-      setMsg(apiError(e))
+      fail(apiError(e))
     } finally {
       setBusy(false)
     }
@@ -81,7 +82,7 @@ export default function FallbackTab() {
         <Button onClick={save} loading={busy}>
           ذخیره و تولید صوت
         </Button>
-        {msg && <span className="text-sm text-emerald-600">{msg}</span>}
+        {flash && <span className={`text-sm ${flash.ok ? 'text-emerald-600' : 'text-rose-600'}`}>{flash.text}</span>}
       </div>
     </Card>
   )
