@@ -73,6 +73,11 @@ public class CallHandler
         var fallback = await settings.GetAsync(SettingKeys.FallbackMessageText, defaultFallback, ct) ?? defaultFallback;
         var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
         var voice = sp.User.VoiceName ?? await settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
+        // درصدِ دقت (پایبندی به پایگاه دانش) → temperature: درصدِ بالاتر = temperature پایین‌تر (پاسخِ دقیق‌تر).
+        // Realtime API فقط بازه‌ی [0.6, 1.2] را می‌پذیرد؛ بنابراین کلِ اسلایدرِ ۱۰..۱۰۰٪ را به‌صورت خطی
+        // روی همین بازه نگاشت می‌کنیم تا تمامِ اسلایدر مؤثر باشد: ۱۰۰٪→۰.۶ (دقیق‌ترین)، ۱۰٪→۱.۲ (خلاقانه‌ترین).
+        var accuracy = Math.Clamp(sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent, 10, 100);
+        var temperature = 0.6 + (100 - accuracy) / 90.0 * 0.6;
         // سوپر ادمین نامحدود است (سقف دقیقه اعمال نمی‌شود)؛ دقایق مصرف‌شده همچنان برای نمایش ثبت می‌شود.
         var unlimited = sp.User.Role == UserRole.SuperAdmin;
         var limitMinutes = sp.User.CallMinuteLimit
@@ -235,7 +240,7 @@ public class CallHandler
         var startedAt = DateTime.UtcNow;
         try
         {
-            await realtime.ConnectAsync(instructions, voice, ct);
+            await realtime.ConnectAsync(instructions, voice, temperature, ct);
             await realtime.GreetAsync(welcome, ct);
 
             while (!ct.IsCancellationRequested)

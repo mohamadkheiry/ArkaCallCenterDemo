@@ -14,6 +14,7 @@ public class SmartPhoneController : ControllerBase
     public SmartPhoneController(ISmartPhoneService service) => _service = service;
 
     public record WelcomeRequest(string Text);
+    public record AccuracyRequest(int Percent);
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct)
@@ -26,7 +27,16 @@ public class SmartPhoneController : ControllerBase
             status = sp.Status.ToString(),
             sp.WelcomeMessageText,
             hasWelcomeAudio = !string.IsNullOrEmpty(sp.WelcomeAudioPath),
+            answerAccuracyPercent = sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent,
         });
+    }
+
+    /// <summary>تنظیمِ درصدِ دقت/پایبندی پاسخ‌ها به پایگاه دانش (۱۰ تا ۱۰۰).</summary>
+    [HttpPut("accuracy")]
+    public async Task<IActionResult> SetAccuracy(AccuracyRequest req, CancellationToken ct)
+    {
+        var sp = await _service.SetAccuracyAsync(User.GetUserId(), req.Percent, ct);
+        return Ok(new { answerAccuracyPercent = sp!.AnswerAccuracyPercent });
     }
 
     /// <summary>ثبت/به‌روزرسانی پیام خوش‌آمد و تولید نسخه‌ی صوتی آن.</summary>

@@ -32,4 +32,7 @@ public interface ISmartPhoneService
     Task<SmartPhone?> GetAsync(int userId, CancellationToken ct = default);
     Task<SmartPhoneResult> CreateAsync(int userId, CancellationToken ct = default);
     Task<SmartPhone?> SetWelcomeAsync(int userId, string text, CancellationToken ct = default);
+
+    /// <summary>تنظیمِ درصدِ دقت/پایبندی به پایگاه دانش (۱۰ تا ۱۰۰).</summary>
+    Task<SmartPhone?> SetAccuracyAsync(int userId, int percent, CancellationToken ct = default);
 }

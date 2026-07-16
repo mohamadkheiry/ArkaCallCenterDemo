@@ -40,6 +40,21 @@ public class SmartPhoneService : ISmartPhoneService
     public Task<SmartPhone?> GetAsync(int userId, CancellationToken ct = default)
         => _db.SmartPhones.AsNoTracking().FirstOrDefaultAsync(s => s.UserId == userId, ct);
 
+    public async Task<SmartPhone?> SetAccuracyAsync(int userId, int percent, CancellationToken ct = default)
+    {
+        percent = Math.Clamp(percent, 10, 100);
+        var sp = await _db.SmartPhones.FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        if (sp is null)
+        {
+            sp = new SmartPhone { UserId = userId, Status = SmartPhoneStatus.Provisioning };
+            _db.SmartPhones.Add(sp);
+        }
+        sp.AnswerAccuracyPercent = percent;
+        sp.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return sp;
+    }
+
     public async Task<SmartPhone?> SetWelcomeAsync(int userId, string text, CancellationToken ct = default)
     {
         text = (text ?? "").Trim();

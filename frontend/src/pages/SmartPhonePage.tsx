@@ -11,6 +11,7 @@ interface Sp {
   status: string
   welcomeMessageText?: string | null
   hasWelcomeAudio: boolean
+  answerAccuracyPercent?: number
 }
 
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -33,6 +34,8 @@ export default function SmartPhonePage() {
   const { refresh } = useAuth()
   const [sp, setSp] = useState<Sp | null>(null)
   const [welcome, setWelcome] = useState('')
+  const [accuracy, setAccuracy] = useState(70)
+  const [savingAcc, setSavingAcc] = useState(false)
   const [hasKb, setHasKb] = useState(false)
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -45,6 +48,7 @@ export default function SmartPhonePage() {
     ])
     setSp(s.data)
     if (s.data?.welcomeMessageText) setWelcome(s.data.welcomeMessageText)
+    if (s.data?.answerAccuracyPercent) setAccuracy(s.data.answerAccuracyPercent)
     setHasKb(!!kb.data && kb.data.moderationStatus === 'Approved')
   }
   useEffect(() => {
@@ -62,6 +66,19 @@ export default function SmartPhonePage() {
       setMsg({ type: 'err', text: apiError(e) })
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function saveAccuracy() {
+    setSavingAcc(true)
+    setMsg(null)
+    try {
+      await api.put('/api/smartphone/accuracy', { percent: accuracy })
+      setMsg({ type: 'ok', text: 'دقت پاسخ‌ها ذخیره شد.' })
+    } catch (e) {
+      setMsg({ type: 'err', text: apiError(e) })
+    } finally {
+      setSavingAcc(false)
     }
   }
 
@@ -120,6 +137,38 @@ export default function SmartPhonePage() {
         <div className="mt-3">
           <Button onClick={saveWelcome} loading={busy} variant="outline">
             ذخیره پیام خوش‌آمد
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="animate-in">
+        <h3 className="font-bold text-slate-800">دقتِ پاسخ‌ها بر اساس پایگاه دانش</h3>
+        <p className="mt-1 text-sm leading-7 text-slate-500">
+          تعیین می‌کند پاسخ‌های هوش مصنوعی چقدر به متنِ پایگاه دانشِ شما پایبند باشند.
+          <b className="text-slate-700"> هرچه بالاتر</b>، پاسخ‌ها دقیق‌تر، مطمئن‌تر و نزدیک‌تر به پایگاه دانش
+          هستند (خلاقیتِ کمتر). <b className="text-slate-700">هرچه پایین‌تر</b>، پاسخ‌ها آزادتر و خلاقانه‌تر
+          می‌شوند (اما ممکن است از پایگاه دانش فاصله بگیرند). برای پاسخ‌گوییِ رسمی و دقیق، مقدارِ بالا
+          (حدود ۸۰ تا ۱۰۰ درصد) پیشنهاد می‌شود.
+        </p>
+        <div className="mt-5 flex items-center gap-4">
+          <input
+            type="range"
+            min={10}
+            max={100}
+            step={5}
+            value={accuracy}
+            onChange={(e) => setAccuracy(Number(e.target.value))}
+            className="h-2 flex-1 cursor-pointer accent-brand-600"
+          />
+          <span className="w-16 text-center text-lg font-extrabold text-brand-700">{toFa(accuracy)}٪</span>
+        </div>
+        <div className="mt-1 flex justify-between text-xs text-slate-400">
+          <span>خلاقانه‌تر (۱۰٪)</span>
+          <span>دقیق‌تر بر پایه‌ی پایگاه دانش (۱۰۰٪)</span>
+        </div>
+        <div className="mt-4">
+          <Button onClick={saveAccuracy} loading={savingAcc} variant="outline">
+            ذخیره دقت پاسخ‌ها
           </Button>
         </div>
       </Card>

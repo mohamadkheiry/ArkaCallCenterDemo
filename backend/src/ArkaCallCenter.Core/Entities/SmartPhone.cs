@@ -24,5 +24,12 @@ public class SmartPhone : BaseEntity
 
     public SmartPhoneStatus Status { get; set; } = SmartPhoneStatus.Provisioning;
 
+    /// <summary>
+    /// میزانِ پایبندیِ پاسخ‌های AI به پایگاه دانش، ۱۰ تا ۱۰۰ درصد. هرچه بالاتر،
+    /// پاسخ‌ها دقیق‌تر و نزدیک‌تر به پایگاه دانش (خلاقیتِ کمتر). به temperature نگاشت
+    /// می‌شود: درصدِ بالاتر = temperature پایین‌تر.
+    /// </summary>
+    public int AnswerAccuracyPercent { get; set; } = 70;
+
     public ICollection<CallSession> CallSessions { get; set; } = new List<CallSession>();
 }
