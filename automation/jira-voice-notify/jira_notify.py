@@ -22,6 +22,10 @@ AST_SND   = "/var/lib/asterisk/sounds/arka"          # asterisk sounds (Playback
 PIPER_PY  = "/opt/miniconda/envs/piper/bin/python"
 VOICE     = os.path.join(BASE, "voices/fa_IR-ganji-medium.onnx")
 LOG       = os.path.join(BASE, "notify.log")
+PENDING      = os.path.join(STATE_DIR, "pending_calls.json")  # صفِ تماس‌های در انتظارِ تکرار
+CDR_DB       = "/var/log/asterisk/master.db"
+RETRY_GAP_S  = 300   # فاصله‌ی ۵ دقیقه بین تلاش‌ها
+MAX_ATTEMPTS = 3     # حداکثر ۳ بار تماس تا جواب دادن
 
 os.makedirs(STATE_DIR, exist_ok=True); os.makedirs(SND_TMP, exist_ok=True)
 os.makedirs(AST_SND, exist_ok=True)
@@ -121,6 +125,57 @@ def call(phone, sound_ref):
                        stderr=subprocess.STDOUT, timeout=30)
     log("CALL %s play=%s -> %s" % (phone, sound_ref, r.stdout.decode('utf-8','replace').strip()[:120]))
 
+# ---------- تشخیصِ «جواب داده یا نه» از CDR + صفِ تکرارِ تماس ----------
+def was_answered(phone, since_ts):
+    """آیا بعد از since_ts تماسی به این شماره جواب داده شده (ANSWERED با مدت>=۲ث)؟"""
+    import sqlite3
+    core = "".join(c for c in phone if c.isdigit()).lstrip("0")  # مثل 9014536717
+    if not core:
+        return False
+    # زمانِ سرور (محلی) هم‌راستا با calldateِ CDR است.
+    since = datetime.datetime.fromtimestamp(since_ts - 8).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        con = sqlite3.connect(CDR_DB, timeout=5)
+        rows = con.execute(
+            "SELECT disposition, billsec FROM cdr WHERE dst LIKE ? AND calldate >= ? "
+            "ORDER BY calldate DESC LIMIT 12", ("%" + core + "%", since)).fetchall()
+        con.close()
+        for disp, bill in rows:
+            if str(disp).upper() == "ANSWERED" and int(bill or 0) >= 2:
+                return True
+    except Exception as e:
+        log("cdr check err: %s" % e)
+    return False
+
+def add_pending(phone, key):
+    lst = load(PENDING, [])
+    lst.append({"phone": phone, "key": key, "attempts": 1, "last_ts": time.time()})
+    save(PENDING, lst)
+
+def process_pending():
+    """هر اجرا: تماس‌های بی‌جواب را (با فاصله‌ی ۵ دقیقه، تا ۳ بار) دوباره می‌زند؛
+       اگر در هر مرحله جواب داده شود، متوقف می‌شود."""
+    lst = load(PENDING, [])
+    if not lst:
+        return
+    now = time.time(); keep = []
+    for e in lst:
+        if was_answered(e["phone"], e["last_ts"]):
+            log("JIRA-CALL ANSWERED phone=%s key=%s (attempt %d)" % (e["phone"], e.get("key"), e["attempts"]))
+            continue  # جواب داد → از صف حذف
+        if now - e["last_ts"] >= RETRY_GAP_S:
+            if e["attempts"] < MAX_ATTEMPTS:
+                call(e["phone"], "arka/jira_check")
+                e["attempts"] += 1; e["last_ts"] = now
+                log("JIRA-CALL RETRY phone=%s key=%s (attempt %d/%d)" % (e["phone"], e.get("key"), e["attempts"], MAX_ATTEMPTS))
+                keep.append(e)
+            else:
+                log("JIRA-CALL GAVE UP phone=%s key=%s (بی‌جواب پس از %d تماس)" % (e["phone"], e.get("key"), MAX_ATTEMPTS))
+                # حذف از صف
+        else:
+            keep.append(e)  # هنوز ۵ دقیقه نگذشته
+    save(PENDING, keep)
+
 # ---------- منطق اصلی ----------
 def check_user(u):
     st_path = os.path.join(STATE_DIR, "user_%s.json" % u["name"])
@@ -139,10 +194,11 @@ def check_user(u):
     new = [ev for ev in events if ev["eid"] not in seen and (now - ev["ts"]) < 1800]
     new.sort(key=lambda e: e["ts"])
     for ev in new:
-        # طبق درخواست: هنگام اساین‌شدنِ ایشوی جدید، فقط صوتِ ثابتِ «چک کردن جیرا»
-        # پخش می‌شود (بدون خواندنِ متن با TTS).
+        # هنگام اساین‌شدنِ ایشوی جدید: تماسِ اول (پخشِ «چک کردن جیرا») + افزودن به صف
+        # تا اگر جواب نداد، تا ۳ بار با فاصله‌ی ۵ دقیقه دوباره تماس گرفته شود.
         call(u["phone"], "arka/jira_check")
-        log("NOTIFIED %s issue=%s by=%s (played jira_check)" % (u["name"], ev["key"], ev["assigner"]))
+        add_pending(u["phone"], ev["key"])
+        log("NOTIFIED %s issue=%s by=%s (attempt 1/%d)" % (u["name"], ev["key"], ev["assigner"], MAX_ATTEMPTS))
         seen.add(ev["eid"])
         time.sleep(2)
     # همه‌ی رویدادهای فعلی را هم دیده‌شده کن (تا دوباره زنگ نزند)
@@ -175,6 +231,8 @@ def main():
         u["jira_base"] = cfg["jira_base"]
         try: check_user(u)
         except Exception as e: log("user %s err: %s" % (u.get("name"), e))
+    try: process_pending()   # تکرارِ تماس‌های بی‌جواب (۵ دقیقه فاصله، تا ۳ بار)
+    except Exception as e: log("pending err: %s" % e)
     try: daily_reminder(cfg)
     except Exception as e: log("daily err: %s" % e)
 
