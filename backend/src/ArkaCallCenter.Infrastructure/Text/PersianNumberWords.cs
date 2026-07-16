@@ -7,7 +7,9 @@ namespace ArkaCallCenter.Infrastructure.Text;
 /// اعداد داخل متن را به حروفِ فارسیِ اعراب‌دار تبدیل می‌کند تا هوش مصنوعی/TTS آن‌ها را
 /// درست تلفظ کند. منطقِ «هوشمند»:
 /// <list type="bullet">
-/// <item>شماره‌ها/شناسه‌ها (صفرِ ابتدایی یا طولِ ≥ ۱۰: موبایل، تلفن، کد ملی، کارت) رقم‌به‌رقم.</item>
+/// <item>موبایل (۱۱ رقم، شروع با ۰۹): سر شماره(۴) + ۳ + ۲ + ۲ — هر گروه به‌صورتِ عددِ کامل.</item>
+/// <item>تلفنِ ثابت (۱۱ رقم، شروع با ۰ و رقمِ دومِ غیرِ ۹): کدِ شهر(۳) + ۲+۲+۲+۲.</item>
+/// <item>سایرِ شناسه‌ها (صفرِ ابتدایی یا طولِ ≥ ۱۰: کد ملی، کارت) رقم‌به‌رقم.</item>
 /// <item>مقادیر (قیمت، درصد، تعداد) به‌صورتِ عددِ کامل (یک میلیون و پانصد هزار).</item>
 /// <item>اعشار با «ممیز» و بخشِ اعشاری رقم‌به‌رقم.</item>
 /// </list>
@@ -76,10 +78,47 @@ public static class PersianNumberWords
     private static string IntegerToWords(string digits)
     {
         if (digits.Length == 0) return "";
-        // شماره/شناسه: صفرِ ابتدایی یا طولِ ≥ ۱۰ → رقم‌به‌رقم.
+
+        // موبایل: ۱۱ رقم، شروع با «۰۹» → سر شماره(۴) + ۳ + ۲ + ۲
+        if (digits.Length == 11 && digits[0] == '0' && digits[1] == '9')
+            return GroupedRead(digits, new[] { 4, 3, 2, 2 });
+
+        // تلفنِ ثابت با کدِ شهر: ۱۱ رقم، شروع با «۰» و رقمِ دومِ غیرِ ۹ → کدِ شهر(۳) + ۲+۲+۲+۲
+        if (digits.Length == 11 && digits[0] == '0' && digits[1] != '9')
+            return GroupedRead(digits, new[] { 3, 2, 2, 2, 2 });
+
+        // سایرِ شماره‌ها/شناسه‌ها: صفرِ ابتدایی یا طولِ ≥ ۱۰ → رقم‌به‌رقم.
         if (digits[0] == '0' || digits.Length >= 10)
             return SpellDigits(digits);
+
+        // مقادیر (قیمت/درصد/تعداد)
         return Cardinal(long.Parse(digits));
+    }
+
+    /// <summary>خواندنِ استانداردِ گروه‌بندی‌شده‌ی شماره: هر گروه به‌صورتِ عددِ کامل، جداشده با مکث.</summary>
+    private static string GroupedRead(string digits, int[] sizes)
+    {
+        var groups = new List<string>();
+        var pos = 0;
+        foreach (var size in sizes)
+        {
+            if (pos >= digits.Length) break;
+            var take = Math.Min(size, digits.Length - pos);
+            groups.Add(GroupToWords(digits.Substring(pos, take)));
+            pos += take;
+        }
+        if (pos < digits.Length) groups.Add(SpellDigits(digits[pos..])); // باقی‌مانده‌ی احتمالی
+        return string.Join("، ", groups);
+    }
+
+    /// <summary>یک گروه را به عددِ کامل می‌خوانَد؛ صفرهای ابتداییِ گروه به‌صورتِ «صفر» جدا خوانده می‌شوند.</summary>
+    private static string GroupToWords(string g)
+    {
+        var parts = new List<string>();
+        var i = 0;
+        while (i < g.Length && g[i] == '0') { parts.Add(Ones[0]); i++; }
+        if (i < g.Length) parts.Add(Cardinal(long.Parse(g[i..])));
+        return string.Join(" ", parts);
     }
 
     /// <summary>خواندنِ رقم‌به‌رقم (برای شماره‌ها).</summary>
