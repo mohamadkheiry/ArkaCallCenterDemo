@@ -1,0 +1,39 @@
+# راهنمای استقرار و پیکربندی — کال سنتر هوشمند آرکا
+
+## ۱. پیش‌نیازها
+- Docker + Docker Compose روی ماشین در همان شبکه‌ی مرکز تلفن (LAN).
+- دسترسی SSH به سرور ایزابل برای نصب dialplan و آپلود صداها.
+- کلید OpenAI و توکن SMS.ir.
+
+## ۲. استقرار استک
+```bash
+# ساخت و بالا آوردن (mysql + api + realtime + nginx)
+docker compose build
+docker compose up -d
+
+# اعمال کدِ جدید یک سرویس خاص:
+docker compose build <service>
+docker compose up -d --force-recreate --no-deps <service>
+```
+آدرس‌ها: وب `:8081`، API `:8080`، AudioSocket `:9092`. مهاجرت‌های EF هنگام استارتِ API خودکار اعمال می‌شوند.
+
+## ۳. اسرار (هرگز در گیت نباشند)
+در فایل `.env` / `appsettings.Local.json`:
+- `OPENAI_API_KEY`
+- توکن و قالب‌های SMS.ir
+- رمزِ root ایزابل (فقط برای provisioning)
+
+## ۴. پیکربندی ایزابل / Asterisk
+- نصب dialplan در `/etc/asterisk/extensions_custom.conf` (context های `arka-main` و `arka-ai`).
+- تنظیم `ARKA_WORKER_HOST` به IP ماشینِ استقرار و `ARKA_WORKER_PORT=9092`.
+- پس از هر ویرایش: `asterisk -rx 'dialplan reload'`.
+- مسیر صداها: `/var/lib/asterisk/sounds/arka/`.
+
+## ۵. اتوماسیون اطلاع‌رسانی صوتی جیرا
+- مسیر: `/opt/arka-jira/` روی ایزابل؛ کرانِ هر دقیقه + یادآورِ روزانه.
+- TTS فارسی با **piper** (صدای Ganji) در محیطِ conda؛ سرویسِ صوتِ HTTP روی پورت ۸۰۹۹.
+
+## ۶. نکات عملیاتی
+- **SSH به ایزابل با paramiko** انجام شود (نه plink؛ plink روی prompt کلیدِ میزبان هنگ می‌کند).
+- بازیابیِ پس از قطعِ برق: پایدارسازیِ `eth1` و سرویس‌ها با systemd.
+- **مهم (سازگاری با OpenAI Realtime GA):** پارامترِ `temperature` در `session.update` ارسال نشود؛ نسخه‌ی GA آن را حذف کرده و ارسالش کلِ session را رد می‌کند. کنترلِ رفتار از طریقِ پرامپت انجام می‌شود.
