@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Inbox, Play, Pause } from 'lucide-react'
+import { Inbox, Play, Pause, MessageCircleQuestion, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card, cn } from '../components/ui'
 import { faDateTime, faDuration, toFa } from '../lib/format'
@@ -13,8 +13,16 @@ interface CallRow {
   hasRecording: boolean
 }
 
-/** پخش فایل ضبط‌شده‌ی مکالمه‌ی خودِ کاربر (از /api/calls/{id}/recording). */
-function RecordingPlayer({ id }: { id: number }) {
+interface UnansweredItem {
+  callId: number
+  index: number
+  question: string
+  callerId?: string | null
+  startedAt: string
+}
+
+/** دکمه‌ی پخشِ یک فایل صوتی (blob) از یک مسیرِ API — برای ضبطِ مکالمه و صوتِ سوالاتِ بی‌پاسخ. */
+function AudioPlayButton({ path, showText = true }: { path: string; showText?: boolean }) {
   const [url, setUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -23,7 +31,7 @@ function RecordingPlayer({ id }: { id: number }) {
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
 
   async function toggle() {
-    if (loading) return   // از دو بار کلیکِ پشت‌سرهم و فچِ تکراری جلوگیری کن
+    if (loading) return // از دو بار کلیک و فچِ تکراری جلوگیری کن
     if (playing) {
       audioRef.current?.pause()
       return
@@ -31,7 +39,7 @@ function RecordingPlayer({ id }: { id: number }) {
     if (!url) {
       setLoading(true)
       try {
-        const { data } = await api.get(`/api/calls/${id}/recording`, { responseType: 'blob' })
+        const { data } = await api.get(path, { responseType: 'blob' })
         const objUrl = URL.createObjectURL(data as Blob)
         setUrl(objUrl)
         const audio = new Audio(objUrl)
@@ -63,8 +71,77 @@ function RecordingPlayer({ id }: { id: number }) {
       ) : (
         <Play size={14} />
       )}
-      {playing ? 'توقف' : 'پخش'}
+      {showText && (playing ? 'توقف' : 'پخش')}
     </button>
+  )
+}
+
+/** بخشِ «سوالاتِ بی‌پاسخ»: با کلیک باز می‌شود و لیست را می‌گیرد؛ هر سوال به‌صورت صوتی قابل پخش است. */
+function UnansweredSection() {
+  const [open, setOpen] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState<UnansweredItem[]>([])
+
+  async function toggleOpen() {
+    const next = !open
+    setOpen(next)
+    if (next && !loaded) {
+      setLoading(true)
+      try {
+        const { data } = await api.get<UnansweredItem[]>('/api/calls/unanswered')
+        setItems(data)
+      } finally {
+        setLoading(false)
+        setLoaded(true)
+      }
+    }
+  }
+
+  return (
+    <Card className="animate-in">
+      <button onClick={toggleOpen} className="flex w-full items-center gap-3 text-right">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600">
+          <MessageCircleQuestion size={20} />
+        </span>
+        <span className="flex-1">
+          <span className="block font-bold text-slate-800">سوالات بی‌پاسخ</span>
+          <span className="block text-xs text-slate-500">
+            سوالاتی که پاسخشان در پایگاه دانش نبود. برای شنیدنِ هر سوال روی «پخش» بزنید و در صورت نیاز، پایگاه دانش را کامل‌تر کنید.
+          </span>
+        </span>
+        <ChevronDown size={18} className={cn('shrink-0 text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          {loading ? (
+            <p className="text-sm text-slate-400">در حال بارگذاری…</p>
+          ) : items.length === 0 ? (
+            <p className="py-4 text-center text-sm text-slate-500">سوال بی‌پاسخی ثبت نشده است. 👌</p>
+          ) : (
+            <ul className="space-y-2">
+              {items.map((q) => (
+                <li
+                  key={`${q.callId}-${q.index}`}
+                  className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-slate-700" title={q.question}>
+                      {q.question}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      <span dir="ltr">{q.callerId ? toFa(q.callerId) : 'نامشخص'}</span> · {faDateTime(q.startedAt)}
+                    </p>
+                  </div>
+                  <AudioPlayButton path={`/api/calls/${q.callId}/unanswered/${q.index}/audio`} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -87,6 +164,8 @@ export default function CallsPage() {
           تاریخچه‌ی تماس‌های پاسخ‌داده‌شده توسط هوش مصنوعی. می‌توانید مکالمه‌ی هر تماس را گوش دهید.
         </p>
       </div>
+
+      <UnansweredSection />
 
       <Card className="animate-in">
         {loading ? (
@@ -129,7 +208,11 @@ export default function CallsPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      {c.hasRecording ? <RecordingPlayer id={c.id} /> : <span className="text-xs text-slate-400">—</span>}
+                      {c.hasRecording ? (
+                        <AudioPlayButton path={`/api/calls/${c.id}/recording`} />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

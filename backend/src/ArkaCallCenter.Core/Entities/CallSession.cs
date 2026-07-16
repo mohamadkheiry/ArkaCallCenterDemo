@@ -19,6 +19,12 @@ public class CallSession : BaseEntity
     /// <summary>رونوشت گفتگو به‌صورت JSON (نوبت‌های caller/assistant).</summary>
     public string? TranscriptJson { get; set; }
 
+    /// <summary>
+    /// سوالاتِ بی‌پاسخِ این تماس (سوالاتی که پاسخشان در پایگاه دانش نبود و fallback پخش شد)
+    /// به‌صورت آرایه‌ی JSON از رشته‌ها. برای پخشِ صوتیِ تک‌به‌تک در پنل استفاده می‌شود.
+    /// </summary>
+    public string? UnansweredQuestionsJson { get; set; }
+
     /// <summary>مسیر فایل ضبط‌شده‌ی مکالمه (WAV ۸kHz) برای پخش در پنل.</summary>
     public string? RecordingPath { get; set; }
 }

@@ -120,6 +120,8 @@ public class CallHandler
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
+        var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
+        string? lastUserQuestion = null;        // آخرین سوالِ caller (روی رشته‌ی حلقه‌ی دریافت ست/خوانده می‌شود).
         var recording = new List<byte>();
         var recLock = new object();
         var answeredFromKb = true;
@@ -235,7 +237,15 @@ public class CallHandler
                 var text = asstBuf.ToString().Trim();
                 lock (turnsLock) turns.Add(new TranscriptTurn("assistant", text));
                 if (!string.IsNullOrEmpty(fallback) && text.Contains(fallback[..Math.Min(15, fallback.Length)]))
+                {
                     answeredFromKb = false;
+                    // این پاسخ fallback بود → آخرین سوالِ caller بی‌پاسخ مانده؛ ثبتش کن (یک‌بار).
+                    if (!string.IsNullOrWhiteSpace(lastUserQuestion))
+                    {
+                        lock (turnsLock) unanswered.Add(lastUserQuestion);
+                        lastUserQuestion = null;
+                    }
+                }
                 asstBuf.Clear();
             }
             return Task.CompletedTask;
@@ -243,7 +253,11 @@ public class CallHandler
         realtime.OnAssistantText += text => { asstBuf.Append(text); return Task.CompletedTask; };
         realtime.OnUserTranscript += text =>
         {
-            if (!string.IsNullOrWhiteSpace(text)) lock (turnsLock) turns.Add(new TranscriptTurn("user", text.Trim()));
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                lastUserQuestion = text.Trim();
+                lock (turnsLock) turns.Add(new TranscriptTurn("user", text.Trim()));
+            }
             return Task.CompletedTask;
         };
 
@@ -305,11 +319,19 @@ public class CallHandler
         }
 
         List<TranscriptTurn> turnsSnapshot;
-        lock (turnsLock) turnsSnapshot = new List<TranscriptTurn>(turns);
+        List<string> unansweredSnapshot;
+        lock (turnsLock)
+        {
+            turnsSnapshot = new List<TranscriptTurn>(turns);
+            unansweredSnapshot = new List<string>(unanswered);
+        }
         var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turnsSnapshot,
             new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        var unansweredJson = unansweredSnapshot.Count > 0
+            ? System.Text.Json.JsonSerializer.Serialize(unansweredSnapshot)
+            : null;
         var durationSeconds = (int)sw.Elapsed.TotalSeconds;
-        await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, recordingPath);
+        await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, unansweredJson, recordingPath);
 
         // افزودن دقایق مصرف‌شده به کاربر (هر تماس به بالاترین دقیقه گرد می‌شود؛ مثل صورتحساب مخابراتی).
         // برای سوپر ادمین که نامحدود است هم فقط جهت نمایش انباشته می‌شود.
@@ -368,7 +390,7 @@ public class CallHandler
         === پایان پایگاه دانش ===
         """;
 
-    private async Task LogCallAsync(int smartPhoneId, string? callerId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? recordingPath)
+    private async Task LogCallAsync(int smartPhoneId, string? callerId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? unansweredJson, string? recordingPath)
     {
         try
         {
@@ -383,6 +405,7 @@ public class CallHandler
                 DurationSeconds = durationSeconds,
                 AnsweredFromKb = answeredFromKb,
                 TranscriptJson = transcript,
+                UnansweredQuestionsJson = unansweredJson,
                 RecordingPath = recordingPath,
             });
             await db.SaveChangesAsync();
