@@ -60,7 +60,7 @@ export default function KnowledgeBasePage() {
   async function uploadFile(file: File) {
     setMsg(null)
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
-    if (!['.txt', '.pdf'].includes(ext)) return setMsg({ type: 'err', text: 'فقط فایل txt و pdf مجاز است.' })
+    if (!['.txt', '.docx'].includes(ext)) return setMsg({ type: 'err', text: 'فقط فایل txt و Word (docx) مجاز است.' })
     if (file.size > MAX_FILE) return setMsg({ type: 'err', text: 'حجم فایل باید حداکثر ۱۰۰ کیلوبایت باشد.' })
     setBusy(true)
     try {
@@ -173,7 +173,7 @@ export default function KnowledgeBasePage() {
             <input
               ref={fileRef}
               type="file"
-              accept=".txt,.pdf"
+              accept=".txt,.docx"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
             />

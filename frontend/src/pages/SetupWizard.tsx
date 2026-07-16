@@ -104,7 +104,7 @@ export default function SetupWizard() {
 
   async function saveKbFile(file: File) {
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
-    if (!['.txt', '.pdf'].includes(ext)) return setError('فقط فایل txt و pdf مجاز است.')
+    if (!['.txt', '.docx'].includes(ext)) return setError('فقط فایل txt و Word (docx) مجاز است.')
     if (file.size > MAX_FILE) return setError('حجم فایل باید حداکثر ۱۰۰ کیلوبایت باشد.')
     setBusy(true)
     setError('')
@@ -309,7 +309,7 @@ export default function SetupWizard() {
                   <input
                     ref={fileRef}
                     type="file"
-                    accept=".txt,.pdf"
+                    accept=".txt,.docx"
                     className="hidden"
                     onChange={(e) => e.target.files?.[0] && saveKbFile(e.target.files[0])}
                   />

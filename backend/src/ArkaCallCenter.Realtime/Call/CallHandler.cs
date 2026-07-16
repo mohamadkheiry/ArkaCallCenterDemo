@@ -52,6 +52,7 @@ public class CallHandler
             _logger.LogWarning("Could not parse extension from UUID.");
             return;
         }
+        var callerId = AudioSocketProtocol.ParseCaller(first.Value.Payload);   // شماره‌ی تماس‌گیرنده
 
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
@@ -271,8 +272,11 @@ public class CallHandler
         {
             try
             {
-                byte[] wav;
-                lock (recLock) wav = AudioConvert.PcmToWav8k(recording.ToArray(), AudioConvert.TelephonyRate);
+                byte[] pcm;
+                lock (recLock) pcm = recording.ToArray();
+                // کوتاه‌کردنِ سکوت‌های طولانی + حذفِ نویزِ سکوت برای صدای صاف‌تر و فشرده‌تر.
+                pcm = AudioPostProcess.CompressSilence(pcm, AudioConvert.TelephonyRate);
+                var wav = AudioConvert.PcmToWav8k(pcm, AudioConvert.TelephonyRate);
                 recordingPath = Path.Combine(_uploadsPath, $"call_{Guid.NewGuid():N}.wav");
                 await File.WriteAllBytesAsync(recordingPath, wav, ct);
             }
@@ -282,7 +286,7 @@ public class CallHandler
         var transcriptJson = System.Text.Json.JsonSerializer.Serialize(turns,
             new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
         var durationSeconds = (int)sw.Elapsed.TotalSeconds;
-        await LogCallAsync(sp.Id, startedAt, durationSeconds, answeredFromKb, transcriptJson, recordingPath);
+        await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, recordingPath);
 
         // افزودن دقایق مصرف‌شده به کاربر (هر تماس به بالاترین دقیقه گرد می‌شود؛ مثل صورتحساب مخابراتی).
         // برای سوپر ادمین که نامحدود است هم فقط جهت نمایش انباشته می‌شود.
@@ -341,7 +345,7 @@ public class CallHandler
         === پایان پایگاه دانش ===
         """;
 
-    private async Task LogCallAsync(int smartPhoneId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? recordingPath)
+    private async Task LogCallAsync(int smartPhoneId, string? callerId, DateTime startedAt, int durationSeconds, bool answeredFromKb, string transcript, string? recordingPath)
     {
         try
         {
@@ -350,6 +354,7 @@ public class CallHandler
             db.CallSessions.Add(new CallSession
             {
                 SmartPhoneId = smartPhoneId,
+                CallerId = callerId,
                 StartedAt = startedAt,
                 EndedAt = DateTime.UtcNow,
                 DurationSeconds = durationSeconds,

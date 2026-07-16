@@ -54,6 +54,19 @@ public static class AudioSocketProtocol
         return int.TryParse(hex, out var ext) ? ext : null;
     }
 
+    /// <summary>
+    /// استخراج شماره‌ی تماس‌گیرنده از UUID. dialplan ۲۰ رقمِ اولِ UUID (بایت‌های ۰..۹)
+    /// را برابر شماره‌ی تماس‌گیرنده‌ی صفرپرشده قرار می‌دهد؛ اگر صفر باشد یعنی نامشخص.
+    /// مثلاً 00000000-9891-2123-4567-000000009410 → تماس‌گیرنده «989121234567».
+    /// </summary>
+    public static string? ParseCaller(byte[] uuid16)
+    {
+        if (uuid16.Length < 16) return null;
+        var first10 = uuid16.AsSpan(0, 10);        // ۲۰ کاراکتر hex
+        var digits = Convert.ToHexString(first10).TrimStart('0');
+        return string.IsNullOrEmpty(digits) ? null : digits;
+    }
+
     private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken ct)
     {
         var read = 0;

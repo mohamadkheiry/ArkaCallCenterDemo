@@ -1,3 +1,4 @@
+using System.Text;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
@@ -51,6 +52,9 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             return new KbResult(false, mod.Reason ?? "محتوا مغایر با قوانین است.", null);
         }
 
+        // پس از تأیید: ارقامِ فارسی/عربی به ارقام انگلیسی تبدیل می‌شوند.
+        text = NormalizeDigits(text);
+
         var kb = await UpsertAsync(userId, ct);
         DeleteFileIfAny(kb);
         kb.SourceType = KbSourceType.Text;
@@ -73,7 +77,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         if (!KbLimits.AllowedExtensions.Contains(ext))
-            return new KbResult(false, "فقط فایل‌های txt و pdf مجاز هستند.", null);
+            return new KbResult(false, "فقط فایل‌های txt و Word (docx) مجاز هستند.", null);
         if (sizeBytes > KbLimits.MaxFileBytes)
             return new KbResult(false, "حجم فایل باید حداکثر ۱۰۰ کیلوبایت باشد.", null);
 
@@ -111,6 +115,9 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             return new KbResult(false, mod.Reason ?? "محتوای فایل مغایر با قوانین است.", null);
         }
 
+        // پس از تأیید: ارقامِ فارسی/عربی به ارقام انگلیسی تبدیل می‌شوند.
+        extracted = NormalizeDigits(extracted);
+
         var kb = await UpsertAsync(userId, ct);
         DeleteFileIfAny(kb);
         kb.SourceType = KbSourceType.File;
@@ -141,6 +148,20 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     }
 
     // ---- helpers ----
+    /// <summary>ارقامِ فارسی (۰-۹) و عربی (٠-٩) را به ارقام انگلیسی (0-9) تبدیل می‌کند.</summary>
+    private static string NormalizeDigits(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            if (ch >= '۰' && ch <= '۹') sb.Append((char)('0' + (ch - '۰')));       // فارسی
+            else if (ch >= '٠' && ch <= '٩') sb.Append((char)('0' + (ch - '٠')));   // عربی
+            else sb.Append(ch);
+        }
+        return sb.ToString();
+    }
+
     private async Task<KnowledgeBase> UpsertAsync(int userId, CancellationToken ct)
     {
         var kb = await _db.KnowledgeBases.FirstOrDefaultAsync(k => k.UserId == userId, ct);
