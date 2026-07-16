@@ -1,9 +1,9 @@
-using System.Text;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
 using ArkaCallCenter.Core.Enums;
 using ArkaCallCenter.Infrastructure.Data;
+using ArkaCallCenter.Infrastructure.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -52,8 +52,8 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             return new KbResult(false, mod.Reason ?? "محتوا مغایر با قوانین است.", null);
         }
 
-        // پس از تأیید: ارقامِ فارسی/عربی به ارقام انگلیسی تبدیل می‌شوند.
-        text = NormalizeDigits(text);
+        // پس از تأیید: اعدادِ داخلِ متن به حروفِ فارسیِ اعراب‌دار تبدیل می‌شوند تا AI درست تلفظشان کند.
+        text = PersianNumberWords.Convert(text);
 
         var kb = await UpsertAsync(userId, ct);
         DeleteFileIfAny(kb);
@@ -115,8 +115,8 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             return new KbResult(false, mod.Reason ?? "محتوای فایل مغایر با قوانین است.", null);
         }
 
-        // پس از تأیید: ارقامِ فارسی/عربی به ارقام انگلیسی تبدیل می‌شوند.
-        extracted = NormalizeDigits(extracted);
+        // پس از تأیید: اعدادِ داخلِ متن به حروفِ فارسیِ اعراب‌دار تبدیل می‌شوند تا AI درست تلفظشان کند.
+        extracted = PersianNumberWords.Convert(extracted);
 
         var kb = await UpsertAsync(userId, ct);
         DeleteFileIfAny(kb);
@@ -148,20 +148,6 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     }
 
     // ---- helpers ----
-    /// <summary>ارقامِ فارسی (۰-۹) و عربی (٠-٩) را به ارقام انگلیسی (0-9) تبدیل می‌کند.</summary>
-    private static string NormalizeDigits(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return s;
-        var sb = new StringBuilder(s.Length);
-        foreach (var ch in s)
-        {
-            if (ch >= '۰' && ch <= '۹') sb.Append((char)('0' + (ch - '۰')));       // فارسی
-            else if (ch >= '٠' && ch <= '٩') sb.Append((char)('0' + (ch - '٠')));   // عربی
-            else sb.Append(ch);
-        }
-        return sb.ToString();
-    }
-
     private async Task<KnowledgeBase> UpsertAsync(int userId, CancellationToken ct)
     {
         var kb = await _db.KnowledgeBases.FirstOrDefaultAsync(k => k.UserId == userId, ct);
