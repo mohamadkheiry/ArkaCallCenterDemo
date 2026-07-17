@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card, SkeletonCard, TextInput } from '../../components/ui'
+import { Button, Card, RangeSlider, SkeletonCard, TextInput } from '../../components/ui'
 import { toFa } from '../../lib/format'
 import { SETTING_FIELDS } from './adminData'
 
@@ -25,20 +25,15 @@ function PercentSlider({
         <span className="text-sm font-medium text-slate-700">{label}</span>
         <span className="rounded-lg bg-brand-50 px-2.5 py-1 text-sm font-bold text-brand-700">{toFa(clamped)}٪</span>
       </div>
-      <input
-        type="range"
+      <RangeSlider
+        value={clamped}
         min={0}
         max={100}
         step={1}
-        value={clamped}
-        onChange={(e) => onChange((Number(e.target.value) / 100).toString())}
-        className="w-full accent-brand-600"
-        style={{ direction: 'ltr' }}
+        onChange={(v) => onChange((v / 100).toString())}
+        minLabel={`${toFa(0)}٪ — خلاقانه‌ترین`}
+        maxLabel={`${toFa(100)}٪ — دقیق‌ترین شباهت`}
       />
-      <div className="mt-1 flex justify-between text-[11px] text-slate-400">
-        <span>۰٪ — خلاقانه‌ترین</span>
-        <span>۱۰۰٪ — دقیق‌ترین شباهت</span>
-      </div>
       {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
     </div>
   )

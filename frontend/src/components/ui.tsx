@@ -141,6 +141,66 @@ export function Spinner() {
   )
 }
 
+/**
+ * اسلایدرِ درصدی با پرشدگیِ رنگِ کنترل‌شده.
+ *
+ * چرا کامپوننتِ مشترک: در صفحه‌ی راست‌چین، پرشدگیِ پیش‌فرضِ مرورگر (accent-color) با
+ * جهتِ حرکتِ دسته هماهنگ نمی‌شود و برچسبِ کمینه/بیشینه هم به‌سادگی برعکس می‌افتد.
+ * اینجا جهت قطعی (چپ→راست: کمینه سمتِ چپ، بیشینه سمتِ راست) است، پرشدگی را خودمان
+ * با گرادیان می‌کشیم، و برچسب‌ها در همان دستگاهِ مختصات چیده می‌شوند تا همیشه بخوانند.
+ */
+export function RangeSlider({
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  minLabel,
+  maxLabel,
+  disabled,
+  className,
+}: {
+  value: number
+  min: number
+  max: number
+  step?: number
+  onChange: (v: number) => void
+  /** برچسبِ سمتِ چپ (کمینه) */
+  minLabel?: ReactNode
+  /** برچسبِ سمتِ راست (بیشینه) */
+  maxLabel?: ReactNode
+  disabled?: boolean
+  className?: string
+}) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0
+  const clamped = Math.min(100, Math.max(0, pct))
+  return (
+    <div className={className}>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="arka-range"
+        style={{
+          // پرشدگی دقیقاً تا محلِ دسته؛ بقیه‌ی ریل خاکستری.
+          background: `linear-gradient(to right, var(--color-brand-600) 0%, var(--color-brand-600) ${clamped}%, #e2e8f0 ${clamped}%, #e2e8f0 100%)`,
+        }}
+      />
+      {(minLabel || maxLabel) && (
+        // dir=ltr تا برچسبِ کمینه واقعاً سمتِ چپ و بیشینه سمتِ راست بنشیند (هم‌راستا با خودِ اسلایدر).
+        <div dir="ltr" className="mt-1.5 flex justify-between text-[11px] text-slate-400">
+          <span>{minLabel}</span>
+          <span>{maxLabel}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** بلوکِ اسکلتونِ بارگذاری. */
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('skeleton', className)} />

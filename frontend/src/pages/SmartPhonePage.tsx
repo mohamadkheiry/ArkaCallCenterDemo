@@ -4,7 +4,7 @@ import { Check as CheckIcon, Dot, PhoneCall } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
-import { Button, Card, SkeletonCard, cn } from '../components/ui'
+import { Button, Card, RangeSlider, SkeletonCard, cn } from '../components/ui'
 
 interface Sp {
   extension: number | null
@@ -166,20 +166,17 @@ export default function SmartPhonePage() {
           (حدود ۸۰ تا ۱۰۰ درصد) پیشنهاد می‌شود.
         </p>
         <div className="mt-5 flex items-center gap-4">
-          <input
-            type="range"
+          <RangeSlider
+            className="flex-1"
+            value={accuracy}
             min={10}
             max={100}
             step={5}
-            value={accuracy}
-            onChange={(e) => setAccuracy(Number(e.target.value))}
-            className="h-2 flex-1 cursor-pointer accent-brand-600"
+            onChange={setAccuracy}
+            minLabel={`${toFa(10)}٪ — خلاقانه‌تر`}
+            maxLabel={`${toFa(100)}٪ — دقیق‌تر بر پایه‌ی پایگاه دانش`}
           />
-          <span className="w-16 text-center text-lg font-extrabold text-brand-700">{toFa(accuracy)}٪</span>
-        </div>
-        <div className="mt-1 flex justify-between text-xs text-slate-400">
-          <span>خلاقانه‌تر (۱۰٪)</span>
-          <span>دقیق‌تر بر پایه‌ی پایگاه دانش (۱۰۰٪)</span>
+          <span className="w-16 shrink-0 text-center text-lg font-extrabold text-brand-700">{toFa(accuracy)}٪</span>
         </div>
         <div className="mt-4">
           <Button onClick={saveAccuracy} loading={savingAcc} variant="outline">
