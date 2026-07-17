@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { cn } from '../../components/ui'
 import SettingsTab from './SettingsTab'
+import BaleTab from './BaleTab'
 import TemplatesTab from './TemplatesTab'
 import VoicesTab from './VoicesTab'
 import FallbackTab from './FallbackTab'
@@ -14,6 +15,7 @@ import CallsAdminTab from './CallsAdminTab'
 const TABS = [
   { key: 'openai', label: 'OpenAI و RAG' },
   { key: 'sms', label: 'SMS.ir' },
+  { key: 'bale', label: 'کانال بله' },
   { key: 'reception', label: 'پذیرش و انتظار' },
   { key: 'branding', label: 'برندینگ' },
   { key: 'templates', label: 'پیامک‌ها و رویدادها' },
@@ -63,6 +65,7 @@ export default function AdminPage() {
       {tab === 'sms' && (
         <SettingsTab key="sms" groups={['sms']} title="تنظیمات SMS.ir" desc="کلید API و شماره خط سرویس پیامک." />
       )}
+      {tab === 'bale' && <BaleTab />}
       {tab === 'reception' && <ReceptionTab />}
       {tab === 'branding' && <BrandingTab />}
       {tab === 'templates' && <TemplatesTab />}

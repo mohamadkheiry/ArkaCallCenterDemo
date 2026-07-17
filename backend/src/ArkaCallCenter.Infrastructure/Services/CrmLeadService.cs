@@ -37,7 +37,7 @@ public class CrmLeadService : ICrmLeadService
     }
 
     /// <summary>«آتش‌کن‌و‌فراموش‌کن»: جریانِ کاربر (ورود/پروفایل/ساخت داخلی) نباید منتظرِ CRM بماند.</summary>
-    public void Enqueue(CrmLeadStage stage, string phoneNumber)
+    public void Enqueue(LeadStage stage, string phoneNumber)
     {
         if (string.IsNullOrWhiteSpace(phoneNumber)) return;
         _ = Task.Run(async () =>
@@ -47,7 +47,7 @@ public class CrmLeadService : ICrmLeadService
         });
     }
 
-    private async Task SubmitAsync(CrmLeadStage stage, string phone)
+    private async Task SubmitAsync(LeadStage stage, string phone)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
@@ -177,19 +177,19 @@ public class CrmLeadService : ICrmLeadService
         return $"کاربر دمو {phone}";
     }
 
-    private static async Task<string> BuildFeedbackAsync(CrmLeadStage stage, User? user, string phone, ArkaDbContext db)
+    private static async Task<string> BuildFeedbackAsync(LeadStage stage, User? user, string phone, ArkaDbContext db)
     {
         var lines = new List<string> { "لید از «دموی کال سنتر هوشمند آرکا»." };
         switch (stage)
         {
-            case CrmLeadStage.PhoneEntered:
+            case LeadStage.PhoneEntered:
                 lines.Add("مرحله: شماره‌ی موبایل وارد شد (ورود به دمو).");
                 break;
-            case CrmLeadStage.ProfileCompleted:
+            case LeadStage.ProfileCompleted:
                 lines.Add("مرحله: پروفایل تکمیل شد (نام و نام‌خانوادگی).");
                 if (!string.IsNullOrWhiteSpace(user?.BrandName)) lines.Add($"برند: {user!.BrandName}");
                 break;
-            case CrmLeadStage.SmartPhoneCreated:
+            case LeadStage.SmartPhoneCreated:
                 lines.Add("مرحله: تلفن هوشمند (داخلی) ساخته شد.");
                 var sp = user?.SmartPhone;
                 if (sp?.Extension is not null) lines.Add($"شماره داخلی: {sp.Extension}");

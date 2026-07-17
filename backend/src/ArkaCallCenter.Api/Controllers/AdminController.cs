@@ -30,8 +30,11 @@ public class AdminController : ControllerBase
     private readonly ITokenService _tokens;
     private readonly string _uploadsPath;
 
+    private readonly IBaleNotifier _bale;
+
     public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai,
-        IDemoService demos, IAsteriskProvisioningService asterisk, ITokenService tokens, IConfiguration config)
+        IDemoService demos, IAsteriskProvisioningService asterisk, ITokenService tokens,
+        IBaleNotifier bale, IConfiguration config)
     {
         _db = db;
         _settings = settings;
@@ -39,8 +42,19 @@ public class AdminController : ControllerBase
         _demos = demos;
         _asterisk = asterisk;
         _tokens = tokens;
+        _bale = bale;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
+    }
+
+    /// <summary>ارسال پیام آزمایشی به کانال بله (برای بررسیِ توکن ربات و آی‌دی کانال).</summary>
+    [HttpPost("bale/test")]
+    public async Task<IActionResult> TestBale(CancellationToken ct)
+    {
+        var (ok, error) = await _bale.SendTestAsync(ct);
+        return ok
+            ? Ok(new { message = "پیام آزمایشی به کانال بله ارسال شد." })
+            : BadRequest(new { error = error ?? "ارسال به کانال بله ناموفق بود." });
     }
 
     // ---------------- Settings (OpenAI, SMS.ir, limits, RAG, default voice) ----------------

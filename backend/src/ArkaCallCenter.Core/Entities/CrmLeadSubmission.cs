@@ -12,7 +12,7 @@ public class CrmLeadSubmission : BaseEntity
     /// <summary>شماره‌ی موبایلِ نرمال‌شده (کلیدِ تشخیصِ کاربر؛ در مرحله‌ی اول هنوز User وجود ندارد).</summary>
     public string PhoneNumber { get; set; } = default!;
 
-    public CrmLeadStage Stage { get; set; }
+    public LeadStage Stage { get; set; }
 
     /// <summary>آیا CRM پاسخِ موفق داد (success=true)؟ فقط ارسالِ موفق «انجام‌شده» تلقی می‌شود.</summary>
     public bool Success { get; set; }

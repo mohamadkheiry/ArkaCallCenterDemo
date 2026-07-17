@@ -12,5 +12,5 @@ public interface ICrmLeadService
     /// ارسالِ یک مرحله‌ی لید به‌صورت «آتش‌کن‌و‌فراموش‌کن». هرگز جریانِ کاربر را کند یا خراب نمی‌کند:
     /// خطاها فقط لاگ می‌شوند. هر مرحله برای هر شماره حداکثر یک‌بار ارسالِ موفق دارد.
     /// </summary>
-    void Enqueue(CrmLeadStage stage, string phoneNumber);
+    void Enqueue(LeadStage stage, string phoneNumber);
 }

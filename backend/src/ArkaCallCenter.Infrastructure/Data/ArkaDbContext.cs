@@ -19,6 +19,7 @@ public class ArkaDbContext : DbContext
     public DbSet<VoiceOption> VoiceOptions => Set<VoiceOption>();
     public DbSet<TokenUsage> TokenUsages => Set<TokenUsage>();
     public DbSet<CrmLeadSubmission> CrmLeadSubmissions => Set<CrmLeadSubmission>();
+    public DbSet<BaleChannelPost> BaleChannelPosts => Set<BaleChannelPost>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -86,6 +87,14 @@ public class ArkaDbContext : DbContext
         b.Entity<CrmLeadSubmission>(e =>
         {
             // هر مرحله برای هر شماره فقط یک‌بار → یکتاییِ (شماره، مرحله) در سطحِ دیتابیس تضمین می‌شود.
+            e.HasIndex(x => new { x.PhoneNumber, x.Stage }).IsUnique();
+            e.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            e.Property(x => x.ResponseMessage).HasMaxLength(500);
+        });
+
+        b.Entity<BaleChannelPost>(e =>
+        {
+            // حداکثر سه پیام برای هر کاربر → یکتاییِ (شماره، مرحله).
             e.HasIndex(x => new { x.PhoneNumber, x.Stage }).IsUnique();
             e.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
             e.Property(x => x.ResponseMessage).HasMaxLength(500);

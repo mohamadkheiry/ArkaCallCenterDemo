@@ -22,6 +22,12 @@ public static class SettingKeys
     public const string CrmApiKey = "crm.apiKey";                       // secret (هدر X-Api-Key)
     public const string CrmEmailDomain = "crm.emailDomain";             // دامنه‌ی ایمیلِ ساختگی از روی شماره
 
+    // کانال بله (Bale) — اطلاع‌رسانیِ کاربرانِ جدیدِ دمو در کانال
+    public const string BaleEnabled = "bale.enabled";                   // "true"/"false"
+    public const string BaleBaseUrl = "bale.baseUrl";                   // پیش‌فرض https://tapi.bale.ai
+    public const string BaleBotToken = "bale.botToken";                 // secret
+    public const string BaleChannelId = "bale.channelId";               // آی‌دیِ پابلیکِ کانال، مثلاً @my_channel
+
     // Voice / defaults
     public const string DefaultVoiceName = "voice.default";
     public const string VoiceSampleText = "voice.sampleText"; // متن نمونه‌صدای گوینده‌ها

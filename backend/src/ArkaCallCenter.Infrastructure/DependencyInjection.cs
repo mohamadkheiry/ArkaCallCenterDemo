@@ -28,6 +28,9 @@ public static class DependencyInjection
         // CRM فروش: singleton چون ارسال در پس‌زمینه و با scopeِ خودش انجام می‌شود.
         services.AddHttpClient("crm", c => c.Timeout = TimeSpan.FromSeconds(20));
         services.AddSingleton<ICrmLeadService, CrmLeadService>();
+        // کانال بله: singleton چون ارسال در پس‌زمینه و با scopeِ خودش انجام می‌شود.
+        services.AddHttpClient("bale", c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<IBaleNotifier, BaleNotifier>();
 
         // فاز ۳: پایگاه دانش + RAG + moderation
         services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(60));

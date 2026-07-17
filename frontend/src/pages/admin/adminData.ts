@@ -16,7 +16,7 @@ export const SETTING_FIELDS: {
   hint?: string
   secret?: boolean
   control?: 'percentSlider' // اسلایدر ۰ تا ۱۰۰٪ که مقدار ۰ تا ۱ ذخیره می‌کند
-  group: 'openai' | 'sms' | 'limits' | 'rag'
+  group: 'openai' | 'sms' | 'limits' | 'rag' | 'bale'
 }[] = [
   { key: 'openai.baseUrl', label: 'Base URL', group: 'openai', hint: 'مثلاً https://api.openai.com/v1' },
   { key: 'openai.apiKey', label: 'API Key', group: 'openai', secret: true },
@@ -40,4 +40,31 @@ export const SETTING_FIELDS: {
     hint: '۱۰۰٪ = دقیق‌ترین شباهت (فقط پاسخ‌های بسیار مرتبط) · ۰٪ = خلاقانه‌ترین حالت',
   },
   { key: 'rag.topK', label: 'تعداد قطعات بازیابی‌شده (topK)', group: 'rag' },
+
+  // کانال بله — اعلامِ کاربرانِ جدیدِ دمو (حداکثر ۳ پیام برای هر کاربر)
+  {
+    key: 'bale.enabled',
+    label: 'فعال بودن اعلام در کانال بله',
+    group: 'bale',
+    hint: 'مقدار true یا false — با false هیچ پیامی به کانال ارسال نمی‌شود.',
+  },
+  {
+    key: 'bale.botToken',
+    label: 'توکن ربات بله',
+    group: 'bale',
+    secret: true,
+    hint: 'توکنی که BotFatherِ بله می‌دهد. ربات باید ادمینِ کانال باشد تا بتواند پیام بفرستد.',
+  },
+  {
+    key: 'bale.channelId',
+    label: 'آی‌دی پابلیک کانال بله',
+    group: 'bale',
+    hint: 'مثلاً ‎@my_channel — اگر @ را ننویسید خودکار اضافه می‌شود.',
+  },
+  {
+    key: 'bale.baseUrl',
+    label: 'Base URL بله',
+    group: 'bale',
+    hint: 'پیش‌فرض https://tapi.bale.ai — معمولاً نیازی به تغییر نیست.',
+  },
 ]
