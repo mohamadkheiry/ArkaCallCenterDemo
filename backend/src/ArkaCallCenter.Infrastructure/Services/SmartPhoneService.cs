@@ -18,14 +18,16 @@ public class SmartPhoneService : ISmartPhoneService
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
     private readonly ISmsEventDispatcher _sms;
+    private readonly ICrmLeadService _crm;
     private readonly ILogger<SmartPhoneService> _logger;
     private readonly string _uploadsPath;
 
     public SmartPhoneService(
         ArkaDbContext db, IExtensionAllocator allocator, IAsteriskProvisioningService asterisk,
         IOpenAiService openai, ISettingsService settings, ISmsEventDispatcher sms,
-        IConfiguration config, ILogger<SmartPhoneService> logger)
+        ICrmLeadService crm, IConfiguration config, ILogger<SmartPhoneService> logger)
     {
+        _crm = crm;
         _db = db;
         _allocator = allocator;
         _asterisk = asterisk;
@@ -125,6 +127,9 @@ public class SmartPhoneService : ISmartPhoneService
             await _sms.DispatchAsync(SmsEventType.SmartPhoneCreated,
                 new Dictionary<string, string> { ["extension"] = extension.ToString(), ["firstName"] = user.FirstName ?? "" },
                 user.PhoneNumber, ct);
+
+            // مرحله‌ی ۳ لید: داخلی ساخته شد → توضیحاتِ داخلی هم برای تیم فروش ارسال می‌شود.
+            _crm.Enqueue(CrmLeadStage.SmartPhoneCreated, user.PhoneNumber);
 
             return new SmartPhoneResult(true, null, sp);
         }

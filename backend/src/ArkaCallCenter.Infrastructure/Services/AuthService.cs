@@ -15,14 +15,17 @@ public class AuthService : IAuthService
     private readonly ISmsSender _sms;
     private readonly IVoiceCaller _voice;
     private readonly ITokenService _tokens;
+    private readonly ICrmLeadService _crm;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ArkaDbContext db, ISmsSender sms, IVoiceCaller voice, ITokenService tokens, ILogger<AuthService> logger)
+    public AuthService(ArkaDbContext db, ISmsSender sms, IVoiceCaller voice, ITokenService tokens,
+        ICrmLeadService crm, ILogger<AuthService> logger)
     {
         _db = db;
         _sms = sms;
         _voice = voice;
         _tokens = tokens;
+        _crm = crm;
         _logger = logger;
     }
 
@@ -31,6 +34,10 @@ public class AuthService : IAuthService
         phoneNumber = NormalizePhone(phoneNumber);
         if (!IsValidIranianMobile(phoneNumber))
             return (false, "شماره موبایل نامعتبر است.");
+
+        // مرحله‌ی ۱ لید برای تیم فروش: به‌محضِ واردکردنِ شماره (حتی اگر کد را تأیید نکند).
+        // پیش از throttle قرار دارد تا درخواستِ تکراری هم لید را از دست ندهد؛ خودِ سرویس تکراری نمی‌فرستد.
+        _crm.Enqueue(Core.Enums.CrmLeadStage.PhoneEntered, phoneNumber);
 
         // جلوگیری از ارسال مکرر: اگر کد فعالِ کمتر از ۶۰ ثانیه وجود دارد، دوباره نساز.
         var recent = await _db.OtpCodes
@@ -136,6 +143,9 @@ public class AuthService : IAuthService
         user.ProfileCompleted = true;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        // مرحله‌ی ۲ لید: نام و نام‌خانوادگی مشخص شد → لیدِ کامل‌تر برای تیم فروش.
+        _crm.Enqueue(Core.Enums.CrmLeadStage.ProfileCompleted, user.PhoneNumber);
         return user;
     }
 

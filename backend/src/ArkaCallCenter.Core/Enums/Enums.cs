@@ -43,3 +43,17 @@ public enum SmsEventType
     NewCallReceived = 7,
     SystemAlert = 8,
 }
+
+/// <summary>
+/// مراحلِ لیدِ کاربرِ دمو که به CRM فروش ارسال می‌شود. هر مرحله برای هر شماره
+/// فقط یک‌بار ارسال می‌شود (حداکثر سه ارسال به‌ازای هر کاربر).
+/// </summary>
+public enum CrmLeadStage
+{
+    /// <summary>۱) کاربر شماره‌ی موبایلش را وارد کرد (هنوز نام/داخلی ندارد).</summary>
+    PhoneEntered = 1,
+    /// <summary>۲) کاربر نام و نام‌خانوادگی (پروفایل) را تکمیل کرد.</summary>
+    ProfileCompleted = 2,
+    /// <summary>۳) کاربر تلفن هوشمند (داخلی) ساخت.</summary>
+    SmartPhoneCreated = 3,
+}

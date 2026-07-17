@@ -18,6 +18,7 @@ public class ArkaDbContext : DbContext
     public DbSet<SmsEventRecipient> SmsEventRecipients => Set<SmsEventRecipient>();
     public DbSet<VoiceOption> VoiceOptions => Set<VoiceOption>();
     public DbSet<TokenUsage> TokenUsages => Set<TokenUsage>();
+    public DbSet<CrmLeadSubmission> CrmLeadSubmissions => Set<CrmLeadSubmission>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -80,6 +81,14 @@ public class ArkaDbContext : DbContext
             e.HasIndex(x => x.Key).IsUnique();
             e.Property(x => x.Key).HasMaxLength(150).IsRequired();
             e.Property(x => x.Value).HasColumnType("text");
+        });
+
+        b.Entity<CrmLeadSubmission>(e =>
+        {
+            // هر مرحله برای هر شماره فقط یک‌بار → یکتاییِ (شماره، مرحله) در سطحِ دیتابیس تضمین می‌شود.
+            e.HasIndex(x => new { x.PhoneNumber, x.Stage }).IsUnique();
+            e.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            e.Property(x => x.ResponseMessage).HasMaxLength(500);
         });
 
         b.Entity<SmsTemplate>(e =>

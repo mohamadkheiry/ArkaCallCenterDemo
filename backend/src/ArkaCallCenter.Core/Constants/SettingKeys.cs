@@ -16,6 +16,12 @@ public static class SettingKeys
     public const string SmsIrLineNumber = "smsir.lineNumber";           // برای پیامک‌های bulk رویدادها
     public const string SmsIrVerifyTemplateId = "smsir.verifyTemplateId"; // قالب ارسال کد تأیید (/send/verify)
 
+    // CRM فروش (ExternalEndpoint/InsertContactUs) — ثبتِ لیدِ کاربرانِ دمو
+    public const string CrmEnabled = "crm.enabled";                     // "true"/"false"
+    public const string CrmBaseUrl = "crm.baseUrl";                     // مثلاً https://api.arkadp.com
+    public const string CrmApiKey = "crm.apiKey";                       // secret (هدر X-Api-Key)
+    public const string CrmEmailDomain = "crm.emailDomain";             // دامنه‌ی ایمیلِ ساختگی از روی شماره
+
     // Voice / defaults
     public const string DefaultVoiceName = "voice.default";
     public const string VoiceSampleText = "voice.sampleText"; // متن نمونه‌صدای گوینده‌ها

@@ -25,6 +25,9 @@ public static class DependencyInjection
         services.AddHttpClient<ISmsSender, SmsIrSender>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<IVoiceCaller, VoiceCaller>(c => c.Timeout = TimeSpan.FromSeconds(35));
         services.AddScoped<ISmsEventDispatcher, SmsEventDispatcher>();
+        // CRM فروش: singleton چون ارسال در پس‌زمینه و با scopeِ خودش انجام می‌شود.
+        services.AddHttpClient("crm", c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddSingleton<ICrmLeadService, CrmLeadService>();
 
         // فاز ۳: پایگاه دانش + RAG + moderation
         services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(60));
