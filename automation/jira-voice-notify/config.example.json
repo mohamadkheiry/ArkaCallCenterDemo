@@ -1,12 +1,14 @@
 {
   "jira_base": "https://JIRA_HOST",
+  "notify_cooldown_s": 600,
   "users": [
     {
       "name": "someuser",
       "jira_user": "SomeUser",
       "jira_key": "JIRAUSERXXXXX",
       "token": "<JIRA_PERSONAL_ACCESS_TOKEN>",
-      "phone": "09xxxxxxxxx"
+      "phone": "09xxxxxxxxx",
+      "notify_cooldown_s": 600
     }
   ],
   "daily_reminder": {
