@@ -23,6 +23,15 @@
 
   --color-ink: #0f172a;
   --color-muted: #64748b;
+
+  /* سایه‌های نرم و لایه‌ای (ظاهرِ حرفه‌ای‌تر) */
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --shadow-soft-md: 0 2px 4px rgba(15, 23, 42, 0.04), 0 10px 28px rgba(15, 23, 42, 0.07);
+  --shadow-soft-lg: 0 4px 8px rgba(15, 23, 42, 0.05), 0 18px 44px rgba(15, 23, 42, 0.10);
+  --shadow-brand: 0 6px 18px rgba(79, 70, 229, 0.28);
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
 }
 
 :root {
@@ -39,17 +48,18 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   background:
-    radial-gradient(1200px 600px at 100% -10%, #eef2ff 0%, transparent 55%),
-    radial-gradient(1000px 500px at -10% 110%, #ede9fe 0%, transparent 55%),
-    #f8fafc;
+    radial-gradient(1100px 560px at 100% -12%, #eef2ff 0%, transparent 52%),
+    radial-gradient(900px 480px at -8% 108%, #eef0ff 0%, transparent 50%),
+    #f6f8fc;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+/* اسکرول‌بارِ نازک‌تر و نرم‌تر */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
@@ -62,16 +72,57 @@ body {
   background-clip: content-box;
 }
 
+/* ظاهرشدنِ نرم با کمی جابه‌جایی و مقیاس */
 @keyframes float-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px) scale(0.99);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 .animate-in {
   animation: float-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* تأخیرِ پلکانی برای گریدها/فهرست‌ها */
+.stagger > * {
+  animation: float-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.07s; }
+.stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.17s; }
+.stagger > *:nth-child(5) { animation-delay: 0.22s; }
+.stagger > *:nth-child(6) { animation-delay: 0.27s; }
+
+/* اسکلتونِ بارگذاری با درخششِ متحرک */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #eceff4 25%, #e0e6ee 37%, #eceff4 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.75rem;
+}
+
+/* حلقه‌ی نبض برای وضعیت‌های زنده */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.animate-soft-pulse {
+  animation: soft-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .stagger > *,
+  .skeleton,
+  .animate-soft-pulse {
+    animation: none !important;
+  }
 }

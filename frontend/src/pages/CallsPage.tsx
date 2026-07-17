@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Inbox, Play, Pause, MessageCircleQuestion, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api'
-import { Card, cn } from '../components/ui'
+import { Card, Skeleton, cn } from '../components/ui'
 import { faDateTime, faDuration, toFa } from '../lib/format'
 
 interface CallRow {
@@ -169,7 +169,16 @@ export default function CallsPage() {
 
       <Card className="animate-in">
         {loading ? (
-          <p className="text-sm text-slate-400">در حال بارگذاری…</p>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="ml-auto h-8 w-20 rounded-lg" />
+              </div>
+            ))}
+          </div>
         ) : calls.length === 0 ? (
           <div className="py-10 text-center">
             <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-slate-50 text-slate-400">

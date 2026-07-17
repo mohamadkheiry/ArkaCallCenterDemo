@@ -76,13 +76,26 @@ export default function DashboardLayout() {
                 onClick={() => setOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
-                    isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50',
+                    'group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
+                    isActive
+                      ? 'bg-gradient-to-l from-brand-50 to-brand-100/60 text-brand-700 shadow-soft'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
                   )
                 }
               >
-                <n.icon size={19} className="shrink-0" />
-                {n.label}
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={cn(
+                        'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors',
+                        isActive ? 'bg-white text-brand-600 shadow-soft' : 'text-slate-400 group-hover:text-brand-600',
+                      )}
+                    >
+                      <n.icon size={18} />
+                    </span>
+                    {n.label}
+                  </>
+                )}
               </NavLink>
             ))}
           </nav>

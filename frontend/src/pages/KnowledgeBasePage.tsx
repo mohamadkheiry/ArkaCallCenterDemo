@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CloudUpload, FileText, FileType2 } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
-import { Button, Card, cn } from '../components/ui'
+import { Button, Card, SkeletonCard, cn } from '../components/ui'
 
 const MAX_CHARS = 2000
 const MAX_FILE = 100 * 1024
@@ -99,6 +99,8 @@ export default function KnowledgeBasePage() {
           یا یک فایل {toFa(100)} کیلوبایتی (txt یا Word).
         </p>
       </div>
+
+      {loading && !kb && <SkeletonCard lines={2} />}
 
       {kb && (
         <Card className="animate-in">

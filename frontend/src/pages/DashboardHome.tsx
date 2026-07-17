@@ -18,14 +18,14 @@ function StatCard({
   icon: React.ComponentType<{ size?: number | string; className?: string }>
 }) {
   return (
-    <Card className="animate-in">
+    <Card hover>
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm text-slate-500">{title}</div>
           <div className="mt-2 text-2xl font-extrabold text-slate-800">{value}</div>
           {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
         </div>
-        <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-600">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600 shadow-soft">
           <Icon size={21} />
         </div>
       </div>
@@ -75,7 +75,7 @@ export default function DashboardHome() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="شماره داخلی"
           value={sp?.extension != null ? toFa(sp.extension) : '—'}

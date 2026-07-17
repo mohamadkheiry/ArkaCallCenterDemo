@@ -17,15 +17,16 @@ export function Button({
 }) {
   const variants: Record<string, string> = {
     primary:
-      'bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/25 disabled:opacity-60',
+      'bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-brand hover:from-brand-500 hover:to-brand-700 hover:-translate-y-0.5 disabled:opacity-60 disabled:translate-y-0',
     ghost: 'bg-transparent text-slate-600 hover:bg-slate-100',
-    outline: 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-    danger: 'bg-rose-600 text-white hover:bg-rose-700',
+    outline:
+      'border border-slate-200 bg-white text-slate-700 shadow-soft hover:border-slate-300 hover:bg-slate-50 hover:-translate-y-0.5 disabled:translate-y-0',
+    danger: 'bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_6px_18px_rgba(225,29,72,0.28)] hover:-translate-y-0.5 disabled:translate-y-0',
   }
   return (
     <button
       className={cn(
-        'inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-all active:scale-[.98] disabled:cursor-not-allowed',
+        'inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-all duration-200 ease-out active:scale-[.97] active:translate-y-0 disabled:cursor-not-allowed',
         variants[variant],
         className,
       )}
@@ -33,7 +34,7 @@ export function Button({
       {...props}
     >
       {loading && (
-        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current" />
       )}
       {children}
     </button>
@@ -51,7 +52,7 @@ export function TextInput({
       {label && <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>}
       <input
         className={cn(
-          'h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-brand-400 focus:ring-4 focus:ring-brand-100',
+          'h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-soft outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-400 focus:ring-4 focus:ring-brand-100',
           className,
         )}
         {...props}
@@ -61,11 +62,20 @@ export function TextInput({
   )
 }
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+  hover = false,
+}: {
+  children: ReactNode
+  className?: string
+  hover?: boolean
+}) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-slate-200/70 bg-white/80 p-6 shadow-sm backdrop-blur-sm',
+        'rounded-2xl border border-slate-200/60 bg-white/85 p-6 shadow-soft backdrop-blur-sm transition-all duration-300',
+        hover && 'hover:-translate-y-0.5 hover:shadow-soft-md',
         className,
       )}
     >
@@ -75,13 +85,13 @@ export function Card({ children, className }: { children: ReactNode; className?:
 }
 
 export function Logo({ size = 40 }: { size?: number }) {
-  const [hasLogo, setHasLogo] = useState(false)
+  const [hasLogo, setHasLogo] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true
     fetch('/api/branding/logo/info')
       .then((r) => (r.ok ? r.json() : { available: false }))
       .then((d) => alive && setHasLogo(!!d.available))
-      .catch(() => {})
+      .catch(() => alive && setHasLogo(false))
     return () => {
       alive = false
     }
@@ -89,17 +99,19 @@ export function Logo({ size = 40 }: { size?: number }) {
 
   return (
     <div className="flex items-center gap-3">
-      {hasLogo ? (
+      {hasLogo === null ? (
+        <span className="skeleton rounded-2xl" style={{ width: size, height: size }} />
+      ) : hasLogo ? (
         <img
           src="/api/branding/logo"
           alt="لوگو"
-          className="rounded-2xl object-contain"
+          className="rounded-2xl object-contain shadow-soft"
           style={{ width: size, height: size }}
           onError={() => setHasLogo(false)}
         />
       ) : (
         <div
-          className="grid place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30"
+          className="grid place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-brand"
           style={{ width: size, height: size }}
         >
           <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
@@ -121,7 +133,36 @@ export function Logo({ size = 40 }: { size?: number }) {
 export function Spinner() {
   return (
     <div className="grid min-h-[60vh] place-items-center">
-      <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-brand-200 border-t-brand-600" />
+      <span className="relative flex h-10 w-10">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-200 opacity-60" />
+        <span className="relative inline-flex h-10 w-10 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-600" />
+      </span>
+    </div>
+  )
+}
+
+/** بلوکِ اسکلتونِ بارگذاری. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('skeleton', className)} />
+}
+
+/** چند خطِ اسکلتونِ متن. */
+export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <div className={cn('space-y-2.5', className)}>
+      {Array.from({ length: lines }).map((_, i) => (
+        <Skeleton key={i} className={cn('h-3.5', i === lines - 1 ? 'w-2/3' : 'w-full')} />
+      ))}
+    </div>
+  )
+}
+
+/** کارتِ اسکلتونِ کامل برای حالتِ بارگذاریِ صفحه. */
+export function SkeletonCard({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/60 bg-white/85 p-6 shadow-soft">
+      <Skeleton className="mb-4 h-5 w-1/3" />
+      <SkeletonText lines={lines} />
     </div>
   )
 }

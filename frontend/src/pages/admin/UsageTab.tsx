@@ -1,7 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { Card, cn } from '../../components/ui'
+import { Card, Skeleton, cn } from '../../components/ui'
 import { faDateTime, toFa } from '../../lib/format'
+
+function SkeletonRows({ cols, rows = 4 }: { cols: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, r) => (
+        <tr key={r} className="border-b border-slate-100">
+          {Array.from({ length: cols }).map((_, c) => (
+            <td key={c} className="p-3">
+              <Skeleton className="h-3.5 w-full max-w-28" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  )
+}
 
 interface KeyUsage {
   apiKey: string
@@ -77,6 +93,7 @@ export default function UsageTab() {
               </tr>
             </thead>
             <tbody>
+              {loading && <SkeletonRows cols={7} />}
               {keys.length === 0 && !loading && (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-slate-400">
@@ -118,6 +135,7 @@ export default function UsageTab() {
               </tr>
             </thead>
             <tbody>
+              {loading && <SkeletonRows cols={5} />}
               {users.length === 0 && !loading && (
                 <tr>
                   <td colSpan={5} className="p-6 text-center text-slate-400">

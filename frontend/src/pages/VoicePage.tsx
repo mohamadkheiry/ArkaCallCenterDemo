@@ -3,7 +3,7 @@ import { Check, Mic } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { useFlash } from '../lib/flash'
 import { useAuth } from '../context/AuthContext'
-import { Button, cn } from '../components/ui'
+import { Button, Skeleton, cn } from '../components/ui'
 import VoiceSampleButton from '../components/VoiceSampleButton'
 
 interface Voice {
@@ -19,14 +19,18 @@ export default function VoicePage() {
   const [selected, setSelected] = useState<string>('')
   const [defaultVoice, setDefaultVoice] = useState<string>('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
-    api.get<{ voices: Voice[]; defaultVoice: string }>('/api/voices').then(({ data }) => {
-      setVoices(data.voices)
-      setDefaultVoice(data.defaultVoice)
-      setSelected(me?.voiceName ?? data.defaultVoice)
-    })
+    api
+      .get<{ voices: Voice[]; defaultVoice: string }>('/api/voices')
+      .then(({ data }) => {
+        setVoices(data.voices)
+        setDefaultVoice(data.defaultVoice)
+        setSelected(me?.voiceName ?? data.defaultVoice)
+      })
+      .finally(() => setLoading(false))
   }, [me?.voiceName])
 
   async function save() {
@@ -52,20 +56,30 @@ export default function VoicePage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {voices.map((v) => (
+      <div className="stagger grid gap-3 sm:grid-cols-2">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 p-4 shadow-soft">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+            ))
+          : voices.map((v) => (
           <button
             key={v.name}
             onClick={() => setSelected(v.name)}
             className={cn(
-              'flex items-center justify-between rounded-2xl border p-4 text-right transition-all',
+              'flex items-center justify-between rounded-2xl border p-4 text-right shadow-soft transition-all duration-200 hover:-translate-y-0.5',
               selected === v.name
                 ? 'border-brand-400 bg-brand-50 ring-4 ring-brand-100'
                 : 'border-slate-200 bg-white hover:border-slate-300',
             )}
           >
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-sm">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-soft">
                 <Mic size={18} />
               </span>
               <div>

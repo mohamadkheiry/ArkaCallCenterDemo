@@ -4,7 +4,7 @@ import { ChevronDown, Pencil, ShieldCheck, LogIn, Search } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
 import { useAuth } from '../../context/AuthContext'
-import { Button, Card, TextInput, cn } from '../../components/ui'
+import { Button, Card, Skeleton, TextInput, cn } from '../../components/ui'
 import { toFa, toEn } from '../../lib/format'
 
 interface AdminUser {
@@ -169,7 +169,17 @@ export default function UsersTab() {
       </div>
 
       <div className="mt-4 space-y-2">
-        {loading && <p className="text-sm text-slate-400">در حال بارگذاری…</p>}
+        {loading &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-white/85 p-4 shadow-soft">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-8 w-20 rounded-lg" />
+            </div>
+          ))}
         {!loading && filtered.length === 0 && <p className="text-sm text-slate-400">کاربری یافت نشد.</p>}
         {filtered.map((u) => (
           <UserRow key={u.id} user={u} onSaved={load} />

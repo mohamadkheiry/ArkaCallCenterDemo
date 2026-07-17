@@ -4,7 +4,7 @@ import { Check as CheckIcon, Dot, PhoneCall } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 import { toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
-import { Button, Card, cn } from '../components/ui'
+import { Button, Card, SkeletonCard, cn } from '../components/ui'
 
 interface Sp {
   extension: number | null
@@ -39,6 +39,7 @@ export default function SmartPhonePage() {
   const [hasKb, setHasKb] = useState(false)
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
   async function load() {
@@ -52,7 +53,7 @@ export default function SmartPhonePage() {
     setHasKb(!!kb.data && kb.data.moderationStatus === 'Approved')
   }
   useEffect(() => {
-    load()
+    load().finally(() => setLoading(false))
   }, [])
 
   async function saveWelcome() {
@@ -100,6 +101,20 @@ export default function SmartPhonePage() {
   const isActive = sp?.status === 'Active' && sp.extension != null
   const hasWelcome = !!sp?.welcomeMessageText
   const canCreate = hasKb && hasWelcome && !isActive
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-800">تلفن هوشمند</h1>
+          <p className="mt-1 text-sm text-slate-500">پیام خوش‌آمد را ثبت کنید و تلفن هوشمند خود را بسازید.</p>
+        </div>
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={4} />
+        <SkeletonCard lines={3} />
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
