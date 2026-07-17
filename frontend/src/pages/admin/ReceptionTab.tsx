@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Music, Upload } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, SkeletonCard } from '../../components/ui'
 
 interface Voice {
   name: string
@@ -21,21 +21,33 @@ export default function ReceptionTab() {
 
   const [holdEnabled, setHoldEnabled] = useState(false)
   const [holdHasFile, setHoldHasFile] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { flash: hFlash, ok: hOk, fail: hFail, clear: hClear } = useFlash()
   const holdRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    api.get('/api/admin/main-greeting').then(({ data }) => {
-      setText(data.text ?? '')
-      setVoice(data.voice ?? 'alloy')
-      setSound(data.asteriskSound ?? null)
-    })
-    api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices))
-    api.get('/api/admin/hold-music').then(({ data }) => {
-      setHoldEnabled(!!data.enabled)
-      setHoldHasFile(!!data.hasFile)
-    })
+    Promise.all([
+      api.get('/api/admin/main-greeting').then(({ data }) => {
+        setText(data.text ?? '')
+        setVoice(data.voice ?? 'alloy')
+        setSound(data.asteriskSound ?? null)
+      }),
+      api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices)),
+      api.get('/api/admin/hold-music').then(({ data }) => {
+        setHoldEnabled(!!data.enabled)
+        setHoldHasFile(!!data.hasFile)
+      }),
+    ]).finally(() => setLoading(false))
   }, [])
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <SkeletonCard lines={4} />
+        <SkeletonCard lines={3} />
+      </div>
+    )
+  }
 
   async function saveGreeting() {
     setBusy(true)

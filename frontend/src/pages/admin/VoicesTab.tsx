@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AudioLines, Sparkles, Upload } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card, cn } from '../../components/ui'
+import { Button, Card, Skeleton, cn } from '../../components/ui'
 import VoiceSampleButton from '../../components/VoiceSampleButton'
 
 interface Voice {
@@ -18,6 +18,7 @@ export default function VoicesTab() {
   const [sampleText, setSampleText] = useState('')
   const [busy, setBusy] = useState(false)
   const [sampleBusy, setSampleBusy] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const { flash, ok, fail, clear } = useFlash()
   const uploadRef = useRef<HTMLInputElement>(null)
   const [uploadTarget, setUploadTarget] = useState<string | null>(null)
@@ -28,7 +29,7 @@ export default function VoicesTab() {
     setSampleText(data.sampleText ?? '')
   }
   useEffect(() => {
-    load()
+    load().finally(() => setLoading(false))
   }, [])
 
   function update(name: string, patch: Partial<Voice>) {
@@ -121,8 +122,16 @@ export default function VoicesTab() {
       />
 
       <div className="mt-4 space-y-2">
+        {loading &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-200/60 p-3 shadow-soft">
+              <Skeleton className="h-9 w-9 rounded-full" />
+              <Skeleton className="h-9 flex-1 rounded-lg" />
+              <Skeleton className="h-7 w-20 rounded-lg" />
+            </div>
+          ))}
         {voices.map((v) => (
-          <div key={v.name} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3">
+          <div key={v.name} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 p-3 shadow-soft">
             <VoiceSampleButton voiceName={v.name} hasSample={v.hasSample} />
             <input
               value={v.displayName}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play, Pause, Trash2, ChevronDown, MessageSquare, Phone } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
-import { Card, cn } from '../../components/ui'
+import { Card, Skeleton, cn } from '../../components/ui'
 import { faDateTime, faDuration, toFa } from '../../lib/format'
 
 interface CallRow {
@@ -247,7 +247,17 @@ export default function CallsAdminTab() {
       </Card>
 
       <div className="space-y-2">
-        {loading && <p className="text-sm text-slate-400">در حال بارگذاری…</p>}
+        {loading &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 p-4 shadow-soft">
+              <Skeleton className="h-10 w-10 rounded-xl" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-7 w-24 rounded-full" />
+            </div>
+          ))}
         {!loading && items.length === 0 && (
           <Card className="animate-in py-10 text-center">
             <p className="text-sm text-slate-500">مکالمه‌ای با این فیلتر یافت نشد.</p>

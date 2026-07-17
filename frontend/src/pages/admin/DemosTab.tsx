@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FlaskConical, PlayCircle, Trash2, Video } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
-import { Button, Card, TextInput, cn } from '../../components/ui'
+import { Button, Card, Skeleton, TextInput, cn } from '../../components/ui'
 import { toFa } from '../../lib/format'
 
 interface Demo {
@@ -220,6 +220,7 @@ export default function DemosTab() {
   const [demos, setDemos] = useState<Demo[]>([])
   const [voices, setVoices] = useState<Voice[]>([])
   const [creating, setCreating] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
   const [form, setForm] = useState({ label: '', welcomeText: '', kbText: '', voice: '', minuteLimit: '' })
 
@@ -228,8 +229,10 @@ export default function DemosTab() {
     setDemos(data)
   }
   useEffect(() => {
-    load()
-    api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices))
+    Promise.all([
+      load(),
+      api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices)),
+    ]).finally(() => setLoading(false))
   }, [])
 
   async function create() {
@@ -304,7 +307,17 @@ export default function DemosTab() {
 
       <div className="space-y-3">
         <h3 className="text-lg font-bold text-slate-800">دموهای موجود ({toFa(demos.length)})</h3>
-        {demos.length === 0 && <p className="text-sm text-slate-400">هنوز دمویی ساخته نشده است.</p>}
+        {loading &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 p-4 shadow-soft">
+              <Skeleton className="h-10 w-10 rounded-xl" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+          ))}
+        {!loading && demos.length === 0 && <p className="text-sm text-slate-400">هنوز دمویی ساخته نشده است.</p>}
         {demos.map((d) => (
           <DemoRow key={d.id} demo={d} voices={voices} onChanged={load} />
         ))}

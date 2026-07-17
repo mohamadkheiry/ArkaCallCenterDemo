@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, SkeletonCard } from '../../components/ui'
 
 interface Voice {
   name: string
@@ -14,16 +14,21 @@ export default function FallbackTab() {
   const [voices, setVoices] = useState<Voice[]>([])
   const [hasAudio, setHasAudio] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
-    api.get('/api/admin/fallback-message').then(({ data }) => {
-      setText(data.text ?? '')
-      setVoice(data.voice ?? 'alloy')
-      setHasAudio(!!data.hasAudio)
-    })
-    api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices))
+    Promise.all([
+      api.get('/api/admin/fallback-message').then(({ data }) => {
+        setText(data.text ?? '')
+        setVoice(data.voice ?? 'alloy')
+        setHasAudio(!!data.hasAudio)
+      }),
+      api.get<{ voices: Voice[] }>('/api/voices').then(({ data }) => setVoices(data.voices)),
+    ]).finally(() => setLoading(false))
   }, [])
+
+  if (loading) return <SkeletonCard lines={4} />
 
   async function save() {
     setBusy(true)

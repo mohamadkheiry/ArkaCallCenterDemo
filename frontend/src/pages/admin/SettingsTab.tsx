@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card, TextInput } from '../../components/ui'
+import { Button, Card, SkeletonCard, TextInput } from '../../components/ui'
 import { toFa } from '../../lib/format'
 import { SETTING_FIELDS } from './adminData'
 
@@ -48,16 +48,23 @@ export default function SettingsTab({ groups, title, desc }: { groups: string[];
   const fields = SETTING_FIELDS.filter((f) => groups.includes(f.group))
   const [values, setValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
-    api.get<Record<string, string | null>>('/api/admin/settings').then(({ data }) => {
-      const next: Record<string, string> = {}
-      for (const f of fields) next[f.key] = data[f.key] ?? ''
-      setValues(next)
-    })
+    setLoading(true)
+    api
+      .get<Record<string, string | null>>('/api/admin/settings')
+      .then(({ data }) => {
+        const next: Record<string, string> = {}
+        for (const f of fields) next[f.key] = data[f.key] ?? ''
+        setValues(next)
+      })
+      .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title])
+
+  if (loading) return <SkeletonCard lines={5} />
 
   async function save() {
     setBusy(true)

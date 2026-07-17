@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
-import { Button, Card } from '../../components/ui'
+import { Button, Card, SkeletonCard } from '../../components/ui'
 import { SMS_EVENTS } from './adminData'
 
 interface Template {
@@ -29,6 +29,7 @@ export default function TemplatesTab() {
   const [templates, setTemplates] = useState<Record<string, Template>>({})
   const [recipients, setRecipients] = useState<Record<string, Recipient>>({})
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { flash, ok, fail, clear } = useFlash()
 
   useEffect(() => {
@@ -47,8 +48,10 @@ export default function TemplatesTab() {
       for (const x of r.data) rm[x.eventType] = { ...x, phoneNumber: x.phoneNumber ?? '' }
       setRecipients(rm)
     }
-    load()
+    load().finally(() => setLoading(false))
   }, [])
+
+  if (loading) return <SkeletonCard lines={6} />
 
   async function save() {
     setBusy(true)
