@@ -15,6 +15,34 @@
               ArkaCallCenter.Realtime ⇄ OpenAI gpt-realtime
 ```
 
+## بازهٔ داخلی‌های انسانی (SIP)
+
+بازهٔ `200` تا `300` برای تلفن‌های انسانی و softphone همکاران رزرو است. تخصیص داخلی‌های AI نباید از این بازه استفاده کند.
+
+- داخلی‌های انسانی را از پنل Issabel بسازید تا در `users`، `devices`، `sip` و AstDB ثبت شوند.
+- داخلی موجود `200` متعلق به `karami` است و نباید بازنویسی شود.
+- در IVR ورودی، داخلی واقعی Issabel همیشه قبل از مسیر AI بررسی و به `ext-local` هدایت می‌شود.
+- شمارهٔ رزروشده‌ای که هنوز در Issabel تعریف نشده است، نباید به AI fall through کند.
+- برای softphoneهای داخل LAN از SIP/UDP روی پورت `5060` استفاده می‌شود. برای کاربران بیرون شبکه، VPN توصیه می‌شود و پورت SIP نباید بدون محدودیت روی اینترنت باز شود.
+
+پارامترهای عمومی softphone:
+
+```text
+SIP server / domain: 192.168.10.101
+Port:                5060
+Transport:           UDP
+Username/Auth ID:    شماره داخلی
+Password:            secret همان داخلی در Issabel
+Outbound proxy:      خالی
+```
+
+پس از ساخت یا ویرایش داخلی در Issabel، وضعیت رجیستر را بررسی کنید:
+
+```bash
+asterisk -rx "sip show peers"
+asterisk -rx "sip show peer 222"
+```
+
 ## ۰) پیش‌نیازها
 
 ```bash
@@ -83,6 +111,7 @@ Asterisk__SshPassword=********
 - ورکر آرکا روی TCP `9092` گوش می‌دهد؛ مطمئن شوید فایروال بین ایزابل و سرور ورکر
   این پورت را باز می‌گذارد.
 - کدک صوتی AudioSocket: SLIN ۸kHz (ورکر داخلاً به ۲۴kHz برای OpenAI ری‌سمپل می‌کند).
+- ضبط مکالمه در worker بر مبنای clock ثابت ۲۰ms ساخته می‌شود؛ صدای caller با فریم خروجی‌ای که واقعاً برای تماس پخش شده mix می‌شود. برای فعال‌شدن اصلاح ضبط، سرویس `realtime` باید rebuild و recreate شود.
 
 ## ۶) تست
 

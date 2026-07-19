@@ -120,12 +120,9 @@ public class CallHandler
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
         string? lastUserQuestion = null;        // آخرین سوالِ caller (روی رشته‌ی حلقه‌ی دریافت ست/خوانده می‌شود).
-        var recording = new List<byte>();
-        var recLock = new object();
+        var recorder = recordingEnabled ? new CallRecordingBuffer() : null;
         var answeredFromKb = true;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
-
-        void Record(byte[] slin) { if (recordingEnabled) lock (recLock) recording.AddRange(slin); }
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model, _logger);
 
@@ -206,7 +203,11 @@ public class CallHandler
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(20));
                 while (await timer.WaitForNextTickAsync(callCts.Token))
-                    await WriteLockedAsync(NextOutFrame());
+                {
+                    var playedFrame = NextOutFrame();
+                    await WriteLockedAsync(playedFrame);
+                    recorder?.CapturePlayedFrame(playedFrame);
+                }
             }
             catch (OperationCanceledException) { }
         }
@@ -215,7 +216,6 @@ public class CallHandler
         {
             Volatile.Write(ref thinking, 0); // صدای AI رسید → دیگر «فکر کردن» نیست
             var slin8k = AudioResampler.Downsample24kTo8k(pcm24k);
-            Record(slin8k);
             EnqueueOut(slin8k); // به‌جای نوشتن مستقیم، وارد صف می‌شود؛ پمپ آن را با آهنگ درست می‌فرستد
             return Task.CompletedTask;
         };
@@ -282,7 +282,8 @@ public class CallHandler
                 if (frame is null || frame.Value.Kind == AudioSocketProtocol.KindHangup) break;
                 if (frame.Value.Kind == AudioSocketProtocol.KindAudio)
                 {
-                    Record(frame.Value.Payload); // ضبط صدای caller
+                    // ضبط روی clock پخش انجام می‌شود تا صدای caller و AI روی یک timeline باشند.
+                    recorder?.EnqueueInbound(frame.Value.Payload);
                     var pcm24k = AudioResampler.Upsample8kTo24k(frame.Value.Payload);
                     await realtime.AppendAudioAsync(pcm24k, ct);
                 }
@@ -301,13 +302,13 @@ public class CallHandler
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
         string? recordingPath = null;
-        if (recordingEnabled && recording.Count > 0)
+        if (recorder is not null)
         {
             try
             {
-                byte[] pcm;
-                lock (recLock) pcm = recording.ToArray();
-                // کوتاه‌کردنِ سکوت‌های طولانی + حذفِ نویزِ سکوت برای صدای صاف‌تر و فشرده‌تر.
+                var pcm = recorder.ToArray();
+                if (pcm.Length == 0) throw new InvalidOperationException("Call recording is empty.");
+                // فقط وقفه‌های واقعاً طولانی را در سطح فریم کوتاه کن؛ نمونه‌های کم‌صدای کلمات دست‌نخورده می‌مانند.
                 pcm = AudioPostProcess.CompressSilence(pcm, AudioConvert.TelephonyRate);
                 var wav = AudioConvert.PcmToWav8k(pcm, AudioConvert.TelephonyRate);
                 recordingPath = Path.Combine(_uploadsPath, $"call_{Guid.NewGuid():N}.wav");

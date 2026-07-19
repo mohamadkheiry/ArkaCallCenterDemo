@@ -17,6 +17,18 @@ docker compose up -d --force-recreate --no-deps <service>
 ```
 آدرس‌ها: وب `:8081`، API `:8080`، AudioSocket `:9092`. مهاجرت‌های EF هنگام استارتِ API خودکار اعمال می‌شوند.
 
+### اعمال اصلاحات ضبط مکالمه
+
+منطق ضبط داخل سرویس `realtime` است و برای انتشار این اصلاح، بازسازی دیتابیس یا API لازم نیست:
+
+```bash
+docker compose build realtime
+docker compose up -d --force-recreate --no-deps realtime
+docker compose logs --tail=100 realtime
+```
+
+پس از انتشار، یک تماس آزمایشی برقرار کنید و فایل ضبط را از پنل پخش کنید. گفتار دو طرف باید پیوسته باشد و وقفه‌های پردازش AI در فایل ذخیره‌شده حداکثر حدود ۲۸۰ میلی‌ثانیه باقی بماند.
+
 ## ۳. اسرار (هرگز در گیت نباشند)
 در فایل `.env` / `appsettings.Local.json`:
 - `OPENAI_API_KEY`
