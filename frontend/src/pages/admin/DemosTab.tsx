@@ -222,7 +222,7 @@ export default function DemosTab() {
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
-  const [form, setForm] = useState({ label: '', welcomeText: '', kbText: '', voice: '', minuteLimit: '' })
+  const [form, setForm] = useState({ extension: '', label: '', welcomeText: '', kbText: '', voice: '', minuteLimit: '' })
 
   async function load() {
     const { data } = await api.get<Demo[]>('/api/admin/demos')
@@ -238,16 +238,22 @@ export default function DemosTab() {
   async function create() {
     setMsg('')
     if (!form.label.trim()) return setMsg('نام دمو الزامی است.')
+    const extension = Number(form.extension)
+    if (!Number.isInteger(extension) || extension < 1 || extension > 999)
+      return setMsg('شماره داخلی باید یک عدد صحیح بین ۱ تا ۹۹۹ باشد.')
+    if (extension >= 100 && extension <= 300)
+      return setMsg('بازهٔ داخلی ۱۰۰ تا ۳۰۰ برای تلفن‌های انسانی رزرو است.')
     setCreating(true)
     try {
       await api.post('/api/admin/demos', {
+        extension,
         label: form.label,
         welcomeText: form.welcomeText,
         kbText: form.kbText,
         voice: form.voice || null,
         minuteLimit: form.minuteLimit === '' ? null : Number(form.minuteLimit),
       })
-      setForm({ label: '', welcomeText: '', kbText: '', voice: '', minuteLimit: '' })
+      setForm({ extension: '', label: '', welcomeText: '', kbText: '', voice: '', minuteLimit: '' })
       setMsg('دمو ساخته شد.')
       await load()
     } catch (e) {
@@ -264,10 +270,21 @@ export default function DemosTab() {
       <Card className="animate-in">
         <h3 className="text-lg font-bold text-slate-800">ساخت دمو جدید</h3>
         <p className="mt-1 text-sm text-slate-500">
-          هر دمو یک داخلی در بازه‌ی ۱ تا ۹۹۹ می‌گیرد. تعداد دموها نامحدود است.
+          داخلی دمو را خودتان از بازهٔ ۱ تا ۹۹۹ انتخاب کنید. بازهٔ ۱۰۰ تا ۳۰۰ برای تلفن‌های انسانی رزرو است.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <TextInput label="نام دمو" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+          <TextInput
+            label="شماره داخلی"
+            hint="مثلاً ۲ یا ۹۰۰؛ بازهٔ ۱۰۰ تا ۳۰۰ مجاز نیست."
+            type="number"
+            min={1}
+            max={999}
+            step={1}
+            required
+            value={form.extension}
+            onChange={(e) => setForm({ ...form, extension: e.target.value })}
+          />
           <TextInput
             label="محدودیت مکالمه (دقیقه)"
             type="number"

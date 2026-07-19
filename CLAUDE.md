@@ -158,7 +158,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **افزوده — IVR پذیرش، موسیقی انتظار، دموها، پیکربندی کامل ایزابل:**
   - **IVR اصلی:** پیام پذیرش قابل‌تنظیم در پنل (متن+گوینده → WAV ۸kHz → آپلود SCP به ایزابل). dialplan `[arka-main]` پیام را پخش و با `Read` داخلی را می‌گیرد، سپس `Goto(arka-ai,${EXT},1)`.
   - **موسیقی انتظار:** آپلود WAV در پنل → تبدیل به SLIN ۸kHz → worker حین «فکر کردن» (رویداد `input_audio_buffer.speech_stopped`) آن را با pacing ۲۰ms پخش می‌کند و با رسیدن صدای AI قطع می‌کند (write lock مشترک).
-  - **دموها (۱–۹۹۹):** `DemoService` + `AdminController` (GET/POST/PUT/DELETE `admin/demos`). هر دمو = یک User با `IsDemo` + SmartPhone (داخلی ۱–۹۹۹ via `AllocateDemoAsync`) + KB + گوینده + محدودیت. نامحدود، بدون moderation، همه‌ی منطق تماس بدون تغییر کار می‌کند. تب «دموها» و «پذیرش و انتظار» در فرانت.
+  - **دموها (۱–۹۹۹ به‌جز ۱۰۰–۳۰۰):** `DemoService` + `AdminController` (GET/POST/PUT/DELETE `admin/demos`). هر دمو = یک User با `IsDemo` + SmartPhone با داخلی انتخابی سوپرادمین + KB + گوینده + محدودیت. بازهٔ ۱۰۰–۳۰۰ برای تلفن‌های انسانی محافظت می‌شود و داخلی تکراری پذیرفته نمی‌شود. بدون moderation، همه‌ی منطق تماس بدون تغییر کار می‌کند. تب «دموها» و «پذیرش و انتظار» در فرانت.
   - **ایزابل:** `telephony/extensions_arka.conf` (contextهای `arka-main`+`arka-ai`)، `pjsip_custom.conf`، و `telephony/README.md` (راهنمای کامل: AudioSocket، DID→IVR، SSH، آپلود صوت). `AudioConvert` (WAV/SLIN/resample) در Infrastructure؛ `UploadSoundAsync` (SCP) در provisioning.
   - migration `DemoAndReception`؛ volume آپلود مشترک بین api و realtime در compose.
 

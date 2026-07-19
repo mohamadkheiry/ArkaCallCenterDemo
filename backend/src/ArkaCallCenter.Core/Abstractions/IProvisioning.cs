@@ -2,11 +2,10 @@ using ArkaCallCenter.Core.Entities;
 
 namespace ArkaCallCenter.Core.Abstractions;
 
-/// <summary>تخصیص داخلی آزاد (یکتا، بدون تکرار). کاربران: ۱۰۰۰–۹۹۹۹، دموها: ۱–۹۹۹.</summary>
+/// <summary>تخصیص داخلی آزاد (یکتا، بدون تکرار) برای کاربران عادی در بازهٔ ۱۰۰۰–۹۹۹۹.</summary>
 public interface IExtensionAllocator
 {
     Task<int> AllocateAsync(CancellationToken ct = default);
-    Task<int> AllocateDemoAsync(CancellationToken ct = default);
 }
 
 public record ProvisionResult(bool Success, string? Error);

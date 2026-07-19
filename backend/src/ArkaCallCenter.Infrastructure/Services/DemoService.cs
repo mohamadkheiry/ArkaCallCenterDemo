@@ -12,8 +12,12 @@ namespace ArkaCallCenter.Infrastructure.Services;
 
 public class DemoService : IDemoService
 {
+    private const int DemoExtensionMin = 1;
+    private const int DemoExtensionMax = 999;
+    private const int ReservedExtensionMin = 100;
+    private const int ReservedExtensionMax = 300;
+
     private readonly ArkaDbContext _db;
-    private readonly IExtensionAllocator _allocator;
     private readonly IAsteriskProvisioningService _asterisk;
     private readonly IRagService _rag;
     private readonly IOpenAiService _openai;
@@ -21,11 +25,10 @@ public class DemoService : IDemoService
     private readonly ILogger<DemoService> _logger;
     private readonly string _uploadsPath;
 
-    public DemoService(ArkaDbContext db, IExtensionAllocator allocator, IAsteriskProvisioningService asterisk,
+    public DemoService(ArkaDbContext db, IAsteriskProvisioningService asterisk,
         IRagService rag, IOpenAiService openai, ISettingsService settings, IConfiguration config, ILogger<DemoService> logger)
     {
         _db = db;
-        _allocator = allocator;
         _asterisk = asterisk;
         _rag = rag;
         _openai = openai;
@@ -46,57 +49,72 @@ public class DemoService : IDemoService
         return demos.Select(Map).ToList();
     }
 
-    public async Task<DemoResult> CreateAsync(string label, string welcomeText, string kbText,
+    public async Task<DemoResult> CreateAsync(int extension, string label, string welcomeText, string kbText,
         string? voice, int? minuteLimit, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(label))
             return new DemoResult(false, "نام دمو الزامی است.", null);
 
-        var ext = await _allocator.AllocateDemoAsync(ct);
+        if (extension is < DemoExtensionMin or > DemoExtensionMax)
+            return new DemoResult(false, "شماره داخلی دمو باید بین ۱ تا ۹۹۹ باشد.", null);
+
+        if (extension is >= ReservedExtensionMin and <= ReservedExtensionMax)
+            return new DemoResult(false, "بازهٔ داخلی ۱۰۰ تا ۳۰۰ برای تلفن‌های انسانی رزرو است.", null);
+
+        if (await _db.SmartPhones.AnyAsync(s => s.Extension == extension, ct))
+            return new DemoResult(false, $"داخلی {extension} قبلاً استفاده شده است.", null);
 
         var user = new User
         {
             IsDemo = true,
             DemoLabel = label.Trim(),
             BrandName = label.Trim(),
-            PhoneNumber = $"demo{ext}",
+            PhoneNumber = $"demo{extension}",
             Role = UserRole.User,
             ProfileCompleted = true,
             IsActive = true,
             VoiceName = voice,
             CallMinuteLimit = minuteLimit,
         };
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync(ct);
-
         // پایگاه دانش (بدون moderation؛ توسط سوپرادمین ساخته می‌شود)
         var kb = new KnowledgeBase
         {
-            UserId = user.Id,
+            User = user,
             SourceType = KbSourceType.Text,
             RawText = kbText?.Trim() ?? "",
             CharCount = (kbText ?? "").Trim().Length,
             ModerationStatus = ModerationStatus.Approved,
         };
-        _db.KnowledgeBases.Add(kb);
-        await _db.SaveChangesAsync(ct);
-        await TryIndexAsync(kb, ct);
-
         var secret = GenerateSecret();
         var sp = new SmartPhone
         {
-            UserId = user.Id,
+            User = user,
+            Extension = extension,
+            SipSecret = secret,
             WelcomeMessageText = welcomeText?.Trim(),
             Status = SmartPhoneStatus.Provisioning,
         };
-        _db.SmartPhones.Add(sp);
-        await _db.SaveChangesAsync(ct);
+
+        user.KnowledgeBase = kb;
+        user.SmartPhone = sp;
+        _db.Users.Add(user);
+        try
+        {
+            // User، KB و داخلی در یک SaveChanges ثبت می‌شوند تا ایندکس unique از
+            // ساخت هم‌زمان دو دمو با یک داخلی جلوگیری کند و رکورد ناقص باقی نماند.
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Could not reserve requested demo extension {Extension}.", extension);
+            return new DemoResult(false, $"داخلی {extension} آزاد نیست؛ یک شمارهٔ دیگر انتخاب کنید.", null);
+        }
+
+        await TryIndexAsync(kb, ct);
 
         await TryWelcomeAudioAsync(user, sp, ct);
 
-        var provision = await _asterisk.ProvisionExtensionAsync(ext, secret, ct);
-        sp.Extension = ext;
-        sp.SipSecret = secret;
+        var provision = await _asterisk.ProvisionExtensionAsync(extension, secret, ct);
         sp.Status = provision.Success ? SmartPhoneStatus.Active : SmartPhoneStatus.Failed;
         await _db.SaveChangesAsync(ct);
 

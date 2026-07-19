@@ -449,14 +449,14 @@ public class AdminController : ControllerBase
         return Ok(new { message = "مکالمه حذف شد." });
     }
 
-    // ---------------- Demos (keys 1..999) ----------------
+    // ---------------- Demos (manual keys 1..999, excluding reserved 100..300) ----------------
     [HttpGet("demos")]
     public async Task<IActionResult> GetDemos(CancellationToken ct) => Ok(await _demos.ListAsync(ct));
 
     [HttpPost("demos")]
     public async Task<IActionResult> CreateDemo(CreateDemoRequest req, CancellationToken ct)
     {
-        var r = await _demos.CreateAsync(req.Label, req.WelcomeText, req.KbText, req.Voice, req.MinuteLimit, ct);
+        var r = await _demos.CreateAsync(req.Extension, req.Label, req.WelcomeText, req.KbText, req.Voice, req.MinuteLimit, ct);
         return r.Ok ? Ok(r.Demo) : BadRequest(new { error = r.Error });
     }
 

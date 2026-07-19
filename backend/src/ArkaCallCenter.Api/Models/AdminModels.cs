@@ -18,7 +18,7 @@ public record FallbackMessageRequest(string Text, string Voice);
 public record UpdateUserLimitRequest(int? CallMinuteLimit);
 public record UpdateUserRequest(string? FirstName, string? LastName, string? BrandName, bool? IsActive, int? CallMinuteLimit);
 
-public record CreateDemoRequest(string Label, string WelcomeText, string KbText, string? Voice, int? MinuteLimit);
+public record CreateDemoRequest(int Extension, string Label, string WelcomeText, string KbText, string? Voice, int? MinuteLimit);
 public record UpdateDemoRequest(string? Label, string? WelcomeText, string? KbText, string? Voice, int? MinuteLimit, bool? IsActive);
 
 public record MainGreetingRequest(string Text, string Voice);

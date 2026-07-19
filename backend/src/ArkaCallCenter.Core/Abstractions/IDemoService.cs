@@ -8,13 +8,14 @@ public record DemoInfo(
 public record DemoResult(bool Ok, string? Error, DemoInfo? Demo);
 
 /// <summary>
-/// مدیریت دموها توسط سوپرادمین. هر دمو یک پروفایل کامل (داخلی ۱–۹۹۹ + پیام خوش‌آمد +
-/// پایگاه دانش + گوینده + محدودیت) است که سوپرادمین می‌سازد و کنترل می‌کند.
+/// مدیریت دموها توسط سوپرادمین. هر دمو یک پروفایل کامل (داخلی انتخابی ۱–۹۹۹،
+/// به‌جز بازهٔ رزروشدهٔ ۱۰۰–۳۰۰ + پیام خوش‌آمد + پایگاه دانش + گوینده + محدودیت)
+/// است که سوپرادمین می‌سازد و کنترل می‌کند.
 /// </summary>
 public interface IDemoService
 {
     Task<IReadOnlyList<DemoInfo>> ListAsync(CancellationToken ct = default);
-    Task<DemoResult> CreateAsync(string label, string welcomeText, string kbText,
+    Task<DemoResult> CreateAsync(int extension, string label, string welcomeText, string kbText,
         string? voice, int? minuteLimit, CancellationToken ct = default);
     Task<DemoResult> UpdateAsync(int id, string? label, string? welcomeText, string? kbText,
         string? voice, int? minuteLimit, bool? isActive, CancellationToken ct = default);
