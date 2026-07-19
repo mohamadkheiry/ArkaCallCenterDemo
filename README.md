@@ -73,3 +73,5 @@ npm run dev
 ## امنیت
 
 هیچ اسراری (رمز سرور ایزابل، کلید OpenAI، توکن SMS.ir، JWT secret) در گیت کامیت نمی‌شود؛ همه در `.env`/`appsettings.Local.json` که در `.gitignore` هستند نگهداری می‌شوند. برای مقادیر نمونه به [`.env.example`](./.env.example) نگاه کنید.
+
+راهنمای گروه‌های رسمی بله، محل نگهداری Secretها و چرخه رسیدگی به باگ تا انتشار در [`docs/07-operations-communication.md`](./docs/07-operations-communication.md) قرار دارد.
