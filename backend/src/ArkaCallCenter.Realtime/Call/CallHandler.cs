@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ArkaCallCenter.Realtime.Call;
 
@@ -22,15 +23,18 @@ public class CallHandler
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<CallHandler> _logger;
     private readonly string _uploadsPath;
+    private readonly TimeSpan _idleTimeout;
 
     /// <summary>یک نوبت گفتگو در رونوشت.</summary>
     private record TranscriptTurn(string Role, string Text);
 
-    public CallHandler(IServiceScopeFactory scopes, IConfiguration config, ILogger<CallHandler> logger)
+    public CallHandler(IServiceScopeFactory scopes, IConfiguration config, IOptions<RealtimeOptions> realtimeOptions, ILogger<CallHandler> logger)
     {
         _scopes = scopes;
         _logger = logger;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
+        var idleSeconds = realtimeOptions.Value.IdleTimeoutSeconds;
+        _idleTimeout = idleSeconds > 0 ? TimeSpan.FromSeconds(idleSeconds) : Timeout.InfiniteTimeSpan;
         Directory.CreateDirectory(_uploadsPath);
     }
 
@@ -57,9 +61,10 @@ public class CallHandler
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
         var settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
+        var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
 
         var sp = await db.SmartPhones
-            .Include(s => s.User).ThenInclude(u => u.KnowledgeBase)
+            .Include(s => s.User)
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Extension == extension && s.Status == SmartPhoneStatus.Active, ct);
         if (sp is null)
@@ -73,7 +78,6 @@ public class CallHandler
             return;
         }
 
-        var kbText = sp.User.KnowledgeBase?.RawText ?? "";
         const string defaultFallback = "پاسخ این سوال در پایگاه دانش من موجود نیست.";
         var fallback = await settings.GetAsync(SettingKeys.FallbackMessageText, defaultFallback, ct) ?? defaultFallback;
         var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
@@ -114,15 +118,20 @@ public class CallHandler
 
         var recordingEnabled = (await settings.GetAsync(SettingKeys.CallRecordingEnabled, "true", ct)) != "false";
 
-        var instructions = BuildInstructions(sp.User.BrandName, kbText, fallback, accuracy);
+        var instructions = BuildInstructions(sp.User.BrandName, fallback, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
-        string? lastUserQuestion = null;        // آخرین سوالِ caller (روی رشته‌ی حلقه‌ی دریافت ست/خوانده می‌شود).
         var recorder = recordingEnabled ? new CallRecordingBuffer() : null;
         var answeredFromKb = true;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
+        var userSpeaking = 0;
+        var lastSpeechTicks = Stopwatch.GetTimestamp();
+        CancellationTokenSource? pendingTurnCts = null;
+        var pendingTurnLock = new object();
+        var pendingTurns = new List<Task>();
+        using var ragGate = new SemaphoreSlim(1, 1);
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model, _logger);
 
@@ -214,6 +223,7 @@ public class CallHandler
 
         realtime.OnAudioDelta += pcm24k =>
         {
+            Interlocked.Exchange(ref lastSpeechTicks, Stopwatch.GetTimestamp());
             Volatile.Write(ref thinking, 0); // صدای AI رسید → دیگر «فکر کردن» نیست
             var slin8k = AudioResampler.Downsample24kTo8k(pcm24k);
             EnqueueOut(slin8k); // به‌جای نوشتن مستقیم، وارد صف می‌شود؛ پمپ آن را با آهنگ درست می‌فرستد
@@ -221,12 +231,26 @@ public class CallHandler
         };
         realtime.OnUserSpeechStarted += () =>
         {
+            Interlocked.Exchange(ref userSpeaking, 1);
+            Interlocked.Exchange(ref lastSpeechTicks, Stopwatch.GetTimestamp());
+            lock (pendingTurnLock)
+            {
+                pendingTurnCts?.Cancel();
+                pendingTurnCts?.Dispose();
+                pendingTurnCts = null;
+            }
             ClearOut();                      // barge-in: صدای در حال پخشِ AI را فوراً قطع کن
             Volatile.Write(ref thinking, 0);
             _logger.LogInformation("Barge-in: user started speaking on ext {Ext}; cleared AI audio buffer.", extension);
             return Task.CompletedTask;
         };
-        realtime.OnUserSpeechStopped += () => { Volatile.Write(ref thinking, 1); return Task.CompletedTask; };
+        realtime.OnUserSpeechStopped += () =>
+        {
+            Interlocked.Exchange(ref userSpeaking, 0);
+            Interlocked.Exchange(ref lastSpeechTicks, Stopwatch.GetTimestamp());
+            Volatile.Write(ref thinking, 1);
+            return Task.CompletedTask;
+        };
         realtime.OnResponseDone += () =>
         {
             Volatile.Write(ref thinking, 0);
@@ -234,16 +258,6 @@ public class CallHandler
             {
                 var text = asstBuf.ToString().Trim();
                 lock (turnsLock) turns.Add(new TranscriptTurn("assistant", text));
-                if (!string.IsNullOrEmpty(fallback) && text.Contains(fallback[..Math.Min(15, fallback.Length)]))
-                {
-                    answeredFromKb = false;
-                    // این پاسخ fallback بود → آخرین سوالِ caller بی‌پاسخ مانده؛ ثبتش کن (یک‌بار).
-                    if (!string.IsNullOrWhiteSpace(lastUserQuestion))
-                    {
-                        lock (turnsLock) unanswered.Add(lastUserQuestion);
-                        lastUserQuestion = null;
-                    }
-                }
                 asstBuf.Clear();
             }
             return Task.CompletedTask;
@@ -253,11 +267,60 @@ public class CallHandler
         {
             if (!string.IsNullOrWhiteSpace(text))
             {
-                lastUserQuestion = text.Trim();
-                lock (turnsLock) turns.Add(new TranscriptTurn("user", text.Trim()));
+                var question = text.Trim();
+                lock (turnsLock) turns.Add(new TranscriptTurn("user", question));
+
+                // اگر transcription نوبت قبلی بعد از شروع صحبت تازه رسید، پاسخ قدیمی را نساز؛
+                // نوبت تازه پس از توقف گفتار، transcription و پاسخ مستقل خودش را خواهد داشت.
+                if (Volatile.Read(ref userSpeaking) != 0)
+                {
+                    _logger.LogInformation("Ignoring stale transcript while caller is speaking on ext {Ext}.", extension);
+                    return Task.CompletedTask;
+                }
+
+                CancellationTokenSource turnCts;
+                lock (pendingTurnLock)
+                {
+                    pendingTurnCts?.Cancel();
+                    pendingTurnCts?.Dispose();
+                    pendingTurnCts = CancellationTokenSource.CreateLinkedTokenSource(callCts.Token);
+                    turnCts = pendingTurnCts;
+                }
+
+                var task = AnswerGroundedAsync(question, turnCts.Token);
+                lock (pendingTurnLock) pendingTurns.Add(task);
             }
             return Task.CompletedTask;
         };
+
+        async Task AnswerGroundedAsync(string question, CancellationToken turnCt)
+        {
+            var unansweredRecorded = false;
+            try
+            {
+                await ragGate.WaitAsync(turnCt);
+                RagAnswer result;
+                try { result = await rag.RetrieveAsync(sp.User.Id, question, turnCt); }
+                finally { ragGate.Release(); }
+                if (!result.Found)
+                {
+                    answeredFromKb = false;
+                    lock (turnsLock) unanswered.Add(question);
+                    unansweredRecorded = true;
+                }
+                await realtime.CreateGroundedResponseAsync(question, result.Found ? result.Context : null, fallback, turnCt);
+            }
+            catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                answeredFromKb = false;
+                if (!unansweredRecorded)
+                    lock (turnsLock) unanswered.Add(question);
+                _logger.LogWarning(ex, "RAG retrieval failed for ext {Ext}; using fallback.", extension);
+                try { await realtime.CreateGroundedResponseAsync(question, null, fallback, turnCt); }
+                catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
+            }
+        }
 
         // پمپ را از همان ابتدا (پیش از اتصال به OpenAI) شروع کن تا سکوت بلافاصله به
         // Asterisk جاری شود و در طول هندشیک WebSocket هم اتصال زنده بماند.
@@ -276,6 +339,15 @@ public class CallHandler
                 {
                     _logger.LogInformation("Call on ext {Ext} reached limit ({Used}+{Cur:F1}/{Min} min).",
                         extension, alreadyUsedMinutes, sw.Elapsed.TotalMinutes, limitMinutes);
+                    break;
+                }
+                if (_idleTimeout != Timeout.InfiniteTimeSpan &&
+                    Volatile.Read(ref userSpeaking) == 0 &&
+                    Volatile.Read(ref thinking) == 0 &&
+                    Stopwatch.GetElapsedTime(Interlocked.Read(ref lastSpeechTicks)) >= _idleTimeout)
+                {
+                    _logger.LogInformation("Call on ext {Ext} closed after {Seconds}s of silence.",
+                        extension, (int)_idleTimeout.TotalSeconds);
                     break;
                 }
                 var frame = await AudioSocketProtocol.ReadFrameAsync(stream, ct);
@@ -297,7 +369,18 @@ public class CallHandler
         {
             sw.Stop();
             callCts.Cancel();                // پمپ خروجی را متوقف کن
+            lock (pendingTurnLock)
+            {
+                pendingTurnCts?.Cancel();
+                pendingTurnCts?.Dispose();
+                pendingTurnCts = null;
+            }
             try { await pumpTask; } catch { }
+            Task[] pendingSnapshot;
+            lock (pendingTurnLock) pendingSnapshot = pendingTurns.ToArray();
+            try { await Task.WhenAll(pendingSnapshot); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _logger.LogWarning(ex, "Pending RAG response failed during call shutdown."); }
         }
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
@@ -379,7 +462,7 @@ public class CallHandler
         }
     }
 
-    private static string BuildInstructions(string? brand, string kbText, string fallback, int accuracyPercent)
+    private static string BuildInstructions(string? brand, string fallback, int accuracyPercent)
     {
         // «دقتِ پاسخ‌ها» (۱۰..۱۰۰) via پرامپت اعمال می‌شود چون Realtime GA دیگر temperature ندارد.
         var faithfulness = accuracyPercent switch
@@ -390,13 +473,10 @@ public class CallHandler
         };
         return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
-        فقط و فقط بر اساس «پایگاه دانش» زیر پاسخ بده. اگر پاسخ سوالِ تماس‌گیرنده در پایگاه
-        دانش وجود نداشت، دقیقاً و بدون تغییر این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
+        برای هر نوبت، قطعه مرتبط پایگاه دانش جداگانه در دستور همان پاسخ در اختیارت قرار می‌گیرد.
+        فقط بر اساس همان قطعه پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
+        این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
         میزانِ پایبندی به پایگاه دانش: {faithfulness}
-
-        === پایگاه دانش ===
-        {kbText}
-        === پایان پایگاه دانش ===
         """;
     }
 

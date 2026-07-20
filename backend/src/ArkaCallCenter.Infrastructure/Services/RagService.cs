@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
@@ -9,6 +11,13 @@ namespace ArkaCallCenter.Infrastructure.Services;
 
 public class RagService : IRagService
 {
+    private const double LexicalRelevanceBoost = 0.08;
+    private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "این", "آن", "است", "هست", "بود", "برای", "چند", "چقدر", "چیست", "چیه", "آیا",
+        "قبل", "بعد", "باید", "شود", "شده", "کردن", "کنم", "کنیم", "درباره", "یعنی",
+        "the", "what", "how", "and", "for", "is", "are"
+    };
     private readonly ArkaDbContext _db;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
@@ -69,7 +78,14 @@ public class RagService : IRagService
             .Take(topK)
             .ToList();
 
-        var found = scored.Count > 0 && scored[0].Score >= threshold;
+        // Embedding فارسی/انگلیسی گاهی برای عبارت‌های دقیق دو‌زبانه (مثل Progressive Overload)
+        // کمی پایین‌تر از آستانه امتیاز می‌دهد. هم‌پوشانی واژه‌ی معنادار فقط یک boost کوچک می‌دهد؛
+        // بنابراین سؤال کاملاً نامرتبط همچنان با fallback پاسخ داده می‌شود.
+        var best = scored.FirstOrDefault();
+        var lexicalBoost = best is not null && HasDistinctiveTermOverlap(query, best.Content)
+            ? LexicalRelevanceBoost
+            : 0;
+        var found = best is not null && best.Score + lexicalBoost >= threshold;
         var context = found ? string.Join("\n---\n", scored.Select(h => h.Content)) : "";
         return new RagAnswer(found, scored, context);
     }
@@ -113,5 +129,26 @@ public class RagService : IRagService
         }
         if (na == 0 || nb == 0) return 0;
         return dot / (Math.Sqrt(na) * Math.Sqrt(nb));
+    }
+
+    internal static bool HasDistinctiveTermOverlap(string query, string content)
+    {
+        var queryTokens = DistinctiveTokens(query);
+        if (queryTokens.Count == 0) return false;
+        var contentTokens = DistinctiveTokens(content);
+        return queryTokens.Overlaps(contentTokens);
+    }
+
+    private static HashSet<string> DistinctiveTokens(string text)
+    {
+        var normalized = text
+            .Normalize(NormalizationForm.FormKC)
+            .Replace('ي', 'ی')
+            .Replace('ك', 'ک')
+            .ToLowerInvariant();
+
+        return Regex.Split(normalized, @"[^\p{L}\p{N}]+")
+            .Where(token => token.Length >= 3 && !StopWords.Contains(token))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 }

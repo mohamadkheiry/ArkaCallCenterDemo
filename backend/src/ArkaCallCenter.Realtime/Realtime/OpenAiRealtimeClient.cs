@@ -12,6 +12,7 @@ namespace ArkaCallCenter.Realtime.Realtime;
 public sealed class OpenAiRealtimeClient : IAsyncDisposable
 {
     private readonly ClientWebSocket _ws = new();
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly ILogger _logger;
     private readonly string _apiKey;
     private readonly string _baseUrl;
@@ -64,7 +65,8 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                             threshold = 0.5,
                             silence_duration_ms = 600,
                             interrupt_response = true,
-                            create_response = true,
+                            // پاسخ فقط بعد از transcription و بازیابی قطعه مرتبط از RAG ساخته می‌شود.
+                            create_response = false,
                         },
                         transcription = new { model = "whisper-1" },
                     },
@@ -95,6 +97,27 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         type = "input_audio_buffer.append",
         audio = Convert.ToBase64String(pcm24k),
     }, ct);
+
+    public Task CreateGroundedResponseAsync(string question, string? context, string fallback, CancellationToken ct)
+    {
+        var responseInstructions = !string.IsNullOrWhiteSpace(context)
+            ? $"""
+               پرسش تماس‌گیرنده: «{question}»
+               فقط با استفاده از قطعه مرتبط زیر، کوتاه و فارسی پاسخ بده. هیچ اطلاعاتی از دانش عمومی،
+               حافظه گفتگو یا بخش دیگری اضافه نکن. اگر همین قطعه پاسخ روشن پرسش را ندارد، دقیقاً بگو: «{fallback}»
+
+               === قطعه مرتبط پایگاه دانش ===
+               {context}
+               === پایان قطعه ===
+               """
+            : $"دقیقاً و بدون هیچ جمله اضافه‌ای بگو: «{fallback}»";
+
+        return SendAsync(new
+        {
+            type = "response.create",
+            response = new { instructions = responseInstructions },
+        }, ct);
+    }
 
     private async Task ReceiveLoopAsync(CancellationToken ct)
     {
@@ -175,7 +198,15 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     private async Task SendAsync(object payload, CancellationToken ct)
     {
         var json = JsonSerializer.Serialize(payload);
-        await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
+        await _sendLock.WaitAsync(ct);
+        try
+        {
+            await _ws.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -187,5 +218,6 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         }
         catch { /* ignore */ }
         _ws.Dispose();
+        _sendLock.Dispose();
     }
 }
