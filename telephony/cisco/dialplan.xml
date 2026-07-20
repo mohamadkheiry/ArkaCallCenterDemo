@@ -1,6 +1,8 @@
 <DIALTEMPLATE>
-    <TEMPLATE MATCH="09........." Timeout="0"/>
-    <TEMPLATE MATCH="........" Timeout="0"/>
-    <TEMPLATE MATCH="..." Timeout="0"/>
-    <TEMPLATE MATCH="*" Timeout="5"/>
+    <TEMPLATE MATCH="09........." Timeout="0"/> <!-- Iranian mobile: 11 digits -->
+    <TEMPLATE MATCH="021........" Timeout="0"/> <!-- Tehran with area code: 11 digits -->
+    <TEMPLATE MATCH="........" Timeout="0"/> <!-- Tehran local landline: 8 digits -->
+    <!-- Wait briefly so three-digit extensions do not truncate longer public numbers. -->
+    <TEMPLATE MATCH="..." Timeout="3"/> <!-- Internal extensions -->
+    <TEMPLATE MATCH="*" Timeout="5"/> <!-- Anything else -->
 </DIALTEMPLATE>
