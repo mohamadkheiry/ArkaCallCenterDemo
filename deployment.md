@@ -203,3 +203,28 @@ docker compose exec -T db mysql -uroot -p"$MYSQL_ROOT_PASSWORD" arka_callcenter 
 
 > فایل‌های صوتی/تصویری در volume `uploads` و داده‌ها در volume `db_data` نگهداری می‌شوند؛
 > `docker compose down` آن‌ها را حذف نمی‌کند، اما `docker compose down -v` **حذف می‌کند** (احتیاط).
+
+---
+
+## ۱۱. تحویل آفلاین v4 و محیط تست شبکه داخلی
+
+در ۲۰ ژوئیهٔ ۲۰۲۶ نسخهٔ فعلی روی Windows/Docker Desktop با همان volumeهای
+دیتابیس و uploads اجرا و از یک میزبان دیگر داخل شبکه تست شد:
+
+- داشبورد داخلی: `http://192.168.10.175:8081`
+- health داخلی: `http://192.168.10.175:8081/health`
+- صفحهٔ دانلود بسته: `http://192.168.10.175:8090/`
+
+بستهٔ `ArkaCallCenter-linux-handoff-20260720-v4.zip` برای Linux/amd64 شامل
+ایمیج‌ها، دیتابیس و uploads فعلی است. SHA-256 فایل ZIP:
+
+```text
+f2927c4f426da01878d6c86d2b9b40fc79eda2aac62edde46461155a830d31ea
+```
+
+انتشار production در Jira Task `AIP-2072` زیر Epic `AIP-1953` ثبت و به
+`A.gholami` واگذار شده است. دامنهٔ نهایی باید
+`https://callcenterdemo.arkadp.com` باشد. جزئیات کامل مسیرهای محلی، reverse
+proxy، TLS، امنیت و معیار پذیرش در
+[`docs/08-windows-lan-and-v4-publish-handoff.md`](docs/08-windows-lan-and-v4-publish-handoff.md)
+ثبت شده است.
