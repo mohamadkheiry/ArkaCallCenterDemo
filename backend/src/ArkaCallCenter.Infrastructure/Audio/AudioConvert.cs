@@ -73,7 +73,9 @@ public static class AudioConvert
         while (pos + 8 <= wav.Length)
         {
             var id = s.Slice(pos, 4);
-            var size = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(pos + 4, 4));
+            // Streaming WAV may use 0xFFFFFFFF when the final chunk length is
+            // unknown while the response is being written.
+            var declaredSize = BinaryPrimitives.ReadUInt32LittleEndian(s.Slice(pos + 4, 4));
             var body = pos + 8;
             // بدنه‌ی fmt حداقل ۱۶ بایت است؛ اگر فایل بریده باشد نباید از بافر بیرون بخوانیم.
             if (id.SequenceEqual("fmt "u8) && body + 16 <= wav.Length)
@@ -85,8 +87,16 @@ public static class AudioConvert
             else if (id.SequenceEqual("data"u8))
             {
                 dataStart = body;
-                dataLen = Math.Min(size, wav.Length - body);
+                dataLen = declaredSize == uint.MaxValue
+                    ? wav.Length - body
+                    : (int)Math.Min(declaredSize, (uint)(wav.Length - body));
+                break;
             }
+
+            if (declaredSize > (uint)(wav.Length - body))
+                throw new InvalidDataException("WAV chunk length exceeds the file length.");
+
+            var size = (int)declaredSize;
             pos = body + size + (size % 2); // chunkها padded به مضرب ۲
         }
         if (dataStart < 0) throw new InvalidDataException("بخش data در WAV یافت نشد.");

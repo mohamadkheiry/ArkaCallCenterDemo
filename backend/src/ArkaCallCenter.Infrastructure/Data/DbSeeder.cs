@@ -32,7 +32,7 @@ public static class DbSeeder
             (SettingKeys.OpenAiApiKey, config["OPENAI_API_KEY"], null, true),
             (SettingKeys.OpenAiChatModel, config["OPENAI_CHAT_MODEL"], "gpt-4o-mini", false),
             (SettingKeys.OpenAiEmbeddingModel, config["OPENAI_EMBEDDING_MODEL"], "text-embedding-3-small", false),
-            (SettingKeys.OpenAiRealtimeModel, config["OPENAI_REALTIME_MODEL"], "gpt-realtime", false),
+            (SettingKeys.OpenAiRealtimeModel, config["OPENAI_REALTIME_MODEL"], "gpt-realtime-2.1", false),
             (SettingKeys.OpenAiTtsModel, config["OPENAI_TTS_MODEL"], "gpt-4o-mini-tts", false),
             (SettingKeys.SmsIrApiKey, config["SMSIR_API_KEY"], null, true),
             (SettingKeys.SmsIrVerifyTemplateId, config["SMSIR_VERIFY_TEMPLATE_ID"], null, false),
@@ -59,7 +59,6 @@ public static class DbSeeder
 
     private static async Task SeedVoicesAsync(ArkaDbContext db, CancellationToken ct)
     {
-        if (await db.VoiceOptions.AnyAsync(ct)) return;
         // گوینده‌های استاندارد OpenAI realtime/TTS
         var voices = new (string name, string display, bool def)[]
         {
@@ -71,9 +70,16 @@ public static class DbSeeder
             ("coral", "کورال", false),
             ("sage", "سیج", false),
             ("verse", "ورس", false),
+            ("marin", "مارین (کیفیت پیشنهادی)", false),
+            ("cedar", "سیدار (کیفیت پیشنهادی)", false),
         };
+        var existing = (await db.VoiceOptions.Select(v => v.Name).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var v in voices)
+        {
+            if (existing.Contains(v.name)) continue;
             db.VoiceOptions.Add(new VoiceOption { Name = v.name, DisplayName = v.display, IsDefault = v.def });
+        }
     }
 
     private static async Task SeedSmsTemplatesAsync(ArkaDbContext db, CancellationToken ct)

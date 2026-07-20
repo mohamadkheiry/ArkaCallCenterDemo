@@ -17,6 +17,9 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _model;
+    private readonly string _transcriptionModel;
+    private readonly string _transcriptionLanguage;
+    private readonly string _transcriptionPrompt;
 
     public event Func<byte[], Task>? OnAudioDelta;   // PCM16 24kHz
     public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار (delta)
@@ -26,11 +29,16 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     public event Func<Task>? OnUserSpeechStopped;     // کاربر حرفش تمام شد → AI در حال «فکر کردن»
     public event Action<int, int, int>? OnUsage;      // prompt, completion, total
 
-    public OpenAiRealtimeClient(string apiKey, string baseUrl, string model, ILogger logger)
+    public OpenAiRealtimeClient(string apiKey, string baseUrl, string model,
+        string transcriptionModel, string transcriptionLanguage, string transcriptionPrompt,
+        ILogger logger)
     {
         _apiKey = apiKey;
         _baseUrl = baseUrl;
         _model = model;
+        _transcriptionModel = transcriptionModel;
+        _transcriptionLanguage = transcriptionLanguage;
+        _transcriptionPrompt = transcriptionPrompt;
         _logger = logger;
     }
 
@@ -68,7 +76,16 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                             // پاسخ فقط بعد از transcription و بازیابی قطعه مرتبط از RAG ساخته می‌شود.
                             create_response = false,
                         },
-                        transcription = new { model = "whisper-1" },
+                        // Persian phone audio is especially sensitive to language detection errors.
+                        // gpt-4o-transcribe provides materially better recognition than whisper-1,
+                        // while the explicit hint prevents short Persian phrases from being
+                        // misclassified as English or Hebrew.
+                        transcription = new
+                        {
+                            model = _transcriptionModel,
+                            language = _transcriptionLanguage,
+                            prompt = _transcriptionPrompt,
+                        },
                     },
                     output = new
                     {

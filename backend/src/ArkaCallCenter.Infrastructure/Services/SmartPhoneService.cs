@@ -149,8 +149,9 @@ public class SmartPhoneService : ISmartPhoneService
         try
         {
             var voice = await ResolveVoiceAsync(userId, ct);
-            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, ct: ct);
-            var path = Path.Combine(_uploadsPath, $"welcome_{userId}.mp3");
+            // WAV avoids MP3 decoding and lets the realtime worker play the greeting immediately.
+            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, "wav", ct);
+            var path = Path.Combine(_uploadsPath, $"welcome_{userId}.wav");
             await File.WriteAllBytesAsync(path, audio, ct);
             sp.WelcomeAudioPath = path;
         }

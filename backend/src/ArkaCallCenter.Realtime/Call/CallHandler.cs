@@ -22,19 +22,28 @@ public class CallHandler
 {
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<CallHandler> _logger;
+    private readonly WelcomeAudioCache _welcomeCache;
     private readonly string _uploadsPath;
     private readonly TimeSpan _idleTimeout;
+    private readonly string _transcriptionModel;
+    private readonly string _transcriptionLanguage;
+    private readonly string _transcriptionPrompt;
 
     /// <summary>یک نوبت گفتگو در رونوشت.</summary>
     private record TranscriptTurn(string Role, string Text);
 
-    public CallHandler(IServiceScopeFactory scopes, IConfiguration config, IOptions<RealtimeOptions> realtimeOptions, ILogger<CallHandler> logger)
+    public CallHandler(IServiceScopeFactory scopes, IConfiguration config, IOptions<RealtimeOptions> realtimeOptions,
+        WelcomeAudioCache welcomeCache, ILogger<CallHandler> logger)
     {
         _scopes = scopes;
         _logger = logger;
+        _welcomeCache = welcomeCache;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         var idleSeconds = realtimeOptions.Value.IdleTimeoutSeconds;
         _idleTimeout = idleSeconds > 0 ? TimeSpan.FromSeconds(idleSeconds) : Timeout.InfiniteTimeSpan;
+        _transcriptionModel = realtimeOptions.Value.TranscriptionModel;
+        _transcriptionLanguage = realtimeOptions.Value.TranscriptionLanguage;
+        _transcriptionPrompt = realtimeOptions.Value.TranscriptionPrompt;
         Directory.CreateDirectory(_uploadsPath);
     }
 
@@ -57,10 +66,10 @@ public class CallHandler
             return;
         }
         var callerId = AudioSocketProtocol.ParseCaller(first.Value.Payload);   // شماره‌ی تماس‌گیرنده
+        var callStartedTicks = Stopwatch.GetTimestamp();
 
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
-        var settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
         var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
 
         var sp = await db.SmartPhones
@@ -78,52 +87,92 @@ public class CallHandler
             return;
         }
 
+        var recorder = new CallRecordingBuffer();
+        using var earlyWelcomeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var welcomePlayedEarly = _welcomeCache.TryGet(extension.Value, out var earlyWelcome);
+        var earlyWelcomeTask = welcomePlayedEarly
+            ? PlayCachedWelcomeAsync(stream, earlyWelcome, extension.Value, callStartedTicks, recorder, earlyWelcomeCts.Token)
+            : Task.CompletedTask;
+
+        // A single settings query avoids several sequential database round trips before
+        // the greeting starts, which is audible as dead air on the first call after restart.
+        var runtimeSettingKeys = new[]
+        {
+            SettingKeys.FallbackMessageText,
+            SettingKeys.DefaultVoiceName,
+            SettingKeys.DefaultCallMinuteLimit,
+            SettingKeys.HoldMusicEnabled,
+            SettingKeys.HoldMusicPath,
+            SettingKeys.OpenAiApiKey,
+            SettingKeys.OpenAiBaseUrl,
+            SettingKeys.OpenAiRealtimeModel,
+            SettingKeys.CallRecordingEnabled,
+        };
+        var runtimeSettings = await db.AppSettings
+            .AsNoTracking()
+            .Where(setting => runtimeSettingKeys.Contains(setting.Key))
+            .ToDictionaryAsync(setting => setting.Key, setting => setting.Value, ct);
+        string? GetSetting(string key, string? fallback = null)
+            => runtimeSettings.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value
+                : fallback;
+        int GetIntSetting(string key, int fallback)
+            => int.TryParse(GetSetting(key), out var value) ? value : fallback;
+
         const string defaultFallback = "پاسخ این سوال در پایگاه دانش من موجود نیست.";
-        var fallback = await settings.GetAsync(SettingKeys.FallbackMessageText, defaultFallback, ct) ?? defaultFallback;
+        var fallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
         var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
-        var voice = sp.User.VoiceName ?? await settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
+        var voice = sp.User.VoiceName ?? GetSetting(SettingKeys.DefaultVoiceName, "alloy") ?? "alloy";
+        byte[]? cachedWelcome = welcomePlayedEarly ? earlyWelcome : null;
+        if (cachedWelcome is null && _welcomeCache.TrySet(extension.Value, sp.WelcomeAudioPath))
+        {
+            _welcomeCache.TryGet(extension.Value, out cachedWelcome);
+        }
         // درصدِ دقت/پایبندی به پایگاه دانش (۱۰..۱۰۰). چون Realtime GA دیگر temperature ندارد،
         // این پارامتر از طریقِ instructions (پرامپت) به مدل منتقل می‌شود؛ درصدِ بالاتر = پایبندیِ سخت‌گیرانه‌تر.
         var accuracy = Math.Clamp(sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent, 10, 100);
         // سوپر ادمین نامحدود است (سقف دقیقه اعمال نمی‌شود)؛ دقایق مصرف‌شده همچنان برای نمایش ثبت می‌شود.
         var unlimited = sp.User.Role == UserRole.SuperAdmin;
         var limitMinutes = sp.User.CallMinuteLimit
-            ?? await settings.GetIntAsync(SettingKeys.DefaultCallMinuteLimit, 30, ct);
+            ?? GetIntSetting(SettingKeys.DefaultCallMinuteLimit, 30);
         var alreadyUsedMinutes = sp.User.UsedMinutes;   // مصرفِ انباشته پیش از این تماس (snapshot).
         // اگر سقفِ دقیقه قبلاً پر شده، اصلاً تماس را برقرار نکن (اتلافِ توکنِ OpenAI بی‌مورد).
         if (!unlimited && alreadyUsedMinutes >= limitMinutes)
         {
             _logger.LogInformation("Ext {Ext}: minute limit already reached ({Used}/{Limit}); rejecting call.",
                 extension, alreadyUsedMinutes, limitMinutes);
+            earlyWelcomeCts.Cancel();
+            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
             return;
         }
 
         // موسیقی انتظار (حین فکر کردن AI) — SLIN 8kHz خام از تنظیمات
         byte[]? holdMusic = null;
-        if ((await settings.GetAsync(SettingKeys.HoldMusicEnabled, "false", ct)) == "true")
+        if (GetSetting(SettingKeys.HoldMusicEnabled, "false") == "true")
         {
-            var holdPath = await settings.GetAsync(SettingKeys.HoldMusicPath, null, ct);
+            var holdPath = GetSetting(SettingKeys.HoldMusicPath);
             if (!string.IsNullOrEmpty(holdPath) && File.Exists(holdPath))
                 holdMusic = await File.ReadAllBytesAsync(holdPath, ct);
         }
 
-        var apiKey = await settings.GetAsync(SettingKeys.OpenAiApiKey, null, ct);
-        var baseUrl = await settings.GetAsync(SettingKeys.OpenAiBaseUrl, "https://api.openai.com/v1", ct) ?? "https://api.openai.com/v1";
-        var model = await settings.GetAsync(SettingKeys.OpenAiRealtimeModel, "gpt-realtime", ct) ?? "gpt-realtime";
+        var apiKey = GetSetting(SettingKeys.OpenAiApiKey);
+        var baseUrl = GetSetting(SettingKeys.OpenAiBaseUrl, "https://api.openai.com/v1") ?? "https://api.openai.com/v1";
+        var model = GetSetting(SettingKeys.OpenAiRealtimeModel, "gpt-realtime-2.1") ?? "gpt-realtime-2.1";
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("OpenAI API key not configured; cannot handle realtime call.");
+            earlyWelcomeCts.Cancel();
+            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
             return;
         }
 
-        var recordingEnabled = (await settings.GetAsync(SettingKeys.CallRecordingEnabled, "true", ct)) != "false";
+        var recordingEnabled = GetSetting(SettingKeys.CallRecordingEnabled, "true") != "false";
 
         var instructions = BuildInstructions(sp.User.BrandName, fallback, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
-        var recorder = recordingEnabled ? new CallRecordingBuffer() : null;
         var answeredFromKb = true;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
         var userSpeaking = 0;
@@ -133,7 +182,8 @@ public class CallHandler
         var pendingTurns = new List<Task>();
         using var ragGate = new SemaphoreSlim(1, 1);
 
-        await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model, _logger);
+        await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model,
+            _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _logger);
 
         realtime.OnUsage += (p, c, t) =>
         {
@@ -155,6 +205,7 @@ public class CallHandler
         var outHead = 0;                            // آفست خواندن در اولین قطعه‌ی صف
         var thinking = 0;                           // ۱ = کاربر حرفش تمام شده، منتظر پاسخ AI
         var holdPos = 0;                            // موقعیت پخش موسیقی انتظار (لوپ)
+        var firstAudioLogged = welcomePlayedEarly ? 1 : 0;
 
         void EnqueueOut(byte[] slin) { lock (outLock) outChunks.AddLast(slin); }
 
@@ -201,6 +252,11 @@ public class CallHandler
                     if (++holdPos >= holdMusic.Length) holdPos = 0;
                 }
             }
+            if (filled > 0 && Interlocked.CompareExchange(ref firstAudioLogged, 1, 0) == 0)
+            {
+                _logger.LogInformation("First greeting audio queued for ext {Ext} after {ElapsedMs:F0}ms.",
+                    extension, Stopwatch.GetElapsedTime(callStartedTicks).TotalMilliseconds);
+            }
             // در غیر این صورت فریمِ سکوت (صفر) می‌ماند
             return frame;
         }
@@ -215,7 +271,7 @@ public class CallHandler
                 {
                     var playedFrame = NextOutFrame();
                     await WriteLockedAsync(playedFrame);
-                    recorder?.CapturePlayedFrame(playedFrame);
+                    recorder.CapturePlayedFrame(playedFrame);
                 }
             }
             catch (OperationCanceledException) { }
@@ -324,13 +380,19 @@ public class CallHandler
 
         // پمپ را از همان ابتدا (پیش از اتصال به OpenAI) شروع کن تا سکوت بلافاصله به
         // Asterisk جاری شود و در طول هندشیک WebSocket هم اتصال زنده بماند.
-        var pumpTask = PumpAsync();
+        if (!welcomePlayedEarly && cachedWelcome is { Length: > 0 })
+            EnqueueOut(cachedWelcome);
+        Task pumpTask = Task.CompletedTask;
         var sw = Stopwatch.StartNew();
         var startedAt = DateTime.UtcNow;
         try
         {
-            await realtime.ConnectAsync(instructions, voice, ct);
-            await realtime.GreetAsync(welcome, ct);
+            var connectTask = realtime.ConnectAsync(instructions, voice, ct);
+            await earlyWelcomeTask;
+            pumpTask = PumpAsync();
+            await connectTask;
+            if (cachedWelcome is not { Length: > 0 })
+                await realtime.GreetAsync(welcome, ct);
 
             while (!ct.IsCancellationRequested)
             {
@@ -355,7 +417,7 @@ public class CallHandler
                 if (frame.Value.Kind == AudioSocketProtocol.KindAudio)
                 {
                     // ضبط روی clock پخش انجام می‌شود تا صدای caller و AI روی یک timeline باشند.
-                    recorder?.EnqueueInbound(frame.Value.Payload);
+                    recorder.EnqueueInbound(frame.Value.Payload);
                     var pcm24k = AudioResampler.Upsample8kTo24k(frame.Value.Payload);
                     await realtime.AppendAudioAsync(pcm24k, ct);
                 }
@@ -385,7 +447,7 @@ public class CallHandler
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
         string? recordingPath = null;
-        if (recorder is not null)
+        if (recordingEnabled)
         {
             try
             {
@@ -424,6 +486,29 @@ public class CallHandler
         {
             await RecordUsageAsync(sp.User.Id, sp.User.PhoneNumber, model, apiKey!,
                 (int)usagePrompt, (int)usageCompletion, (int)usageTotal);
+        }
+    }
+
+    private async Task PlayCachedWelcomeAsync(NetworkStream stream, byte[] slin8k, int extension,
+        long startedTicks, CallRecordingBuffer recorder, CancellationToken ct)
+    {
+        const int frameSize = CallRecordingBuffer.FrameBytes;
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(20));
+        var logged = false;
+        for (var offset = 0; offset < slin8k.Length; offset += frameSize)
+        {
+            if (!await timer.WaitForNextTickAsync(ct)) break;
+            var size = Math.Min(frameSize, slin8k.Length - offset);
+            var frame = new byte[frameSize];
+            Array.Copy(slin8k, offset, frame, 0, size);
+            await AudioSocketProtocol.WriteAudioAsync(stream, frame, ct);
+            recorder.CapturePlayedFrame(frame);
+            if (!logged)
+            {
+                logged = true;
+                _logger.LogInformation("First greeting audio queued for ext {Ext} after {ElapsedMs:F0}ms (memory cache).",
+                    extension, Stopwatch.GetElapsedTime(startedTicks).TotalMilliseconds);
+            }
         }
     }
 
@@ -473,6 +558,7 @@ public class CallHandler
         };
         return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
+        با فارسی معیار ایران، کاملاً روان و طبیعی و بدون لهجه انگلیسی صحبت کن؛ از مکث‌های غیرضروری پرهیز کن.
         برای هر نوبت، قطعه مرتبط پایگاه دانش جداگانه در دستور همان پاسخ در اختیارت قرار می‌گیرد.
         فقط بر اساس همان قطعه پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
         این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.

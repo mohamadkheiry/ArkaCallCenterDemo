@@ -203,8 +203,9 @@ public class DemoService : IDemoService
         try
         {
             var voice = user.VoiceName ?? await _settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
-            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, ct: ct);
-            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}.mp3");
+            // WAV avoids MP3 decoding and lets the realtime worker play the greeting immediately.
+            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, "wav", ct);
+            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}.wav");
             await File.WriteAllBytesAsync(path, audio, ct);
             sp.WelcomeAudioPath = path;
         }

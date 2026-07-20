@@ -286,11 +286,13 @@ sequenceDiagram
     PBX->>PBX: [arka-main] پخش پیام پذیرش + Read داخلی (DTMF)
     PBX->>W: AudioSocket(UUID با داخلی، :9092)
     W->>W: یافتن SmartPhone/دمو + KB + گوینده + سقف دقیقه
-    W->>O: session.update (instructions=KB + قانون fallback) + greet
+    W->>PBX: پخش فوری کش WAV پیام خوش‌آمد
+    W->>O: session.update (دستور پایه + transcription فارسی)
     loop مکالمه
       C->>PBX: صدای caller (SLIN 8k)
       PBX->>W: هدایت صدا
-      W->>O: upsample 24k → append
+      W->>O: upsample 24k → append → transcription (fa)
+      W->>W: retrieval نوبت‌به‌نوبت از RAG
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
       W->>W: قطع موسیقی → downsample 8k → پخش برای caller
@@ -323,7 +325,7 @@ sequenceDiagram
 
 | رسانه | تولید/آپلود | مصرف |
 |-------|-------------|------|
-| وویس خوش‌آمد | TTS هنگام ساخت تلفن | (realtime آن را با متن می‌گوید) |
+| وویس خوش‌آمد | TTS با راهنمای تلفظ فارسی → WAV هنگام ساخت/ویرایش تلفن | worker؛ تبدیل به SLIN و پخش فوری |
 | پیام fallback | TTS در پنل | worker |
 | پیام پذیرش (IVR) | TTS → WAV۸k → SCP به ایزابل | dialplan |
 | موسیقی انتظار | آپلود WAV → SLIN۸k | worker (استریم SLIN) |

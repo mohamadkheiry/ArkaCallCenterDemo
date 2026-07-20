@@ -128,12 +128,27 @@ public class OpenAiService : IOpenAiService
     public async Task<byte[]> TextToSpeechAsync(string text, string voice, string format = "mp3", CancellationToken ct = default)
     {
         var model = await ModelAsync(SettingKeys.OpenAiTtsModel, "gpt-4o-mini-tts", ct);
+        object body = model.StartsWith("gpt-4o", StringComparison.OrdinalIgnoreCase)
+            ? new
+            {
+                model,
+                voice,
+                input = text,
+                response_format = format,
+                instructions = LooksPersian(text)
+                    ? "با فارسی معیار ایران، روان، طبیعی، گرم و بدون لهجه انگلیسی صحبت کن. واژه‌ها را شمرده اما بدون مکث اضافه تلفظ کن."
+                    : "Speak naturally, clearly, and without unnecessary pauses.",
+            }
+            : new { model, voice, input = text, response_format = format };
         var req = await BuildAsync(HttpMethod.Post, "/audio/speech",
-            new { model, voice, input = text, response_format = format }, ct);
+            body, ct);
         using var res = await _http.SendAsync(req, ct);
         await EnsureOkAsync(res, ct);
         return await res.Content.ReadAsByteArrayAsync(ct);
     }
+
+    private static bool LooksPersian(string text)
+        => text.Any(ch => ch is >= '\u0600' and <= '\u06ff');
 
     private async Task EnsureOkAsync(HttpResponseMessage res, CancellationToken ct)
     {

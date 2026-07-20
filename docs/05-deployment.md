@@ -35,6 +35,10 @@ docker compose logs --tail=100 realtime
 
 ```env
 CALL_IDLE_TIMEOUT_SECONDS=60
+OPENAI_REALTIME_MODEL=gpt-realtime-2.1
+OPENAI_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+TRANSCRIPTION_LANGUAGE=fa
+DEFAULT_VOICE=marin
 ```
 
 مقدار `0` قطع خودکار را غیرفعال می‌کند. پس از انتشار، یک سؤال موجود در KB و یک سؤال کاملاً نامرتبط را تست کنید؛ اولی باید پاسخ KB و دومی باید fallback بگیرد.
@@ -60,3 +64,5 @@ CALL_IDLE_TIMEOUT_SECONDS=60
 - **SSH به ایزابل با paramiko** انجام شود (نه plink؛ plink روی prompt کلیدِ میزبان هنگ می‌کند).
 - بازیابیِ پس از قطعِ برق: پایدارسازیِ `eth1` و سرویس‌ها با systemd.
 - **مهم (سازگاری با OpenAI Realtime GA):** پارامترِ `temperature` در `session.update` ارسال نشود؛ نسخه‌ی GA آن را حذف کرده و ارسالش کلِ session را رد می‌کند. کنترلِ رفتار از طریقِ پرامپت انجام می‌شود.
+- برای مکالمه فارسی، language hint باید `fa` بماند. تغییر مدل transcription ابتدا روی صدای واقعی تلفن تست شود؛ `gpt-4o-transcribe` برای دقت بالاتر از `whisper-1` انتخاب شده است.
+- پیام‌های خوش‌آمد جدید WAV هستند، هنگام startup به SLIN 8kHz تبدیل و در حافظه گرم می‌شوند و مستقیم پخش می‌شوند. پاسخ‌های WAV streaming با طول نامشخص نیز پشتیبانی می‌شوند. پس از مهاجرت از نسخه MP3، متن خوش‌آمد را یک بار ذخیره کنید تا فایل WAV تولید شود.

@@ -63,6 +63,8 @@ services:
       Realtime__AudioSocketHost: "0.0.0.0"
       Realtime__AudioSocketPort: "9092"
       Realtime__IdleTimeoutSeconds: "${CALL_IDLE_TIMEOUT_SECONDS:-60}"
+      Realtime__TranscriptionModel: "${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-transcribe}"
+      Realtime__TranscriptionLanguage: "${TRANSCRIPTION_LANGUAGE:-fa}"
       Storage__UploadsPath: "/app/uploads"
     volumes:
       - uploads:/app/uploads
