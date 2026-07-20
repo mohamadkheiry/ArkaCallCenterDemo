@@ -138,9 +138,11 @@ docker compose logs -f realtime
 `SIP42.8-5-4S` است. فایل‌های firmware امضاشدهٔ Cisco باید فقط روی TFTP
 مرکز تلفن باشند و به علت مجوز انتشار و حجم باینری در Git قرار نمی‌گیرند.
 
-این firmware قدیمی REGISTER را از یک پورت موقت ارسال می‌کند، ولی تماس ورودی
-را روی UDP/5060 می‌پذیرد. بنابراین peer داخلی ۲۲۲ در
-`/etc/asterisk/sip_custom_post.conf` به IP و پورت ثابت گوشی محدود شده است:
+این firmware قدیمی REGISTER را از یک پورت موقت ارسال می‌کند، پاسخ Digest را
+در این محیط کامل نمی‌کند و تماس ورودی را روی UDP/5060 می‌پذیرد. بنابراین peer
+داخلی ۲۲۲ در `/etc/asterisk/sip_custom_post.conf` به‌صورت dynamic و بدون Digest،
+اما فقط برای IP ثابت گوشی، تعریف می‌شود. نمونهٔ قابل‌استقرار در
+`telephony/cisco/sip_custom_post.conf.example` قرار دارد:
 
 ```ini
 [222](+)
@@ -149,7 +151,7 @@ deny=0.0.0.0/0.0.0.0
 permit=192.168.10.170/255.255.255.255
 qualify=no
 nat=no
-host=192.168.10.170
+host=dynamic
 port=5060
 insecure=port,invite
 ```
@@ -161,6 +163,29 @@ insecure=port,invite
 `insecure=port,invite` فقط ناسازگاری firmware قدیمی Cisco با پورت مبدأ موقت را
 جبران می‌کند؛ ACL بالا باید حتماً همراه آن باشد تا INVITE بدون Digest فقط از
 IP ثابت همین گوشی پذیرفته شود.
+
+شبکهٔ تلفن‌های مدیریت‌شده باید در jail مربوط به Asterisk در Fail2ban نادیده
+گرفته شود تا تلاش‌های رجیستر firmware قدیمی، IP تلفن را مسدود نکند. مقدارهای
+قبلی `ignoreip` را حفظ کنید و شبکهٔ LAN را به همان خط اضافه کنید:
+
+```ini
+[asterisk]
+ignoreip = <existing-values> 192.168.10.0/24
+```
+
+اعمال فوری و خارج‌کردن گوشی از مسدودی:
+
+```bash
+fail2ban-client set asterisk addignoreip 192.168.10.0/24
+fail2ban-client set asterisk unbanip 192.168.10.170
+fail2ban-client status asterisk
+```
+
+فایل Dial Plan گوشی باید به `/tftpboot/dialplan.xml` کپی شود. نمونهٔ کنترل‌شده
+در `telephony/cisco/dialplan.xml` قرار دارد؛ موبایل‌های ۱۱رقمی `09...` و
+داخلی‌های سه‌رقمی بلافاصله ارسال می‌شوند و سایر شماره‌ها پس از ۵ ثانیه ارسال
+خواهند شد. پس از تغییر، گوشی باید واقعاً reboot شود تا فایل را دوباره از TFTP
+دریافت کند؛ قطع و وصل صرفِ کابل شبکه در صورت وجود آداپتور برق کافی نیست.
 
 گوشی برای بالا آمدن به NTP نیاز دارد. `chronyd` روی PBX باید UDP/123 را فقط
 برای شبکهٔ داخلی ارائه کند؛ نمونهٔ محدودیت در `/etc/chrony.conf`:
@@ -174,7 +199,7 @@ allow 192.168.10.0/24
 ```bash
 asterisk -rx "sip show peer 222"
 # Addr->IP باید 192.168.10.170:5060 باشد.
-# Insecure باید port,invite و ACL باید Yes باشد.
+# Dynamic باید Yes، Insecure باید port,invite و ACL باید Yes باشد.
 # در trace تماس باید پاسخ‌های 100 Trying و 180 Ringing دیده شوند.
 ```
 

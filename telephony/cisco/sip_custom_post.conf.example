@@ -1,0 +1,11 @@
+; Cisco 7942G extension 222 compatibility override.
+; Use only on a trusted LAN with a DHCP reservation and switch-port/MAC controls.
+[222](+)
+secret=
+deny=0.0.0.0/0.0.0.0
+permit=192.168.10.170/255.255.255.255
+qualify=no
+nat=no
+host=dynamic
+port=5060
+insecure=port,invite
