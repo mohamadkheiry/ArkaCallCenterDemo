@@ -9,3 +9,15 @@ nat=no
 host=dynamic
 port=5060
 insecure=port,invite
+
+; Cisco 7942G extension 200 compatibility override.
+; Keep the ACL limited to this phone's DHCP-reserved address.
+[200](+)
+secret=
+deny=0.0.0.0/0.0.0.0
+permit=192.168.10.186/255.255.255.255
+qualify=no
+nat=no
+host=dynamic
+port=5060
+insecure=port,invite

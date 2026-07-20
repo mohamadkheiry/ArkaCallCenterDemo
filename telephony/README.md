@@ -204,6 +204,15 @@ asterisk -rx "sip show peer 222"
 # در trace تماس باید پاسخ‌های 100 Trying و 180 Ringing دیده شوند.
 ```
 
+همین الگوی dynamic برای داخلی فیزیکی `200` نیز لازم است. تعریف static مانند
+`host=192.168.10.186` باعث می‌شود Asterisk درخواست REGISTER گوشی را با پیام
+`Peer is not supposed to register` رد کند و تماس ورودی با `CHANUNAVAIL` پایان
+یابد. برای این گوشی، بخش `[200](+)` در فایل نمونه استفاده و ACL فقط به
+`192.168.10.186/32` محدود می‌شود. پس از `sip reload` باید خروجی
+`sip show peer 200` شامل `Dynamic: Yes`، Contact معتبر و User-Agent گوشی باشد.
+تست کنترل‌شده از `ext-local,200` باید وضعیت `Ringing` بگیرد و پس از پایان تست
+هیچ channel فعالی باقی نماند.
+
 برای تماس خروجی، شماره‌های موبایل ایران باید مستقیم با قالب `09xxxxxxxxx`
 شماره‌گیری شوند. route خروجی باید الگوی `_0.` را به trunk مربوط بفرستد؛
 در تست کنترل‌شده، ورود به `SIP/shatel/09xxxxxxxxx` و دریافت Progress/Ringing باید
