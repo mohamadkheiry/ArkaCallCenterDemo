@@ -265,3 +265,58 @@ body {
     opacity: 0;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   داشبورد اصلی — فضای زنده‌ی تماس و لایه‌های عمیق
+   ───────────────────────────────────────────────────────────── */
+.dashboard-hero {
+  background:
+    radial-gradient(70% 100% at 100% 0%, rgba(99, 102, 241, 0.48), transparent 64%),
+    radial-gradient(52% 86% at 0% 100%, rgba(14, 165, 233, 0.18), transparent 70%),
+    linear-gradient(135deg, #12133d 0%, #24205f 50%, #322473 100%);
+}
+
+.dashboard-grid-pattern {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to left, black, transparent 88%);
+}
+
+@keyframes dashboard-wave {
+  0%, 100% { transform: scaleY(0.36); opacity: 0.65; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+.dashboard-wave-bar {
+  transform-origin: center;
+  animation: dashboard-wave 1.35s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes dashboard-orb-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8px, -8px, 0) scale(1.04); }
+}
+
+.dashboard-orb {
+  animation: dashboard-orb-float 8s ease-in-out infinite;
+}
+
+@keyframes dashboard-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.12), 0 10px 30px rgba(79, 70, 229, 0.28); }
+  50% { box-shadow: 0 0 0 10px rgba(129, 140, 248, 0), 0 12px 36px rgba(79, 70, 229, 0.42); }
+}
+
+.dashboard-glow-pulse {
+  animation: dashboard-glow 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-wave-bar,
+  .dashboard-orb,
+  .dashboard-glow-pulse {
+    animation: none !important;
+  }
+}
