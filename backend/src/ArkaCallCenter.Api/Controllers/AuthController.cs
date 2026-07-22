@@ -13,12 +13,12 @@ public class AuthController : ControllerBase
     private readonly IAuthService _auth;
     public AuthController(IAuthService auth) => _auth = auth;
 
-    /// <summary>ارسال کد یک‌بارمصرف به شماره موبایل.</summary>
+    /// <summary>خواندن کد یک‌بارمصرف برای شماره موبایل از طریق تماس CodeSenderWithPhone.</summary>
     [HttpPost("request-otp")]
     public async Task<IActionResult> RequestOtp(RequestOtpRequest req, CancellationToken ct)
     {
         var (ok, error) = await _auth.RequestOtpAsync(req.PhoneNumber, ct);
-        return ok ? Ok(new { message = "کد ارسال شد." }) : BadRequest(new { error });
+        return ok ? Ok(new { message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود." }) : BadRequest(new { error });
     }
 
     /// <summary>خواندنِ کد تأیید از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>

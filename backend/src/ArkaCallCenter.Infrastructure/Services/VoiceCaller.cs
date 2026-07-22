@@ -37,7 +37,45 @@ public class VoiceCaller : IVoiceCaller
         PostAsync("/call", new { phone = phoneNumber, text, raw = rawText }, phoneNumber, ct);
 
     public Task<bool> CallOtpAsync(string phoneNumber, string code, CancellationToken ct = default) =>
-        PostAsync("/call-otp", new { phone = phoneNumber, code }, phoneNumber, ct);
+        PostVerificationAsync(phoneNumber, code, ct);
+
+    private async Task<bool> PostVerificationAsync(string phoneNumber, string code, CancellationToken ct)
+    {
+        var baseUrl = BaseUrl();
+        var apiKey = _config["VoiceService:Secret"];
+        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogWarning("Verification call service URL or API key is not configured.");
+            return false;
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/v1/verification-calls")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new { mobile = phoneNumber, code }),
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+            req.Headers.Add("X-API-Key", apiKey);
+            req.Headers.Add("Idempotency-Key", $"arka-login-{Guid.NewGuid():N}");
+            using var res = await _http.SendAsync(req, ct);
+            var body = await res.Content.ReadAsStringAsync(ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                _logger.LogError(
+                    "Verification call service error {Status}: {Body}", res.StatusCode, body);
+                return false;
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Verification call service failed for {Phone}", phoneNumber);
+            return false;
+        }
+    }
 
     private async Task<bool> PostAsync(string path, object payload, string phone, CancellationToken ct)
     {

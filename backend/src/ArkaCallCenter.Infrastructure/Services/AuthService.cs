@@ -12,18 +12,16 @@ public class AuthService : IAuthService
     private const int MaxVerifyAttempts = 5;
 
     private readonly ArkaDbContext _db;
-    private readonly ISmsSender _sms;
     private readonly IVoiceCaller _voice;
     private readonly ITokenService _tokens;
     private readonly ICrmLeadService _crm;
     private readonly IBaleNotifier _bale;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ArkaDbContext db, ISmsSender sms, IVoiceCaller voice, ITokenService tokens,
+    public AuthService(ArkaDbContext db, IVoiceCaller voice, ITokenService tokens,
         ICrmLeadService crm, IBaleNotifier bale, ILogger<AuthService> logger)
     {
         _db = db;
-        _sms = sms;
         _voice = voice;
         _tokens = tokens;
         _crm = crm;
@@ -58,9 +56,17 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(ct);
 
-        // ارسال کد از طریق قالب verify سرویس SMS.ir.
-        await _sms.SendVerifyCodeAsync(phoneNumber, code, ct);
-        return (true, null);
+        // ارسال کد از طریق تماس تلفنی سرویس CodeSenderWithPhone.
+        var sent = await _voice.CallOtpAsync(phoneNumber, code, ct);
+        if (sent) return (true, null);
+
+        var failedOtp = await _db.OtpCodes
+            .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstAsync(ct);
+        failedOtp.Consumed = true;
+        await _db.SaveChangesAsync(ct);
+        return (false, "برقراری تماس تأیید ممکن نشد؛ لطفاً دوباره تلاش کنید.");
     }
 
     public async Task<(bool ok, string? error)> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default)
@@ -179,9 +185,17 @@ public class AuthService : IAuthService
         });
         await _db.SaveChangesAsync(ct);
 
-        // کد به شماره‌ی جدید (از طریق قالب verify) ارسال می‌شود تا مالکیت آن تأیید شود.
-        await _sms.SendVerifyCodeAsync(newPhone, code, ct);
-        return (true, null);
+        // کد از طریق تماس CodeSenderWithPhone خوانده می‌شود تا مالکیت شماره تأیید شود.
+        var sent = await _voice.CallOtpAsync(newPhone, code, ct);
+        if (sent) return (true, null);
+
+        var failedOtp = await _db.OtpCodes
+            .Where(x => x.PhoneNumber == newPhone && !x.Consumed)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstAsync(ct);
+        failedOtp.Consumed = true;
+        await _db.SaveChangesAsync(ct);
+        return (false, "برقراری تماس تأیید ممکن نشد؛ لطفاً دوباره تلاش کنید.");
     }
 
     public async Task<(bool ok, string? error)> ConfirmPhoneChangeAsync(int userId, string newPhone, string code, CancellationToken ct = default)
