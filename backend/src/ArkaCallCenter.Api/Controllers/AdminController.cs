@@ -1,4 +1,5 @@
 using ArkaCallCenter.Api.Models;
+using ArkaCallCenter.Api.Extensions;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
@@ -28,13 +29,14 @@ public class AdminController : ControllerBase
     private readonly IDemoService _demos;
     private readonly IAsteriskProvisioningService _asterisk;
     private readonly ITokenService _tokens;
+    private readonly ILogger<AdminController> _logger;
     private readonly string _uploadsPath;
 
     private readonly IBaleNotifier _bale;
 
     public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai,
         IDemoService demos, IAsteriskProvisioningService asterisk, ITokenService tokens,
-        IBaleNotifier bale, IConfiguration config)
+        IBaleNotifier bale, IConfiguration config, ILogger<AdminController> logger)
     {
         _db = db;
         _settings = settings;
@@ -42,6 +44,7 @@ public class AdminController : ControllerBase
         _demos = demos;
         _asterisk = asterisk;
         _tokens = tokens;
+        _logger = logger;
         _bale = bale;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
@@ -303,16 +306,110 @@ public class AdminController : ControllerBase
         return Ok(users);
     }
 
+    /// <summary>
+    /// ایجاد سوپرادمین با شماره موبایل. اگر کاربر از قبل وجود داشته باشد، همان حساب ارتقا پیدا می‌کند.
+    /// ورود سوپرادمین جدید مانند سایر کاربران با OTP انجام می‌شود.
+    /// </summary>
+    [HttpPost("users/super-admins")]
+    public async Task<IActionResult> CreateSuperAdmin(CreateSuperAdminRequest req, CancellationToken ct)
+    {
+        var phone = NormalizePhone(req.PhoneNumber);
+        if (!IsValidIranianMobile(phone))
+            return BadRequest(new { error = "شماره موبایل معتبر ایرانی وارد کنید." });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone, ct);
+        var created = user is null;
+        if (created)
+        {
+            user = new User
+            {
+                PhoneNumber = phone,
+                FirstName = Clean(req.FirstName),
+                LastName = Clean(req.LastName),
+                Role = UserRole.SuperAdmin,
+                IsActive = true,
+                // سوپرادمین جدید باید بعد از ورود OTP مستقیماً به پنل مدیریت دسترسی داشته باشد.
+                ProfileCompleted = true,
+            };
+            _db.Users.Add(user);
+        }
+        else
+        {
+            if (user!.IsDemo)
+                return BadRequest(new { error = "حساب دمو را نمی‌توان به سوپرادمین تبدیل کرد." });
+
+            user.Role = UserRole.SuperAdmin;
+            user.IsActive = true;
+            user.ProfileCompleted = true;
+            if (req.FirstName is not null) user.FirstName = Clean(req.FirstName);
+            if (req.LastName is not null) user.LastName = Clean(req.LastName);
+            user.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        _logger.LogWarning("Super admin {ActorId} {Action} super-admin account {TargetId}.",
+            User.GetUserId(), created ? "created" : "promoted", user.Id);
+        return StatusCode(created ? StatusCodes.Status201Created : StatusCodes.Status200OK, new
+        {
+            message = created ? "سوپرادمین جدید ایجاد شد." : "کاربر موجود به سوپرادمین ارتقا یافت.",
+            user.Id,
+            user.PhoneNumber,
+            role = user.Role.ToString(),
+            created,
+        });
+    }
+
+    /// <summary>ارتقای یک کاربر موجود به سوپرادمین توسط یک سوپرادمین دیگر.</summary>
+    [HttpPut("users/{id:int}/role")]
+    public async Task<IActionResult> UpdateUserRole(int id, UpdateUserRoleRequest req, CancellationToken ct)
+    {
+        if (req.Role != UserRole.SuperAdmin)
+            return BadRequest(new { error = "در این نسخه فقط ارتقا به نقش سوپرادمین مجاز است." });
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id && !u.IsDemo, ct);
+        if (user is null) return NotFound(new { error = "کاربر یافت نشد." });
+
+        user.Role = UserRole.SuperAdmin;
+        user.ProfileCompleted = true;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogWarning("Super admin {ActorId} promoted user {TargetId} to SuperAdmin.", User.GetUserId(), user.Id);
+        return Ok(new
+        {
+            message = id == User.GetUserId()
+                ? "حساب شما سوپرادمین است."
+                : "نقش کاربر به سوپرادمین تغییر کرد؛ کاربر باید دوباره وارد سامانه شود.",
+            user.Id,
+            role = user.Role.ToString(),
+        });
+    }
+
     [HttpPut("users/{id:int}/limit")]
     public async Task<IActionResult> SetUserLimit(int id, UpdateUserLimitRequest req, CancellationToken ct)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return NotFound();
+
         user.CallMinuteLimit = req.CallMinuteLimit;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(new { message = "محدودیت کاربر به‌روزرسانی شد." });
     }
+
+    private static string NormalizePhone(string? phone)
+    {
+        phone = new string((phone ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (phone.StartsWith("0098")) phone = "0" + phone[4..];
+        else if (phone.StartsWith("98") && phone.Length == 12) phone = "0" + phone[2..];
+        else if (phone.StartsWith("9") && phone.Length == 10) phone = "0" + phone;
+        return phone;
+    }
+
+    private static bool IsValidIranianMobile(string phone) =>
+        phone.Length == 11 && phone.StartsWith("09");
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>ویرایش اطلاعات کاربر توسط سوپرادمین: نام، نام‌خانوادگی، برند، وضعیت فعال و محدودیت.</summary>
     [HttpPut("users/{id:int}")]
@@ -320,6 +417,16 @@ public class AdminController : ControllerBase
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return NotFound();
+
+        if (user.Role == UserRole.SuperAdmin && req.IsActive == false)
+        {
+            if (id == User.GetUserId())
+                return BadRequest(new { error = "نمی‌توانید حساب سوپرادمین خودتان را غیرفعال کنید." });
+            var hasAnotherActiveAdmin = await _db.Users.AnyAsync(
+                u => u.Id != id && !u.IsDemo && u.Role == UserRole.SuperAdmin && u.IsActive, ct);
+            if (!hasAnotherActiveAdmin)
+                return BadRequest(new { error = "آخرین سوپرادمین فعال را نمی‌توان غیرفعال کرد." });
+        }
 
         if (req.FirstName is not null) user.FirstName = req.FirstName.Trim();
         if (req.LastName is not null) user.LastName = req.LastName.Trim();

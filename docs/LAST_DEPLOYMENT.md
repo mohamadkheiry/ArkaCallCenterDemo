@@ -74,3 +74,19 @@ contextهای `arka-main`، `arka-ai` و داخلی تست پذیرش `9000` د�
 systemctl is-enabled arka-call-center.service  # enabled
 systemctl is-active arka-call-center.service   # active
 ```
+
+## مدیریت سوپرادمین‌ها
+
+در تب «کاربران» پنل سوپرادمین امکان ایجاد حساب مدیریتی با شماره موبایل و ارتقای کاربر
+موجود به نقش `SuperAdmin` اضافه شده است. حساب جدید با همان فرایند OTP وارد می‌شود و
+کاربر ارتقایافته برای دریافت claim نقش جدید باید یک بار دوباره وارد سامانه شود.
+
+APIهای متناظر فقط با نقش `SuperAdmin` قابل فراخوانی‌اند:
+
+```text
+POST /api/admin/users/super-admins
+PUT  /api/admin/users/{id}/role
+```
+
+ایجاد/ارتقای نقش در لاگ عملیاتی API ثبت می‌شود. پنل همچنین از غیرفعال‌کردن حساب
+سوپرادمین جاری و آخرین سوپرادمین فعال جلوگیری می‌کند.

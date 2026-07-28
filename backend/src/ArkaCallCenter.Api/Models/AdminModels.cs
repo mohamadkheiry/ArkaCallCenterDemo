@@ -17,6 +17,8 @@ public record FallbackMessageRequest(string Text, string Voice);
 
 public record UpdateUserLimitRequest(int? CallMinuteLimit);
 public record UpdateUserRequest(string? FirstName, string? LastName, string? BrandName, bool? IsActive, int? CallMinuteLimit);
+public record UpdateUserRoleRequest(UserRole Role);
+public record CreateSuperAdminRequest(string PhoneNumber, string? FirstName, string? LastName);
 
 public record CreateDemoRequest(int Extension, string Label, string WelcomeText, string KbText, string? Voice, int? MinuteLimit);
 public record UpdateDemoRequest(string? Label, string? WelcomeText, string? KbText, string? Voice, int? MinuteLimit, bool? IsActive);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Pencil, ShieldCheck, LogIn, Search } from 'lucide-react'
+import { ChevronDown, Pencil, ShieldCheck, LogIn, Search, UserPlus } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { useFlash } from '../../lib/flash'
 import { useAuth } from '../../context/AuthContext'
@@ -26,6 +26,7 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
   const [busy, setBusy] = useState(false)
   const { flash, ok, fail, clear } = useFlash()
   const [entering, setEntering] = useState(false)
+  const [promoting, setPromoting] = useState(false)
   const { impersonate } = useAuth()
   const navigate = useNavigate()
 
@@ -59,6 +60,22 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
       fail(apiError(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function promoteToSuperAdmin() {
+    const label = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.phoneNumber
+    if (!confirm(`نقش «${label}» به سوپرادمین تغییر کند؟ این کاربر به تمام بخش‌های مدیریتی دسترسی خواهد داشت.`)) return
+    setPromoting(true)
+    clear()
+    try {
+      await api.put(`/api/admin/users/${user.id}/role`, { role: 'SuperAdmin' })
+      ok('کاربر به سوپرادمین ارتقا یافت. برای دریافت دسترسی جدید باید دوباره وارد سامانه شود.')
+      onSaved()
+    } catch (e) {
+      fail(apiError(e))
+    } finally {
+      setPromoting(false)
     }
   }
 
@@ -114,9 +131,14 @@ function UserRow({ user, onSaved }: { user: AdminUser; onSaved: () => void }) {
               <Pencil size={15} /> ذخیره تغییرات
             </Button>
             {user.role !== 'SuperAdmin' && (
-              <Button variant="outline" onClick={enterPanel} loading={entering}>
-                <LogIn size={15} /> ورود به پنل کاربر
-              </Button>
+              <>
+                <Button variant="outline" onClick={enterPanel} loading={entering}>
+                  <LogIn size={15} /> ورود به پنل کاربر
+                </Button>
+                <Button onClick={promoteToSuperAdmin} loading={promoting}>
+                  <ShieldCheck size={15} /> ارتقا به سوپرادمین
+                </Button>
+              </>
             )}
             {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
           </div>
@@ -130,6 +152,9 @@ export default function UsersTab() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
+  const [newAdmin, setNewAdmin] = useState({ phoneNumber: '', firstName: '', lastName: '' })
+  const [creatingAdmin, setCreatingAdmin] = useState(false)
+  const { flash, ok, fail, clear } = useFlash()
 
   async function load() {
     const { data } = await api.get<AdminUser[]>('/api/admin/users')
@@ -139,6 +164,27 @@ export default function UsersTab() {
   useEffect(() => {
     load()
   }, [])
+
+  async function createSuperAdmin(e: React.FormEvent) {
+    e.preventDefault()
+    clear()
+    setCreatingAdmin(true)
+    try {
+      const phoneNumber = toEn(newAdmin.phoneNumber).replace(/\D/g, '')
+      const { data } = await api.post<{ message: string }>('/api/admin/users/super-admins', {
+        phoneNumber,
+        firstName: newAdmin.firstName || null,
+        lastName: newAdmin.lastName || null,
+      })
+      ok(data.message)
+      setNewAdmin({ phoneNumber: '', firstName: '', lastName: '' })
+      await load()
+    } catch (e) {
+      fail(apiError(e))
+    } finally {
+      setCreatingAdmin(false)
+    }
+  }
 
   // سرچ زنده روی نام، نام‌خانوادگی، برند، شماره و داخلی
   const filtered = useMemo(() => {
@@ -155,8 +201,44 @@ export default function UsersTab() {
     <Card className="animate-in">
       <h3 className="text-lg font-bold text-slate-800">کاربران</h3>
       <p className="mt-1 text-sm text-slate-500">
-        روی هر کاربر بزنید تا اطلاعات او را ویرایش کنید یا وارد پنلش شوید.
+        کاربران را ویرایش کنید، وارد پنلشان شوید یا دسترسی سوپرادمین بدهید.
       </p>
+
+      <form onSubmit={createSuperAdmin} className="mt-5 rounded-2xl border border-brand-100 bg-brand-50/50 p-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+          <UserPlus size={18} className="text-brand-600" /> ایجاد سوپرادمین جدید
+        </div>
+        <p className="mt-1 text-xs leading-6 text-slate-500">
+          اگر شماره قبلاً ثبت شده باشد، همان کاربر ارتقا پیدا می‌کند؛ در غیر این صورت حساب جدید ساخته می‌شود. ورود با OTP انجام می‌شود.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <TextInput
+            label="شماره موبایل"
+            dir="ltr"
+            inputMode="numeric"
+            required
+            placeholder="09123456789"
+            value={newAdmin.phoneNumber}
+            onChange={(e) => setNewAdmin({ ...newAdmin, phoneNumber: e.target.value })}
+          />
+          <TextInput
+            label="نام (اختیاری)"
+            value={newAdmin.firstName}
+            onChange={(e) => setNewAdmin({ ...newAdmin, firstName: e.target.value })}
+          />
+          <TextInput
+            label="نام خانوادگی (اختیاری)"
+            value={newAdmin.lastName}
+            onChange={(e) => setNewAdmin({ ...newAdmin, lastName: e.target.value })}
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button type="submit" loading={creatingAdmin}>
+            <ShieldCheck size={16} /> ایجاد یا ارتقا
+          </Button>
+          {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
+        </div>
+      </form>
 
       <div className="relative mt-4">
         <Search size={17} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
