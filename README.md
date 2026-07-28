@@ -50,6 +50,9 @@ chmod +x deploy.sh && ./deploy.sh
 
 راهنمای کامل: **[`deployment.md`](./deployment.md)** · زیپ آماده: [`release/ArkaCallCenter-deploy.zip`](./release/ArkaCallCenter-deploy.zip)
 
+آخرین مقصد عملیاتی، آدرس‌ها، شمارش داده‌های منتقل‌شده و مسیر backup در
+[`docs/LAST_DEPLOYMENT.md`](./docs/LAST_DEPLOYMENT.md) ثبت شده است.
+
 ## شروع سریع (توسعه)
 
 پیش‌نیازها: .NET 9 SDK، Node ≥ ۲۰، MySQL ۸.
