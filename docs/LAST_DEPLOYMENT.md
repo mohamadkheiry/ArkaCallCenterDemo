@@ -12,7 +12,7 @@
 | commit برنامه | `236f30de59208fcd53acc828e7bc44437f934d3a` |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
-| اجرای خودکار | Docker فعال در boot و policy تمام کانتینرها `unless-stopped` |
+| اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
 
 ## آدرس‌ها
 
@@ -60,3 +60,17 @@ contextهای `arka-main`، `arka-ai` و داخلی تست پذیرش `9000` د�
 ```
 
 این بکاپ شامل dump دیتابیس محلی، uploads، environment و نسخه قبل/بعد dialplan است.
+
+## راه‌اندازی خودکار پس از reboot
+
+واحد systemd با نام `arka-call-center.service` روی سرور نصب، فعال و با restart کنترل‌شده
+تست شده است. این واحد بعد از آماده‌شدن شبکه و Docker، استک Compose را از مسیر
+`/opt/arka-call-center` بالا می‌آورد. نمونه قابل نصب آن در
+[`systemd/arka-call-center.service`](../systemd/arka-call-center.service) نگهداری می‌شود.
+
+وضعیت مورد انتظار:
+
+```bash
+systemctl is-enabled arka-call-center.service  # enabled
+systemctl is-active arka-call-center.service   # active
+```

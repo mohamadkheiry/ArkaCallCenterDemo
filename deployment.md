@@ -87,6 +87,23 @@ docker compose ps
 docker compose logs -f api    # migration خودکار + seed
 ```
 
+### اجرای خودکار در Linux با systemd
+
+برای اینکه کل استک پس از reboot سرور به‌صورت خودکار اجرا شود، واحد آمادهٔ systemd را نصب کنید:
+
+```bash
+sudo install -m 0644 systemd/arka-call-center.service /etc/systemd/system/arka-call-center.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now arka-call-center.service
+systemctl is-enabled arka-call-center.service
+systemctl is-active arka-call-center.service
+```
+
+این واحد به Docker و `network-online.target` وابسته است و Compose را از مسیر
+`/opt/arka-call-center` اجرا می‌کند. در صورت استفاده از مسیر دیگر، مقدار
+`WorkingDirectory` را پیش از نصب تغییر دهید. policy سرویس‌های Compose نیز
+`unless-stopped` است تا کانتینرها در رخدادهای بازیابی Docker مجدداً اجرا شوند.
+
 پس از بالا آمدن:
 
 | مورد | آدرس |
