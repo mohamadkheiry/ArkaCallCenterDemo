@@ -76,7 +76,7 @@ flowchart TB
 | Frontend | React 18 · Vite · TypeScript · Tailwind CSS v4 · Vazirmatn (RTL) · lucide-react · React Query · React Router |
 | Backend | .NET 9 · ASP.NET Core Web API · Clean Architecture |
 | ORM / DB | EF Core 9 · Pomelo.MySql · **MySQL 8** |
-| AI | OpenAI Embeddings (`text-embedding-3-small`) · `gpt-realtime` · TTS (`gpt-4o-mini-tts`) |
+| AI | OpenAI Embeddings (`text-embedding-3-large`) · `gpt-realtime` · TTS (`gpt-4o-mini-tts`) |
 | SMS | SMS.ir REST v1 |
 | Telephony | Asterisk (Isabel) · AudioSocket · SSH.NET (provisioning + SCP) |
 | صوت | PdfPig (استخراج متن) · resampler خطی ۸k↔۲۴k · WAV/SLIN داخلی |

@@ -60,7 +60,7 @@ public class OpenAiService : IOpenAiService
 
     public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct = default)
     {
-        var model = await ModelAsync(SettingKeys.OpenAiEmbeddingModel, "text-embedding-3-small", ct);
+        var model = await ModelAsync(SettingKeys.OpenAiEmbeddingModel, "text-embedding-3-large", ct);
         var req = await BuildAsync(HttpMethod.Post, "/embeddings", new { model, input = texts }, ct);
         using var res = await _http.SendAsync(req, ct);
         await EnsureOkAsync(res, ct);

@@ -161,9 +161,9 @@ public class RagService : IRagService
     {
         var model = await _settings.GetAsync(
             SettingKeys.OpenAiEmbeddingModel,
-            "text-embedding-3-small",
+            "text-embedding-3-large",
             ct);
-        return string.IsNullOrWhiteSpace(model) ? "text-embedding-3-small" : model.Trim();
+        return string.IsNullOrWhiteSpace(model) ? "text-embedding-3-large" : model.Trim();
     }
 
     private async Task<List<KnowledgeChunk>> ReindexForCurrentModelAsync(

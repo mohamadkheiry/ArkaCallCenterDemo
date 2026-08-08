@@ -74,7 +74,7 @@
 ## ۵. طراحی RAG
 
 - منبع KB → **chunking** (مثلاً ~۵۰۰ کاراکتر با overlap). چون سقف ۲۰۰۰ کاراکتر/۱۰۰KB است، تعداد chunkها کم است.
-- هر chunk → `text-embedding-3-small` → بردار در `KnowledgeChunk.Embedding` (JSON float[]).
+- هر chunk → `text-embedding-3-large` → بردار در `KnowledgeChunk.Embedding` همراه نام مدل.
 - هنگام تماس: سوالِ کاربر (از realtime transcript) → embedding → **cosine similarity** با chunkها (محاسبه در حافظه؛ حجم کوچک است) → top-k.
 - اگر بیشترین شباهت < آستانه (`AppSettings.RagSimilarityThreshold`) → «پاسخ در پایگاه دانش نیست» → fallback.
 - در غیر این صورت، chunkهای بازیابی‌شده به‌عنوان context به `gpt-realtime` (system/instructions) داده می‌شوند.

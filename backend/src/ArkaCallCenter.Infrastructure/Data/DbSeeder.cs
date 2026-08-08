@@ -31,7 +31,7 @@ public static class DbSeeder
             (SettingKeys.OpenAiBaseUrl, config["OPENAI_BASE_URL"], "https://api.openai.com/v1", false),
             (SettingKeys.OpenAiApiKey, config["OPENAI_API_KEY"], null, true),
             (SettingKeys.OpenAiChatModel, config["OPENAI_CHAT_MODEL"], "gpt-4o-mini", false),
-            (SettingKeys.OpenAiEmbeddingModel, config["OPENAI_EMBEDDING_MODEL"], "text-embedding-3-small", false),
+            (SettingKeys.OpenAiEmbeddingModel, config["OPENAI_EMBEDDING_MODEL"], "text-embedding-3-large", false),
             (SettingKeys.OpenAiRealtimeModel, config["OPENAI_REALTIME_MODEL"], "gpt-realtime-2.1", false),
             (SettingKeys.OpenAiTtsModel, config["OPENAI_TTS_MODEL"], "gpt-4o-mini-tts", false),
             (SettingKeys.SmsIrApiKey, config["SMSIR_API_KEY"], null, true),
