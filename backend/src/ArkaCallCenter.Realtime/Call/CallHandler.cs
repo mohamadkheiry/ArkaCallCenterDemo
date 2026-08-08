@@ -354,6 +354,16 @@ public class CallHandler
             var unansweredRecorded = false;
             try
             {
+                if (ConversationTurnClassifier.TryCreateResponse(question, out var conversationalResponse))
+                {
+                    _logger.LogInformation(
+                        "Handling conversational turn without RAG for ext {Ext}: {Question}",
+                        extension,
+                        question);
+                    await realtime.CreateConversationalResponseAsync(conversationalResponse, turnCt);
+                    return;
+                }
+
                 await ragGate.WaitAsync(turnCt);
                 RagAnswer result;
                 try { result = await rag.RetrieveAsync(sp.User.Id, question, turnCt); }
@@ -560,7 +570,8 @@ public class CallHandler
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
         با فارسی معیار ایران، کاملاً روان و طبیعی و بدون لهجه انگلیسی صحبت کن؛ از مکث‌های غیرضروری پرهیز کن.
         برای هر نوبت، قطعه مرتبط پایگاه دانش جداگانه در دستور همان پاسخ در اختیارت قرار می‌گیرد.
-        فقط بر اساس همان قطعه پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
+        احوال‌پرسی، تشکر، تأیید کوتاه و خداحافظی را طبیعی و مؤدبانه پاسخ بده؛ این موارد نیازمند پایگاه دانش نیستند.
+        برای پرسش‌های دانشی فقط بر اساس قطعه ارائه‌شده پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
         این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
         میزانِ پایبندی به پایگاه دانش: {faithfulness}
         """;

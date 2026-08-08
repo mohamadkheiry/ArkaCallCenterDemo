@@ -115,6 +115,17 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         audio = Convert.ToBase64String(pcm24k),
     }, ct);
 
+    /// <summary>پاسخ کوتاه به احوال‌پرسی، تشکر و خداحافظی؛ مستقل از پایگاه دانش.</summary>
+    public Task CreateConversationalResponseAsync(string responseText, CancellationToken ct)
+        => SendAsync(new
+        {
+            type = "response.create",
+            response = new
+            {
+                instructions = $"فقط همین جمله را طبیعی و دوستانه بگو و چیزی اضافه نکن: «{responseText}»",
+            },
+        }, ct);
+
     public Task CreateGroundedResponseAsync(string question, string? context, string fallback, CancellationToken ct)
     {
         var responseInstructions = !string.IsNullOrWhiteSpace(context)

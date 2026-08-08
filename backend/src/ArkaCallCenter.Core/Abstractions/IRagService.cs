@@ -15,6 +15,11 @@ public interface IRagService
     Task IndexAsync(KnowledgeBase kb, CancellationToken ct = default);
 
     /// <summary>
+    /// در صورت قدیمی‌بودن یا تفاوت مدل embedding، ایندکس کاربر را با مدل فعلی بازسازی می‌کند.
+    /// </summary>
+    Task EnsureIndexAsync(int userId, CancellationToken ct = default);
+
+    /// <summary>
     /// مرتبط‌ترین chunkها را برای یک پرسش بازیابی می‌کند. اگر بیشترین شباهت زیر
     /// آستانه باشد، Found=false برمی‌گردد (یعنی پاسخ در پایگاه دانش نیست).
     /// </summary>
