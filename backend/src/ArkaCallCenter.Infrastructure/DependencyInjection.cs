@@ -33,7 +33,9 @@ public static class DependencyInjection
         services.AddSingleton<IBaleNotifier, BaleNotifier>();
 
         // فاز ۳: پایگاه دانش + RAG + moderation
-        services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(60));
+        // TTS فارسی روی شبکه‌ی سرور گاهی بیش از ۶۰ ثانیه زمان می‌برد؛ timeout کوتاه
+        // باعث 502 در صوت سؤال بی‌پاسخ و بازتولید خوش‌آمد می‌شد.
+        services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(120));
         services.AddScoped<IModerationService, ModerationService>();
         services.AddScoped<IRagService, RagService>();
         services.AddScoped<IFileTextExtractor, FileTextExtractor>();

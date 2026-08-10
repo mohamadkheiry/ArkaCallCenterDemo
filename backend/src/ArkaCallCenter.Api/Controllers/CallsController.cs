@@ -18,13 +18,20 @@ public class CallsController : ControllerBase
     private readonly ArkaDbContext _db;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
+    private readonly ILogger<CallsController> _logger;
     private readonly string _uploadsPath;
 
-    public CallsController(ArkaDbContext db, IOpenAiService openai, ISettingsService settings, IConfiguration config)
+    public CallsController(
+        ArkaDbContext db,
+        IOpenAiService openai,
+        ISettingsService settings,
+        IConfiguration config,
+        ILogger<CallsController> logger)
     {
         _db = db;
         _openai = openai;
         _settings = settings;
+        _logger = logger;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -110,6 +117,10 @@ public class CallsController : ControllerBase
 
         // کش روی دیسک تا هر پخش، یک درخواستِ TTS جدید (و هزینه) نسازد.
         var cachePath = Path.Combine(_uploadsPath, $"unanswered_{id}_{index}.wav");
+        var legacyCachePath = Path.Combine(_uploadsPath, $"unanswered_{id}_{index}.mp3");
+        if (!HasPlayableWav(cachePath) && HasPlayableLegacyMp3(legacyCachePath))
+            return PhysicalFile(legacyCachePath, "audio/mpeg", enableRangeProcessing: true);
+
         if (!HasPlayableWav(cachePath))
         {
             var voice = await ResolveVoiceAsync(userId, ct);
@@ -121,8 +132,9 @@ public class CallsController : ControllerBase
                     throw new InvalidDataException("TTS returned an empty WAV.");
                 await WriteAtomicallyAsync(cachePath, audio, ct);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Could not generate unanswered-question audio for call {CallId}, item {Index}.", id, index);
                 return StatusCode(502, new { error = "تولید صوت ممکن نشد؛ لطفاً بعداً تلاش کنید." });
             }
         }
@@ -190,6 +202,20 @@ public class CallsController : ControllerBase
             return stream.Read(header) == header.Length &&
                    header[..4].SequenceEqual("RIFF"u8) &&
                    header[8..12].SequenceEqual("WAVE"u8);
+        }
+        catch { return false; }
+    }
+
+    private static bool HasPlayableLegacyMp3(string path)
+    {
+        try
+        {
+            if (!System.IO.File.Exists(path)) return false;
+            using var stream = System.IO.File.OpenRead(path);
+            if (stream.Length < 128) return false;
+            Span<byte> header = stackalloc byte[3];
+            if (stream.Read(header) != header.Length) return false;
+            return header.SequenceEqual("ID3"u8) || (header[0] == 0xff && (header[1] & 0xe0) == 0xe0);
         }
         catch { return false; }
     }
