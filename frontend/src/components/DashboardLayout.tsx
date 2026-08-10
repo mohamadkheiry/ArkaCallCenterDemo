@@ -14,8 +14,9 @@ import {
   UserCog,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { api } from '../lib/api'
 import { Logo, cn } from './ui'
-import Tour, { TOUR_DONE_KEY } from './Tour'
+import Tour from './Tour'
 
 interface NavItem {
   to: string
@@ -37,7 +38,7 @@ const NAV: NavItem[] = [
 ]
 
 export default function DashboardLayout() {
-  const { me, logout, impersonating, stopImpersonating } = useAuth()
+  const { me, refresh, logout, impersonating, stopImpersonating } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
@@ -45,13 +46,25 @@ export default function DashboardLayout() {
 
   const items = NAV.filter((n) => !n.adminOnly || isAdmin)
 
-  // اولین ورود: تور راهنما به‌صورت خودکار
+  // فقط اولین ورود هر کاربر: وضعیت پایان تور در دیتابیس نگهداری می‌شود، نه مرورگر.
   useEffect(() => {
-    if (!localStorage.getItem(TOUR_DONE_KEY)) {
+    if (me && !me.hasCompletedTour) {
       const t = setTimeout(() => setTourOpen(true), 600)
       return () => clearTimeout(t)
     }
-  }, [])
+  }, [me?.id, me?.hasCompletedTour])
+
+  async function closeTour() {
+    setTourOpen(false)
+    if (!me?.hasCompletedTour) {
+      try {
+        await api.post('/api/me/tour/complete')
+        await refresh()
+      } catch {
+        // اگر ثبت سرور شکست بخورد، در ورود بعدی دوباره نمایش داده می‌شود.
+      }
+    }
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -181,7 +194,7 @@ export default function DashboardLayout() {
         </main>
       </div>
 
-      <Tour open={tourOpen} isAdmin={isAdmin} onClose={() => setTourOpen(false)} onSidebarChange={setOpen} />
+      <Tour open={tourOpen} isAdmin={isAdmin} onClose={closeTour} onSidebarChange={setOpen} />
     </div>
   )
 }

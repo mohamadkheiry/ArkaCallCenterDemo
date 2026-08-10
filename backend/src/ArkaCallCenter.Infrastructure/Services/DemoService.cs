@@ -129,6 +129,9 @@ public class DemoService : IDemoService
         if (user is null) return new DemoResult(false, "دمو یافت نشد.", null);
 
         if (label is not null) { user.DemoLabel = label.Trim(); user.BrandName = label.Trim(); }
+        var previousVoice = user.VoiceName;
+        var previousWelcome = user.SmartPhone?.WelcomeMessageText;
+        var voiceChanged = voice is not null && !string.Equals(user.VoiceName, voice, StringComparison.Ordinal);
         if (voice is not null) user.VoiceName = voice;
         if (minuteLimit.HasValue) user.CallMinuteLimit = minuteLimit;
         if (isActive.HasValue)
@@ -141,7 +144,22 @@ public class DemoService : IDemoService
         if (welcomeText is not null && user.SmartPhone is not null)
         {
             user.SmartPhone.WelcomeMessageText = welcomeText.Trim();
-            await TryWelcomeAudioAsync(user, user.SmartPhone, ct);
+            if (!await TryWelcomeAudioAsync(user, user.SmartPhone, ct))
+            {
+                user.VoiceName = previousVoice;
+                user.SmartPhone.WelcomeMessageText = previousWelcome;
+                return new DemoResult(false, "تولید پیام خوش‌آمد با تنظیمات جدید انجام نشد؛ مقادیر قبلی حفظ شدند.", null);
+            }
+        }
+        else if (voiceChanged && user.SmartPhone is not null &&
+                 !string.IsNullOrWhiteSpace(user.SmartPhone.WelcomeMessageText))
+        {
+            // ویرایش صرفِ گوینده نیز باید پیام خوش‌آمد موجود را با صدای جدید بازتولید کند.
+            if (!await TryWelcomeAudioAsync(user, user.SmartPhone, ct))
+            {
+                user.VoiceName = previousVoice;
+                return new DemoResult(false, "تولید پیام خوش‌آمد با گوینده جدید انجام نشد؛ گوینده قبلی حفظ شد.", null);
+            }
         }
 
         if (kbText is not null)
@@ -197,19 +215,56 @@ public class DemoService : IDemoService
         catch (Exception ex) { _logger.LogWarning(ex, "Demo KB indexing failed (OpenAI key?)"); }
     }
 
-    private async Task TryWelcomeAudioAsync(User user, SmartPhone sp, CancellationToken ct)
+    private async Task<bool> TryWelcomeAudioAsync(User user, SmartPhone sp, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sp.WelcomeMessageText)) return;
+        if (string.IsNullOrWhiteSpace(sp.WelcomeMessageText)) return true;
         try
         {
             var voice = user.VoiceName ?? await _settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
             // WAV avoids MP3 decoding and lets the realtime worker play the greeting immediately.
             var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, "wav", ct);
-            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}.wav");
-            await File.WriteAllBytesAsync(path, audio, ct);
+            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}_{Guid.NewGuid():N}.wav");
+            var oldPath = sp.WelcomeAudioPath;
+            await WriteAtomicallyAsync(path, audio, ct);
             sp.WelcomeAudioPath = path;
+            await _db.SaveChangesAsync(ct);
+            TryDeleteWelcomeFile(oldPath);
+            return true;
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "Demo welcome TTS failed."); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Demo welcome TTS failed.");
+            return false;
+        }
+    }
+
+    private static async Task WriteAtomicallyAsync(string path, byte[] audio, CancellationToken ct)
+    {
+        var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, audio, ct);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+        }
+    }
+
+    private void TryDeleteWelcomeFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var uploadsRoot = Path.GetFullPath(_uploadsPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+                File.Delete(fullPath);
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not remove superseded demo welcome {Path}.", path); }
     }
 
     private static string GenerateSecret()

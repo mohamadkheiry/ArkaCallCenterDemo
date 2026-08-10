@@ -9,6 +9,12 @@ namespace ArkaCallCenter.Realtime.Call;
 /// </summary>
 public static class ConversationTurnClassifier
 {
+    private static readonly HashSet<string> IdentityQuestionWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "کجا", "کجاست", "کجای", "گرفتم", "گرفته", "گرفته‌ام", "کردم", "کرده", "کرده‌ام",
+        "نام", "اسم", "چیست", "چیه", "کی", "هستید"
+    };
+
     private static readonly HashSet<string> GreetingWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "سلام", "درود", "الو", "صبح", "ظهر", "عصر", "شب", "روز", "وقت", "خسته"
@@ -51,6 +57,36 @@ public static class ConversationTurnClassifier
         "لطف", "دارید", "کنید", "کردید", "می", "کنم", "هستم", "هستی", "هستید", "هست", "است",
         "چه", "چطور", "چطوره", "چطورید", "بابت", "واقعا", "واقعاً"
     };
+
+    public static bool TryCreateBusinessIdentityResponse(string text, string? brandName, out string response)
+    {
+        response = "";
+        var tokens = Tokenize(text);
+        if (tokens.Count == 0 || tokens.Count > 16) return false;
+
+        var asksAboutCallDestination = tokens.Contains("تماس", StringComparer.OrdinalIgnoreCase) &&
+                                       tokens.Any(IdentityQuestionWords.Contains);
+        var asksWhereThisIs = (tokens.Contains("اینجا", StringComparer.OrdinalIgnoreCase) ||
+                               (tokens.Contains("این", StringComparer.OrdinalIgnoreCase) &&
+                                tokens.Contains("جا", StringComparer.OrdinalIgnoreCase))) &&
+                              tokens.Any(token => token is "کجا" or "کجاست" or "کجای");
+        var asksWhoYouAre = tokens.Contains("شما", StringComparer.OrdinalIgnoreCase) &&
+                            tokens.Any(token => token is "کی" or "نام" or "اسم") &&
+                            tokens.Any(token => token is "هستید" or "چیست" or "چیه");
+        var asksBusinessName = (tokens.Contains("کسب", StringComparer.OrdinalIgnoreCase) ||
+                                tokens.Contains("مجموعه", StringComparer.OrdinalIgnoreCase) ||
+                                tokens.Contains("شرکت", StringComparer.OrdinalIgnoreCase)) &&
+                               (tokens.Any(token => token is "نام" or "اسم") ||
+                                tokens.Any(token => token is "چه" or "کدام"));
+
+        if (!asksAboutCallDestination && !asksWhereThisIs && !asksWhoYouAre && !asksBusinessName)
+            return false;
+
+        response = string.IsNullOrWhiteSpace(brandName)
+            ? "شما با این مجموعه تماس گرفته‌اید."
+            : $"شما با کسب‌وکار «{brandName.Trim()}» تماس گرفته‌اید.";
+        return true;
+    }
 
     public static bool TryCreateResponse(string text, out string response)
     {

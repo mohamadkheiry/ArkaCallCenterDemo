@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Entities;
 using ArkaCallCenter.Infrastructure.Data;
@@ -9,7 +10,9 @@ namespace ArkaCallCenter.Infrastructure.Services;
 public class AuthService : IAuthService
 {
     private const int OtpTtlMinutes = 2;
+    private const int OtpCooldownSeconds = 60;
     private const int MaxVerifyAttempts = 5;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> OtpRequestGates = new();
 
     private readonly ArkaDbContext _db;
     private readonly IVoiceCaller _voice;
@@ -29,73 +32,27 @@ public class AuthService : IAuthService
         _logger = logger;
     }
 
-    public async Task<(bool ok, string? error)> RequestOtpAsync(string phoneNumber, CancellationToken ct = default)
+    public async Task<OtpRequestResult> RequestOtpAsync(string phoneNumber, CancellationToken ct = default)
     {
         phoneNumber = NormalizePhone(phoneNumber);
         if (!IsValidIranianMobile(phoneNumber))
-            return (false, "شماره موبایل نامعتبر است.");
+            return new OtpRequestResult(false, "شماره موبایل نامعتبر است.");
 
         // مرحله‌ی ۱ لید برای تیم فروش: به‌محضِ واردکردنِ شماره (حتی اگر کد را تأیید نکند).
         // پیش از throttle قرار دارد تا درخواستِ تکراری هم لید را از دست ندهد؛ خودِ سرویس تکراری نمی‌فرستد.
         _crm.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
         _bale.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
 
-        // جلوگیری از ارسال مکرر: اگر کد فعالِ کمتر از ۶۰ ثانیه وجود دارد، دوباره نساز.
-        var recent = await _db.OtpCodes
-            .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed && x.CreatedAt > DateTime.UtcNow.AddSeconds(-60))
-            .AnyAsync(ct);
-        if (recent)
-            return (false, "کد قبلاً ارسال شده است؛ کمی صبر کنید.");
-
-        var code = Random.Shared.Next(100000, 1000000).ToString();
-        _db.OtpCodes.Add(new OtpCode
-        {
-            PhoneNumber = phoneNumber,
-            Code = code,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
-        });
-        await _db.SaveChangesAsync(ct);
-
-        // ارسال کد از طریق تماس تلفنی سرویس CodeSenderWithPhone.
-        var sent = await _voice.CallOtpAsync(phoneNumber, code, ct);
-        if (sent) return (true, null);
-
-        var failedOtp = await _db.OtpCodes
-            .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed)
-            .OrderByDescending(x => x.CreatedAt)
-            .FirstAsync(ct);
-        failedOtp.Consumed = true;
-        await _db.SaveChangesAsync(ct);
-        return (false, "برقراری تماس تأیید ممکن نشد؛ لطفاً دوباره تلاش کنید.");
+        return await RequestOtpCallCoreAsync(phoneNumber, ct);
     }
 
-    public async Task<(bool ok, string? error)> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default)
+    public async Task<OtpRequestResult> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default)
     {
         phoneNumber = NormalizePhone(phoneNumber);
         if (!IsValidIranianMobile(phoneNumber))
-            return (false, "شماره موبایل نامعتبر است.");
+            return new OtpRequestResult(false, "شماره موبایل نامعتبر است.");
 
-        // کدِ فعالِ موجود (همان کدی که با پیامک رفته) را بردار؛ اگر نبود، بساز.
-        var otp = await _db.OtpCodes
-            .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed && x.ExpiresAt > DateTime.UtcNow)
-            .OrderByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-        if (otp is null)
-        {
-            var code = Random.Shared.Next(100000, 1000000).ToString();
-            otp = new OtpCode
-            {
-                PhoneNumber = phoneNumber,
-                Code = code,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
-            };
-            _db.OtpCodes.Add(otp);
-            await _db.SaveChangesAsync(ct);
-        }
-
-        // با فایل‌های صوتیِ ضبط‌شده خوانده می‌شود: صدای اولیه + ارقام + «مجدداً…» + ارقام.
-        var ok = await _voice.CallOtpAsync(phoneNumber, otp.Code, ct);
-        return ok ? (true, null) : (false, "برقراری تماس ممکن نشد؛ لطفاً دوباره تلاش کنید.");
+        return await RequestOtpCallCoreAsync(phoneNumber, ct);
     }
 
     public async Task<VerifyOtpResult> VerifyOtpAsync(string phoneNumber, string code, CancellationToken ct = default)
@@ -231,6 +188,58 @@ public class AuthService : IAuthService
     }
 
     // ---- helpers ----
+    private async Task<OtpRequestResult> RequestOtpCallCoreAsync(string phoneNumber, CancellationToken ct)
+    {
+        var requestGate = OtpRequestGates.GetOrAdd(phoneNumber, _ => new SemaphoreSlim(1, 1));
+        await requestGate.WaitAsync(ct);
+        try
+        {
+            var previous = await _db.OtpCodes
+                .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var retryAfter = previous is null ? 0 : RemainingCooldownSeconds(previous.CreatedAt);
+            if (retryAfter > 0)
+                return new OtpRequestResult(
+                    false,
+                    $"برای درخواست تماس مجدد، {retryAfter} ثانیه دیگر صبر کنید.",
+                    retryAfter);
+
+            // با درخواست مجاز بعدی، کد قبلی باطل و یک کد تازه ساخته می‌شود تا زمان
+            // cooldown و اعتبار کد همیشه از یک نقطه‌ی مشخص محاسبه شوند.
+            if (previous is not null) previous.Consumed = true;
+
+            var otp = new OtpCode
+            {
+                PhoneNumber = phoneNumber,
+                Code = Random.Shared.Next(100000, 1000000).ToString(),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
+            };
+            _db.OtpCodes.Add(otp);
+            await _db.SaveChangesAsync(ct);
+
+            // با فایل‌های صوتی ضبط‌شده خوانده می‌شود: صدای اولیه + ارقام + «مجدداً…» + ارقام.
+            var sent = await _voice.CallOtpAsync(phoneNumber, otp.Code, ct);
+            if (sent)
+                return new OtpRequestResult(true, null, RemainingCooldownSeconds(otp.CreatedAt));
+
+            otp.Consumed = true;
+            await _db.SaveChangesAsync(ct);
+            return new OtpRequestResult(false, "برقراری تماس تأیید ممکن نشد؛ لطفاً دوباره تلاش کنید.");
+        }
+        finally
+        {
+            requestGate.Release();
+        }
+    }
+
+    private static int RemainingCooldownSeconds(DateTime createdAt)
+    {
+        var remaining = OtpCooldownSeconds - (DateTime.UtcNow - createdAt).TotalSeconds;
+        return Math.Max(0, (int)Math.Ceiling(remaining));
+    }
+
     private static string NormalizePhone(string phone)
     {
         phone = new string((phone ?? string.Empty).Where(char.IsDigit).ToArray());

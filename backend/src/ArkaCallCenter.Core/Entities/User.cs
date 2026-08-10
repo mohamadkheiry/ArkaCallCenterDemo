@@ -15,6 +15,9 @@ public class User : BaseEntity
     /// <summary>true وقتی نام/برند تکمیل شده باشد (پروفایل کامل).</summary>
     public bool ProfileCompleted { get; set; }
 
+    /// <summary>تور گام‌به‌گام فقط تا پایان اولین ورود به‌صورت خودکار نمایش داده می‌شود.</summary>
+    public bool HasCompletedTour { get; set; }
+
     /// <summary>گوینده‌ی انتخابی کاربر برای صدای تلفن هوشمند (از VoiceOption).</summary>
     public string? VoiceName { get; set; }
 

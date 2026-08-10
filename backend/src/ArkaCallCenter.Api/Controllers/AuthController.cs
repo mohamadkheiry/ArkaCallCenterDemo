@@ -17,16 +17,16 @@ public class AuthController : ControllerBase
     [HttpPost("request-otp")]
     public async Task<IActionResult> RequestOtp(RequestOtpRequest req, CancellationToken ct)
     {
-        var (ok, error) = await _auth.RequestOtpAsync(req.PhoneNumber, ct);
-        return ok ? Ok(new { message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود." }) : BadRequest(new { error });
+        var result = await _auth.RequestOtpAsync(req.PhoneNumber, ct);
+        return OtpResponse(result);
     }
 
     /// <summary>خواندنِ کد تأیید از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>
     [HttpPost("request-otp-call")]
     public async Task<IActionResult> RequestOtpByCall(RequestOtpRequest req, CancellationToken ct)
     {
-        var (ok, error) = await _auth.RequestOtpByCallAsync(req.PhoneNumber, ct);
-        return ok ? Ok(new { message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود." }) : BadRequest(new { error });
+        var result = await _auth.RequestOtpByCallAsync(req.PhoneNumber, ct);
+        return OtpResponse(result);
     }
 
     /// <summary>اعتبارسنجی کد و صدور توکن.</summary>
@@ -52,5 +52,27 @@ public class AuthController : ControllerBase
         var user = await _auth.CompleteProfileAsync(userId, req.FirstName, req.LastName, req.BrandName, ct);
         if (user is null) return NotFound(new { error = "کاربر یافت نشد." });
         return Ok(new { user.FirstName, user.LastName, user.BrandName, user.ProfileCompleted });
+    }
+
+    private IActionResult OtpResponse(OtpRequestResult result)
+    {
+        if (result.Success)
+            return Ok(new
+            {
+                message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود.",
+                result.RetryAfterSeconds,
+            });
+
+        if (result.RetryAfterSeconds > 0)
+        {
+            Response.Headers.RetryAfter = result.RetryAfterSeconds.ToString();
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                error = result.Error,
+                result.RetryAfterSeconds,
+            });
+        }
+
+        return BadRequest(new { error = result.Error });
     }
 }

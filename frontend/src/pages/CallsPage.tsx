@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Inbox, Play, Pause, MessageCircleQuestion, ChevronDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Inbox, MessageCircleQuestion, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api'
 import { Card, Skeleton, cn } from '../components/ui'
+import AudioPlayButton from '../components/AudioPlayButton'
 import { faDateTime, faDuration, toFa } from '../lib/format'
 
 interface CallRow {
@@ -19,61 +20,6 @@ interface UnansweredItem {
   question: string
   callerId?: string | null
   startedAt: string
-}
-
-/** دکمه‌ی پخشِ یک فایل صوتی (blob) از یک مسیرِ API — برای ضبطِ مکالمه و صوتِ سوالاتِ بی‌پاسخ. */
-function AudioPlayButton({ path, showText = true }: { path: string; showText?: boolean }) {
-  const [url, setUrl] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [playing, setPlaying] = useState(false)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
-
-  async function toggle() {
-    if (loading) return // از دو بار کلیک و فچِ تکراری جلوگیری کن
-    if (playing) {
-      audioRef.current?.pause()
-      return
-    }
-    if (!url) {
-      setLoading(true)
-      try {
-        const { data } = await api.get(path, { responseType: 'blob' })
-        const objUrl = URL.createObjectURL(data as Blob)
-        setUrl(objUrl)
-        const audio = new Audio(objUrl)
-        audioRef.current = audio
-        audio.onended = () => setPlaying(false)
-        audio.onpause = () => setPlaying(false)
-        audio.onplay = () => setPlaying(true)
-        await audio.play()
-      } catch {
-        /* ignore */
-      } finally {
-        setLoading(false)
-      }
-    } else {
-      await audioRef.current?.play()
-    }
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      disabled={loading}
-      className="flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100 disabled:opacity-60"
-    >
-      {loading ? (
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-300 border-t-brand-600" />
-      ) : playing ? (
-        <Pause size={14} />
-      ) : (
-        <Play size={14} />
-      )}
-      {showText && (playing ? 'توقف' : 'پخش')}
-    </button>
-  )
 }
 
 /** بخشِ «سوالاتِ بی‌پاسخ»: با کلیک باز می‌شود و لیست را می‌گیرد؛ هر سوال به‌صورت صوتی قابل پخش است. */

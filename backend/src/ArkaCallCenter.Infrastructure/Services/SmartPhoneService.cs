@@ -64,6 +64,7 @@ public class SmartPhoneService : ISmartPhoneService
     {
         text = (text ?? "").Trim();
         var sp = await _db.SmartPhones.FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        var previousAudioPath = sp?.WelcomeAudioPath;
         var generated = await GenerateWelcomeAudioAsync(userId, text, ct);
         if (!generated.Ok)
             return new WelcomeAudioResult(false, generated.Error, null);
@@ -76,7 +77,17 @@ public class SmartPhoneService : ISmartPhoneService
         sp.WelcomeMessageText = text;
         sp.WelcomeAudioPath = generated.Path;
         sp.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            TryDeleteWelcomeFile(generated.Path);
+            throw;
+        }
+        if (!string.Equals(previousAudioPath, generated.Path, StringComparison.OrdinalIgnoreCase))
+            TryDeleteWelcomeFile(previousAudioPath);
         return new WelcomeAudioResult(true, null, sp);
     }
 
@@ -161,7 +172,9 @@ public class SmartPhoneService : ISmartPhoneService
             if (AudioConvert.WavToSlin8k(audio).Length == 0)
                 throw new InvalidDataException("فایل صوتی تولیدشده خالی است.");
 
-            var path = Path.Combine(_uploadsPath, $"welcome_{userId}.wav");
+            // نام نسخه‌دار باعث می‌شود worker حتی در فایل‌سیستم‌هایی با دقت پایین mtime
+            // تغییر پیام/گوینده را در تماس بعدی بدون ابهام تشخیص دهد.
+            var path = Path.Combine(_uploadsPath, $"welcome_{userId}_{Guid.NewGuid():N}.wav");
             await WriteAtomicallyAsync(path, audio, ct);
             return (true, null, path);
         }
@@ -201,6 +214,24 @@ public class SmartPhoneService : ISmartPhoneService
         {
             try { if (File.Exists(tempPath)) File.Delete(tempPath); }
             catch { /* پاک‌سازی فایل موقت نباید نتیجه اصلی را تغییر دهد. */ }
+        }
+    }
+
+    private void TryDeleteWelcomeFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var uploadsRoot = Path.GetFullPath(_uploadsPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+                File.Delete(fullPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not remove superseded welcome audio {Path}.", path);
         }
     }
 

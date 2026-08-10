@@ -14,6 +14,7 @@ export interface Me {
   brandName?: string | null
   role: Role
   profileCompleted: boolean
+  hasCompletedTour: boolean
   voiceName?: string | null
   callMinuteLimit?: number | null
   usedMinutes: number

@@ -60,6 +60,7 @@ public class MeController : ControllerBase
             user.BrandName,
             role = user.Role.ToString(),
             user.ProfileCompleted,
+            user.HasCompletedTour,
             user.VoiceName,
             user.CallMinuteLimit,
             user.UsedMinutes,
@@ -76,6 +77,21 @@ public class MeController : ControllerBase
         });
     }
 
+    /// <summary>ثبت دائمی پایان تور اولین ورود برای کاربر جاری.</summary>
+    [HttpPost("tour/complete")]
+    public async Task<IActionResult> CompleteTour(CancellationToken ct)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
+        if (user is null) return NotFound();
+        if (!user.HasCompletedTour)
+        {
+            user.HasCompletedTour = true;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+        return Ok(new { user.HasCompletedTour });
+    }
+
     public record SetVoiceRequest(string VoiceName);
 
     /// <summary>انتخاب گوینده‌ی صدای کاربر (باید از گوینده‌های فعال باشد).</summary>
@@ -89,6 +105,7 @@ public class MeController : ControllerBase
             .Include(u => u.SmartPhone)
             .FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
         if (user is null) return NotFound();
+        var previousVoice = user.VoiceName;
         user.VoiceName = req.VoiceName;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
@@ -102,13 +119,24 @@ public class MeController : ControllerBase
                 user.SmartPhone.WelcomeMessageText,
                 ct);
             if (!regenerated.Ok)
+            {
+                // صدای مکالمه و خوش‌آمد باید همیشه هماهنگ بمانند؛ اگر TTS شکست خورد
+                // انتخاب گوینده نیز به مقدار سالم قبلی برمی‌گردد.
+                user.VoiceName = previousVoice;
+                user.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
                 return StatusCode(StatusCodes.Status502BadGateway, new
                 {
-                    error = "گوینده ذخیره شد، اما بازتولید فایل صوتی خوش‌آمد انجام نشد؛ دوباره تلاش کنید.",
+                    error = "بازتولید پیام خوش‌آمد با صدای جدید انجام نشد؛ گوینده قبلی حفظ شد.",
                 });
+            }
         }
 
-        return Ok(new { user.VoiceName, welcomeAudioRegenerated = user.SmartPhone is not null });
+        return Ok(new
+        {
+            user.VoiceName,
+            welcomeAudioRegenerated = !string.IsNullOrWhiteSpace(user.SmartPhone?.WelcomeMessageText),
+        });
     }
 
     // ---------------- Phone change (with OTP to the new number) ----------------

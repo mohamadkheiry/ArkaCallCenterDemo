@@ -89,9 +89,7 @@ public class CallHandler
 
         var recorder = new CallRecordingBuffer();
         using var welcomePlaybackCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var hasStaticWelcome = _welcomeCache.TryGet(extension.Value, out var staticWelcome);
-        if (!hasStaticWelcome && _welcomeCache.TrySet(extension.Value, sp.WelcomeAudioPath))
-            hasStaticWelcome = _welcomeCache.TryGet(extension.Value, out staticWelcome);
+        var hasStaticWelcome = _welcomeCache.TryGet(extension.Value, sp.WelcomeAudioPath, out var staticWelcome);
 
         // فایل ثابت خوش‌آمد پیش از اتصال به OpenAI پخش می‌شود. در این بازه صدای ورودی
         // تماس‌گیرنده خوانده و دور ریخته می‌شود؛ بنابراین نه به VAD می‌رسد و نه می‌تواند
@@ -364,6 +362,19 @@ public class CallHandler
             var unansweredRecorded = false;
             try
             {
+                if (ConversationTurnClassifier.TryCreateBusinessIdentityResponse(
+                        question,
+                        sp.User.BrandName,
+                        out var identityResponse))
+                {
+                    _logger.LogInformation(
+                        "Answering business identity question for ext {Ext}: {Question}",
+                        extension,
+                        question);
+                    await realtime.CreateConversationalResponseAsync(identityResponse, turnCt);
+                    return;
+                }
+
                 if (ConversationTurnClassifier.TryCreateResponse(question, out var conversationalResponse))
                 {
                     _logger.LogInformation(

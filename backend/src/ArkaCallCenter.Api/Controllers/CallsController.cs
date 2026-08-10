@@ -2,6 +2,7 @@ using System.Text.Json;
 using ArkaCallCenter.Api.Extensions;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
+using ArkaCallCenter.Infrastructure.Audio;
 using ArkaCallCenter.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,7 +34,7 @@ public class CallsController : ControllerBase
     public async Task<IActionResult> Get(CancellationToken ct)
     {
         var userId = User.GetUserId();
-        var calls = await _db.CallSessions.AsNoTracking()
+        var rows = await _db.CallSessions.AsNoTracking()
             .Where(c => c.SmartPhone.UserId == userId)
             .OrderByDescending(c => c.StartedAt)
             .Take(100)
@@ -44,9 +45,18 @@ public class CallsController : ControllerBase
                 c.StartedAt,
                 c.DurationSeconds,
                 c.AnsweredFromKb,
-                hasRecording = c.RecordingPath != null,
+                c.RecordingPath,
             })
             .ToListAsync(ct);
+        var calls = rows.Select(c => new
+        {
+            c.Id,
+            c.CallerId,
+            c.StartedAt,
+            c.DurationSeconds,
+            c.AnsweredFromKb,
+            hasRecording = HasPlayableWav(c.RecordingPath),
+        });
         return Ok(calls);
     }
 
@@ -99,22 +109,24 @@ public class CallsController : ControllerBase
         if (string.IsNullOrWhiteSpace(text)) return NotFound();
 
         // کش روی دیسک تا هر پخش، یک درخواستِ TTS جدید (و هزینه) نسازد.
-        var cachePath = Path.Combine(_uploadsPath, $"unanswered_{id}_{index}.mp3");
-        if (!System.IO.File.Exists(cachePath))
+        var cachePath = Path.Combine(_uploadsPath, $"unanswered_{id}_{index}.wav");
+        if (!HasPlayableWav(cachePath))
         {
             var voice = await ResolveVoiceAsync(userId, ct);
             byte[] audio;
             try
             {
-                audio = await _openai.TextToSpeechAsync(text, voice, ct: ct);
+                audio = await _openai.TextToSpeechAsync(text, voice, "wav", ct);
+                if (AudioConvert.WavToSlin8k(audio).Length == 0)
+                    throw new InvalidDataException("TTS returned an empty WAV.");
+                await WriteAtomicallyAsync(cachePath, audio, ct);
             }
             catch (Exception)
             {
                 return StatusCode(502, new { error = "تولید صوت ممکن نشد؛ لطفاً بعداً تلاش کنید." });
             }
-            await System.IO.File.WriteAllBytesAsync(cachePath, audio, ct);
         }
-        return PhysicalFile(cachePath, "audio/mpeg", enableRangeProcessing: true);
+        return PhysicalFile(cachePath, "audio/wav", enableRangeProcessing: true);
     }
 
     /// <summary>جزئیات یک تماسِ خودِ کاربر به‌همراه متن مکالمه (رونوشت).</summary>
@@ -135,7 +147,7 @@ public class CallsController : ControllerBase
             c.AnsweredFromKb,
             transcript = c.TranscriptJson,
             unansweredQuestions = SafeParse(c.UnansweredQuestionsJson),
-            hasRecording = !string.IsNullOrEmpty(c.RecordingPath) && System.IO.File.Exists(c.RecordingPath),
+            hasRecording = HasPlayableWav(c.RecordingPath),
         });
     }
 
@@ -147,7 +159,8 @@ public class CallsController : ControllerBase
         var path = await _db.CallSessions.AsNoTracking()
             .Where(c => c.Id == id && c.SmartPhone.UserId == userId)
             .Select(c => c.RecordingPath).FirstOrDefaultAsync(ct);
-        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return NotFound();
+        if (!HasPlayableWav(path))
+            return NotFound(new { error = "فایل صوتی این مکالمه موجود یا معتبر نیست." });
         return PhysicalFile(path, "audio/wav", enableRangeProcessing: true);
     }
 
@@ -164,5 +177,34 @@ public class CallsController : ControllerBase
         var userVoice = await _db.Users.Where(u => u.Id == userId).Select(u => u.VoiceName).FirstOrDefaultAsync(ct);
         if (!string.IsNullOrWhiteSpace(userVoice)) return userVoice!;
         return await _settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
+    }
+
+    private static bool HasPlayableWav(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return false;
+        try
+        {
+            using var stream = System.IO.File.OpenRead(path);
+            if (stream.Length <= 44) return false;
+            Span<byte> header = stackalloc byte[12];
+            return stream.Read(header) == header.Length &&
+                   header[..4].SequenceEqual("RIFF"u8) &&
+                   header[8..12].SequenceEqual("WAVE"u8);
+        }
+        catch { return false; }
+    }
+
+    private static async Task WriteAtomicallyAsync(string path, byte[] audio, CancellationToken ct)
+    {
+        var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await System.IO.File.WriteAllBytesAsync(tempPath, audio, ct);
+            System.IO.File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            try { if (System.IO.File.Exists(tempPath)) System.IO.File.Delete(tempPath); } catch { }
+        }
     }
 }

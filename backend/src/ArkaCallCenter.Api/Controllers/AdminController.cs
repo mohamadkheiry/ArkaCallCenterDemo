@@ -491,7 +491,7 @@ public class AdminController : ControllerBase
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var items = await query
+        var rows = await query
             .OrderByDescending(c => c.StartedAt)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(c => new
@@ -507,9 +507,25 @@ public class AdminController : ControllerBase
                 brand = c.SmartPhone.User.BrandName,
                 isDemo = c.SmartPhone.User.IsDemo,
                 demoLabel = c.SmartPhone.User.DemoLabel,
-                hasRecording = c.RecordingPath != null,
+                c.RecordingPath,
             })
             .ToListAsync(ct);
+
+        var items = rows.Select(c => new
+        {
+            c.Id,
+            c.CallerId,
+            c.StartedAt,
+            c.DurationSeconds,
+            c.AnsweredFromKb,
+            c.extension,
+            c.ownerPhone,
+            c.ownerName,
+            c.brand,
+            c.isDemo,
+            c.demoLabel,
+            hasRecording = HasPlayableWav(c.RecordingPath),
+        }).ToList();
 
         return Ok(new { total, page, pageSize, items });
     }
@@ -533,7 +549,7 @@ public class AdminController : ControllerBase
             ownerPhone = c.SmartPhone.User.PhoneNumber,
             brand = c.SmartPhone.User.BrandName,
             transcript = c.TranscriptJson,
-            hasRecording = !string.IsNullOrEmpty(c.RecordingPath) && System.IO.File.Exists(c.RecordingPath),
+            hasRecording = HasPlayableWav(c.RecordingPath),
         });
     }
 
@@ -543,7 +559,8 @@ public class AdminController : ControllerBase
     {
         var path = await _db.CallSessions.AsNoTracking()
             .Where(c => c.Id == id).Select(c => c.RecordingPath).FirstOrDefaultAsync(ct);
-        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return NotFound();
+        if (!HasPlayableWav(path))
+            return NotFound(new { error = "فایل صوتی این مکالمه موجود یا معتبر نیست." });
         return PhysicalFile(path, "audio/wav", enableRangeProcessing: true);
     }
 
@@ -839,5 +856,20 @@ public class AdminController : ControllerBase
             u.lastUsed,
         });
         return Ok(result);
+    }
+
+    private static bool HasPlayableWav(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return false;
+        try
+        {
+            using var stream = System.IO.File.OpenRead(path);
+            if (stream.Length <= 44) return false;
+            Span<byte> header = stackalloc byte[12];
+            return stream.Read(header) == header.Length &&
+                   header[..4].SequenceEqual("RIFF"u8) &&
+                   header[8..12].SequenceEqual("WAVE"u8);
+        }
+        catch { return false; }
     }
 }

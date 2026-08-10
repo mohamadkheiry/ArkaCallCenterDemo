@@ -41,4 +41,30 @@ public class ConversationTurnClassifierTests
 
         Assert.False(handled);
     }
+
+    [Theory]
+    [InlineData("من با کجا تماس گرفته‌ام؟")]
+    [InlineData("با چه مجموعه‌ای تماس گرفتم؟")]
+    [InlineData("اینجا کجاست؟")]
+    [InlineData("شما کی هستید؟")]
+    [InlineData("اسم کسب و کار شما چیست؟")]
+    public void Business_identity_questions_return_the_configured_brand(string text)
+    {
+        var handled = ConversationTurnClassifier.TryCreateBusinessIdentityResponse(
+            text,
+            "فروشگاه آرکا",
+            out var response);
+
+        Assert.True(handled);
+        Assert.Contains("فروشگاه آرکا", response);
+        Assert.DoesNotContain("پایگاه دانش", response);
+    }
+
+    [Theory]
+    [InlineData("آدرس شعبه شما کجاست؟")]
+    [InlineData("ساعت کاری شرکت چیست؟")]
+    public void Business_knowledge_questions_are_not_mistaken_for_identity(string text)
+    {
+        Assert.False(ConversationTurnClassifier.TryCreateBusinessIdentityResponse(text, "آرکا", out _));
+    }
 }

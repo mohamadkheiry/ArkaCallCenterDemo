@@ -26,7 +26,7 @@ public class SmartPhoneController : ControllerBase
             extension = sp.Extension,
             status = sp.Status.ToString(),
             sp.WelcomeMessageText,
-            hasWelcomeAudio = !string.IsNullOrEmpty(sp.WelcomeAudioPath),
+            hasWelcomeAudio = !string.IsNullOrEmpty(sp.WelcomeAudioPath) && System.IO.File.Exists(sp.WelcomeAudioPath),
             answerAccuracyPercent = sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent,
         });
     }

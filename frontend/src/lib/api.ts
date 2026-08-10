@@ -34,3 +34,12 @@ export function apiError(err: unknown, fallback = 'خطایی رخ داد. دو�
   }
   return fallback
 }
+
+/** زمان باقی‌مانده‌ی cooldown را از بدنه یا هدر استاندارد Retry-After می‌خواند. */
+export function apiRetryAfter(err: unknown): number {
+  if (!axios.isAxiosError(err)) return 0
+  const bodyValue = Number((err.response?.data as { retryAfterSeconds?: number })?.retryAfterSeconds)
+  if (Number.isFinite(bodyValue) && bodyValue > 0) return Math.ceil(bodyValue)
+  const headerValue = Number(err.response?.headers?.['retry-after'])
+  return Number.isFinite(headerValue) && headerValue > 0 ? Math.ceil(headerValue) : 0
+}
