@@ -561,7 +561,7 @@ public class AdminController : ControllerBase
             .Where(c => c.Id == id).Select(c => c.RecordingPath).FirstOrDefaultAsync(ct);
         if (!HasPlayableWav(path))
             return NotFound(new { error = "فایل صوتی این مکالمه موجود یا معتبر نیست." });
-        return PhysicalFile(path, "audio/wav", enableRangeProcessing: true);
+        return PhysicalFile(path!, "audio/wav", enableRangeProcessing: true);
     }
 
     [HttpDelete("calls/{id:int}")]
