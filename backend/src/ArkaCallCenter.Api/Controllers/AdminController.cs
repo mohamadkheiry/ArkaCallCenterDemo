@@ -252,7 +252,10 @@ public class AdminController : ControllerBase
     [HttpGet("fallback-message")]
     public async Task<IActionResult> GetFallback(CancellationToken ct)
     {
-        var text = await _settings.GetAsync(SettingKeys.FallbackMessageText, "پاسخ این سوال در پایگاه دانش من موجود نیست.", ct);
+        var text = await _settings.GetAsync(
+            SettingKeys.FallbackMessageText,
+            ConversationMessages.UnknownKnowledge,
+            ct);
         var voice = await _settings.GetAsync(SettingKeys.FallbackMessageVoice, "alloy", ct);
         var audioPath = await _settings.GetAsync(SettingKeys.FallbackAudioPath, null, ct);
         return Ok(new { text, voice, hasAudio = !string.IsNullOrEmpty(audioPath) && System.IO.File.Exists(audioPath) });

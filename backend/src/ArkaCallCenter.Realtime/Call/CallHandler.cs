@@ -88,10 +88,22 @@ public class CallHandler
         }
 
         var recorder = new CallRecordingBuffer();
-        using var earlyWelcomeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var welcomePlayedEarly = _welcomeCache.TryGet(extension.Value, out var earlyWelcome);
-        var earlyWelcomeTask = welcomePlayedEarly
-            ? PlayCachedWelcomeAsync(stream, earlyWelcome, extension.Value, callStartedTicks, recorder, earlyWelcomeCts.Token)
+        using var welcomePlaybackCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var hasStaticWelcome = _welcomeCache.TryGet(extension.Value, out var staticWelcome);
+        if (!hasStaticWelcome && _welcomeCache.TrySet(extension.Value, sp.WelcomeAudioPath))
+            hasStaticWelcome = _welcomeCache.TryGet(extension.Value, out staticWelcome);
+
+        // فایل ثابت خوش‌آمد پیش از اتصال به OpenAI پخش می‌شود. در این بازه صدای ورودی
+        // تماس‌گیرنده خوانده و دور ریخته می‌شود؛ بنابراین نه به VAD می‌رسد و نه می‌تواند
+        // پیام خوش‌آمد را قطع یا به‌عنوان نوبت مکالمه ثبت کند.
+        var welcomePlaybackTask = hasStaticWelcome
+            ? PlayStaticWelcomeWithoutVadAsync(
+                stream,
+                staticWelcome,
+                extension.Value,
+                callStartedTicks,
+                recorder,
+                welcomePlaybackCts.Token)
             : Task.CompletedTask;
 
         // A single settings query avoids several sequential database round trips before
@@ -119,15 +131,13 @@ public class CallHandler
         int GetIntSetting(string key, int fallback)
             => int.TryParse(GetSetting(key), out var value) ? value : fallback;
 
-        const string defaultFallback = "پاسخ این سوال در پایگاه دانش من موجود نیست.";
-        var fallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
-        var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
+        const string defaultFallback = ConversationMessages.UnknownKnowledge;
+        var configuredFallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
+        var fallback = ConversationMessages.LegacyUnknownKnowledgeMessages
+            .Contains(configuredFallback, StringComparer.Ordinal)
+            ? defaultFallback
+            : configuredFallback;
         var voice = sp.User.VoiceName ?? GetSetting(SettingKeys.DefaultVoiceName, "alloy") ?? "alloy";
-        byte[]? cachedWelcome = welcomePlayedEarly ? earlyWelcome : null;
-        if (cachedWelcome is null && _welcomeCache.TrySet(extension.Value, sp.WelcomeAudioPath))
-        {
-            _welcomeCache.TryGet(extension.Value, out cachedWelcome);
-        }
         // درصدِ دقت/پایبندی به پایگاه دانش (۱۰..۱۰۰). چون Realtime GA دیگر temperature ندارد،
         // این پارامتر از طریقِ instructions (پرامپت) به مدل منتقل می‌شود؛ درصدِ بالاتر = پایبندیِ سخت‌گیرانه‌تر.
         var accuracy = Math.Clamp(sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent, 10, 100);
@@ -141,8 +151,8 @@ public class CallHandler
         {
             _logger.LogInformation("Ext {Ext}: minute limit already reached ({Used}/{Limit}); rejecting call.",
                 extension, alreadyUsedMinutes, limitMinutes);
-            earlyWelcomeCts.Cancel();
-            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
+            welcomePlaybackCts.Cancel();
+            try { await welcomePlaybackTask; } catch (OperationCanceledException) { }
             return;
         }
 
@@ -161,8 +171,8 @@ public class CallHandler
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("OpenAI API key not configured; cannot handle realtime call.");
-            earlyWelcomeCts.Cancel();
-            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
+            welcomePlaybackCts.Cancel();
+            try { await welcomePlaybackTask; } catch (OperationCanceledException) { }
             return;
         }
 
@@ -205,7 +215,7 @@ public class CallHandler
         var outHead = 0;                            // آفست خواندن در اولین قطعه‌ی صف
         var thinking = 0;                           // ۱ = کاربر حرفش تمام شده، منتظر پاسخ AI
         var holdPos = 0;                            // موقعیت پخش موسیقی انتظار (لوپ)
-        var firstAudioLogged = welcomePlayedEarly ? 1 : 0;
+        var firstAudioLogged = hasStaticWelcome ? 1 : 0;
 
         void EnqueueOut(byte[] slin) { lock (outLock) outChunks.AddLast(slin); }
 
@@ -388,21 +398,21 @@ public class CallHandler
             }
         }
 
-        // پمپ را از همان ابتدا (پیش از اتصال به OpenAI) شروع کن تا سکوت بلافاصله به
-        // Asterisk جاری شود و در طول هندشیک WebSocket هم اتصال زنده بماند.
-        if (!welcomePlayedEarly && cachedWelcome is { Length: > 0 })
-            EnqueueOut(cachedWelcome);
         Task pumpTask = Task.CompletedTask;
         var sw = Stopwatch.StartNew();
         var startedAt = DateTime.UtcNow;
         try
         {
-            var connectTask = realtime.ConnectAsync(instructions, voice, ct);
-            await earlyWelcomeTask;
+            // VAD فقط پس از پایان کامل فایل ثابت خوش‌آمد فعال می‌شود.
+            await welcomePlaybackTask;
+            if (hasStaticWelcome)
+                _logger.LogInformation(
+                    "Static welcome playback completed before Realtime/VAD connection for ext {Ext}.",
+                    extension);
             pumpTask = PumpAsync();
-            await connectTask;
-            if (cachedWelcome is not { Length: > 0 })
-                await realtime.GreetAsync(welcome, ct);
+            if (!hasStaticWelcome)
+                _logger.LogWarning("Ext {Ext} has no valid static welcome WAV; continuing without greeting.", extension);
+            await realtime.ConnectAsync(instructions, voice, ct);
 
             while (!ct.IsCancellationRequested)
             {
@@ -496,6 +506,41 @@ public class CallHandler
         {
             await RecordUsageAsync(sp.User.Id, sp.User.PhoneNumber, model, apiKey!,
                 (int)usagePrompt, (int)usageCompletion, (int)usageTotal);
+        }
+    }
+
+    private async Task PlayStaticWelcomeWithoutVadAsync(
+        NetworkStream stream,
+        byte[] slin8k,
+        int extension,
+        long startedTicks,
+        CallRecordingBuffer recorder,
+        CancellationToken ct)
+    {
+        using var discardCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var discardTask = DiscardInboundDuringWelcomeAsync(stream, discardCts.Token);
+        try
+        {
+            await PlayCachedWelcomeAsync(stream, slin8k, extension, startedTicks, recorder, ct);
+        }
+        finally
+        {
+            discardCts.Cancel();
+            try { await discardTask; }
+            catch (OperationCanceledException) { }
+            catch (IOException) when (discardCts.IsCancellationRequested) { }
+            catch (System.Net.Sockets.SocketException) when (discardCts.IsCancellationRequested) { }
+        }
+    }
+
+    private static async Task DiscardInboundDuringWelcomeAsync(NetworkStream stream, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var frame = await AudioSocketProtocol.ReadFrameAsync(stream, ct);
+            if (frame is null || frame.Value.Kind == AudioSocketProtocol.KindHangup)
+                return;
+            // Audio frames during the fixed welcome are intentionally discarded.
         }
     }
 

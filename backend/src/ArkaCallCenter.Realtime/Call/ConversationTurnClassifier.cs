@@ -11,18 +11,18 @@ public static class ConversationTurnClassifier
 {
     private static readonly HashSet<string> GreetingWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "سلام", "درود", "الو"
+        "سلام", "درود", "الو", "صبح", "ظهر", "عصر", "شب", "روز", "وقت", "خسته"
     };
 
     private static readonly HashSet<string> GreetingFillers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "عرض", "ادب", "خدمت", "وقت", "صبح", "ظهر", "عصر", "شب", "بخیر", "خوش",
-        "آمدید", "خوبی", "خوبید", "هستید", "خسته", "نباشید"
+        "عرض", "ادب", "خدمت", "بخیر", "خوش", "آمدید", "نباشید"
     };
 
     private static readonly HashSet<string> ThanksWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ممنون", "متشکرم", "مرسی", "سپاس", "سپاسگزارم", "تشکر"
+        "ممنون", "ممنونم", "متشکرم", "مرسی", "سپاس", "سپاسگزارم", "تشکر",
+        "دست", "درد", "نکنه", "نکند", "زحمت", "کشیدید"
     };
 
     private static readonly HashSet<string> GoodbyeWords = new(StringComparer.OrdinalIgnoreCase)
@@ -32,43 +32,76 @@ public static class ConversationTurnClassifier
 
     private static readonly HashSet<string> AcknowledgmentWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "باشه", "حتما", "حتماً", "اوکی", "فهمیدم", "متوجه", "شدم", "بسیار", "خوب"
+        "باشه", "حتما", "حتماً", "اوکی", "فهمیدم", "متوجه", "شدم", "بسیار", "خوب", "درسته", "درست"
     };
 
-    private static readonly HashSet<string> PoliteFillers = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> WellbeingWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "خیلی", "زیاد", "از", "بر", "شما", "لطف", "دارید", "کنید"
+        "حال", "حالت", "حالتون", "احوال", "خوبی", "خوبید", "چطوری", "چطورید", "چطوره", "خبر"
+    };
+
+    private static readonly HashSet<string> ApologyWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ببخشید", "معذرت", "پوزش", "عذر", "شرمنده"
+    };
+
+    private static readonly HashSet<string> CommonSocialWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "خیلی", "زیاد", "از", "بر", "به", "با", "و", "که", "من", "شما", "خودت", "خودتون", "خودتان",
+        "لطف", "دارید", "کنید", "کردید", "می", "کنم", "هستم", "هستی", "هستید", "هست", "است",
+        "چه", "چطور", "چطوره", "چطورید", "بابت", "واقعا", "واقعاً"
     };
 
     public static bool TryCreateResponse(string text, out string response)
     {
         response = "";
         var tokens = Tokenize(text);
-        if (tokens.Count == 0 || tokens.Count > 8) return false;
+        if (tokens.Count == 0 || tokens.Count > 12) return false;
 
-        if (ContainsOnlyIntent(tokens, GoodbyeWords, PoliteFillers))
+        var allSocialWords = GreetingWords
+            .Concat(GreetingFillers)
+            .Concat(ThanksWords)
+            .Concat(GoodbyeWords)
+            .Concat(AcknowledgmentWords)
+            .Concat(WellbeingWords)
+            .Concat(ApologyWords)
+            .Concat(CommonSocialWords)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var isPoliteDayFarewell = tokens.Contains("روز", StringComparer.OrdinalIgnoreCase) &&
+                                  tokens.Contains("خوش", StringComparer.OrdinalIgnoreCase) &&
+                                  tokens.All(token => allSocialWords.Contains(token) || token == "روز");
+        if (ContainsOnlyIntent(tokens, GoodbyeWords, allSocialWords) || isPoliteDayFarewell)
         {
             response = "خدانگهدار، روز خوبی داشته باشید.";
             return true;
         }
 
-        if (ContainsOnlyIntent(tokens, ThanksWords, PoliteFillers))
+        if (ContainsOnlyIntent(tokens, ThanksWords, allSocialWords))
         {
             response = "خواهش می‌کنم. اگر سؤال دیگری دارید، بفرمایید.";
             return true;
         }
 
-        var greetingAllowed = GreetingWords
-            .Concat(GreetingFillers)
-            .Concat(PoliteFillers)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (tokens.Any(GreetingWords.Contains) && tokens.All(greetingAllowed.Contains))
+        if (ContainsOnlyIntent(tokens, ApologyWords, allSocialWords))
+        {
+            response = "خواهش می‌کنم، بفرمایید. چطور می‌توانم کمکتان کنم؟";
+            return true;
+        }
+
+        if (ContainsOnlyIntent(tokens, WellbeingWords, allSocialWords))
+        {
+            response = "ممنون، خوبم و با کمال میل آماده‌ام کمکتان کنم.";
+            return true;
+        }
+
+        if (ContainsOnlyIntent(tokens, GreetingWords, allSocialWords))
         {
             response = "سلام! خوش آمدید. چطور می‌توانم کمکتان کنم؟";
             return true;
         }
 
-        if (ContainsOnlyIntent(tokens, AcknowledgmentWords, PoliteFillers))
+        if (ContainsOnlyIntent(tokens, AcknowledgmentWords, allSocialWords))
         {
             response = "حتماً. اگر سؤال دیگری دارید، بفرمایید.";
             return true;
@@ -82,7 +115,7 @@ public static class ConversationTurnClassifier
         HashSet<string> intentWords,
         HashSet<string> allowedFillers)
         => tokens.Any(intentWords.Contains) &&
-           tokens.All(token => intentWords.Contains(token) || allowedFillers.Contains(token));
+           tokens.All(allowedFillers.Contains);
 
     private static List<string> Tokenize(string text)
     {

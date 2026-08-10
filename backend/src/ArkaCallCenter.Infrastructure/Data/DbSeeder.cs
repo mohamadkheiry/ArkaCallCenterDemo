@@ -42,7 +42,7 @@ public static class DbSeeder
             (SettingKeys.CallLimitWarningPercent, null, "80", false),
             (SettingKeys.RagSimilarityThreshold, config["RAG_SIMILARITY_THRESHOLD"], "0.35", false),
             (SettingKeys.RagTopK, config["RAG_TOP_K"], "4", false),
-            (SettingKeys.FallbackMessageText, null, "پاسخ این سوال در پایگاه دانش من موجود نیست.", false),
+            (SettingKeys.FallbackMessageText, null, ConversationMessages.UnknownKnowledge, false),
             (SettingKeys.FallbackMessageVoice, null, "alloy", false),
         };
 
@@ -54,6 +54,16 @@ public static class DbSeeder
             // کلیدهای سِری فقط وقتی از env آمده باشند ساخته می‌شوند (رکورد خالی نسازیم).
             if (secret && string.IsNullOrWhiteSpace(value)) continue;
             db.AppSettings.Add(new AppSetting { Key = key, Value = value, IsSecret = secret });
+        }
+
+        // فقط متن پیش‌فرض نسخه‌های قبلی را ارتقا بده؛ متن سفارشی مدیر دست‌نخورده می‌ماند.
+        var fallbackSetting = await db.AppSettings
+            .FirstOrDefaultAsync(x => x.Key == SettingKeys.FallbackMessageText, ct);
+        if (fallbackSetting is not null && ConversationMessages.LegacyUnknownKnowledgeMessages
+            .Contains(fallbackSetting.Value, StringComparer.Ordinal))
+        {
+            fallbackSetting.Value = ConversationMessages.UnknownKnowledge;
+            fallbackSetting.UpdatedAt = DateTime.UtcNow;
         }
     }
 

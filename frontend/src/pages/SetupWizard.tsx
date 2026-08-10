@@ -33,8 +33,8 @@ interface Voice {
 const STEPS = [
   { key: 'intro', title: 'شروع', icon: PlayCircle },
   { key: 'kb', title: 'پایگاه دانش', icon: BookOpenText },
-  { key: 'welcome', title: 'پیام خوش‌آمد', icon: MessageSquareText },
   { key: 'voice', title: 'گوینده', icon: Mic },
+  { key: 'welcome', title: 'پیام خوش‌آمد', icon: MessageSquareText },
   { key: 'create', title: 'ساخت تلفن', icon: Rocket },
 ] as const
 
@@ -69,7 +69,7 @@ export default function SetupWizard() {
     api.get('/api/smartphone').then(({ data }) => {
       if (data?.welcomeMessageText) {
         setWelcome(data.welcomeMessageText)
-        setWelcomeSaved(true)
+        setWelcomeSaved(!!data.hasWelcomeAudio)
       }
       if (data?.extension && data?.status === 'Active') setExtension(data.extension)
     })
@@ -222,7 +222,7 @@ export default function SetupWizard() {
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-800">به سامانه تلفن هوشمند آرکا خوش آمدید</h3>
             <p className="text-sm leading-7 text-slate-500">
-              در این ویزارد: پایگاه دانش کسب‌وکارتان را وارد می‌کنید، پیام خوش‌آمد و گوینده را انتخاب می‌کنید،
+              در این ویزارد: پایگاه دانش کسب‌وکارتان را وارد می‌کنید، گوینده و پیام خوش‌آمد را انتخاب می‌کنید،
               و در پایان تلفن هوشمند شما با یک داخلی اختصاصی ساخته می‌شود.
             </p>
             {videoAvailable && (
@@ -333,8 +333,8 @@ export default function SetupWizard() {
           </div>
         )}
 
-        {/* گام ۲: پیام خوش‌آمد */}
-        {step === 2 && (
+        {/* گام ۳: پیام خوش‌آمد — پس از انتخاب گوینده تا صوت ثابت فقط یک‌بار تولید شود. */}
+        {step === 3 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-800">پیام خوش‌آمد</h3>
@@ -344,7 +344,9 @@ export default function SetupWizard() {
                 </span>
               )}
             </div>
-            <p className="text-sm text-slate-500">این پیام در ابتدای هر تماس برای تماس‌گیرنده پخش می‌شود.</p>
+            <p className="text-sm text-slate-500">
+              پس از ذخیره، یک فایل صوتی ثابت با گوینده انتخابی تولید و پیش از فعال‌شدن شنود پخش می‌شود.
+            </p>
             <textarea
               value={welcome}
               onChange={(e) => setWelcome(e.target.value)}
@@ -363,8 +365,8 @@ export default function SetupWizard() {
           </div>
         )}
 
-        {/* گام ۳: گوینده */}
-        {step === 3 && (
+        {/* گام ۲: گوینده */}
+        {step === 2 && (
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-800">صدای گوینده</h3>
             <p className="text-sm text-slate-500">هوش مصنوعی با این صدا به تماس‌گیرندگان پاسخ می‌دهد.</p>

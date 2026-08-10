@@ -99,16 +99,6 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         _ = Task.Run(() => ReceiveLoopAsync(ct), ct);
     }
 
-    /// <summary>درخواست از مدل برای گفتن پیام خوش‌آمد در ابتدای تماس.</summary>
-    public Task GreetAsync(string welcomeText, CancellationToken ct) => SendAsync(new
-    {
-        type = "response.create",
-        response = new
-        {
-            instructions = $"به تماس‌گیرنده این پیام خوش‌آمد را دقیقاً بگو: «{welcomeText}»",
-        },
-    }, ct);
-
     public Task AppendAudioAsync(byte[] pcm24k, CancellationToken ct) => SendAsync(new
     {
         type = "input_audio_buffer.append",

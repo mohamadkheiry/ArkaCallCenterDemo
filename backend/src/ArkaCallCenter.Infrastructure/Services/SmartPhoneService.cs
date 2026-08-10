@@ -3,6 +3,7 @@ using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
 using ArkaCallCenter.Core.Enums;
+using ArkaCallCenter.Infrastructure.Audio;
 using ArkaCallCenter.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -59,22 +60,24 @@ public class SmartPhoneService : ISmartPhoneService
         return sp;
     }
 
-    public async Task<SmartPhone?> SetWelcomeAsync(int userId, string text, CancellationToken ct = default)
+    public async Task<WelcomeAudioResult> SetWelcomeAsync(int userId, string text, CancellationToken ct = default)
     {
         text = (text ?? "").Trim();
         var sp = await _db.SmartPhones.FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        var generated = await GenerateWelcomeAudioAsync(userId, text, ct);
+        if (!generated.Ok)
+            return new WelcomeAudioResult(false, generated.Error, null);
+
         if (sp is null)
         {
             sp = new SmartPhone { UserId = userId, Status = SmartPhoneStatus.Provisioning };
             _db.SmartPhones.Add(sp);
         }
         sp.WelcomeMessageText = text;
+        sp.WelcomeAudioPath = generated.Path;
         sp.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-
-        await GenerateWelcomeAudioAsync(userId, sp, ct);
-        await _db.SaveChangesAsync(ct);
-        return sp;
+        return new WelcomeAudioResult(true, null, sp);
     }
 
     // تخصیصِ داخلی TOCTOU-safe نیست (خواندنِ لیست → انتخاب → ذخیره). این قفلِ درون‌پردازه‌ای
@@ -96,6 +99,12 @@ public class SmartPhoneService : ISmartPhoneService
         var sp = user.SmartPhone;
         if (sp is null || string.IsNullOrWhiteSpace(sp.WelcomeMessageText))
             return new SmartPhoneResult(false, "ابتدا پیام خوش‌آمد را ثبت کنید.", null);
+
+        if (!HasStaticWelcomeAudio(sp))
+            return new SmartPhoneResult(
+                false,
+                "فایل صوتی ثابت پیام خوش‌آمد آماده نیست؛ لطفاً پیام خوش‌آمد را دوباره ذخیره کنید.",
+                null);
 
         // قبلاً ساخته شده؟
         if (sp.Extension is not null && sp.Status == SmartPhoneStatus.Active)
@@ -120,10 +129,6 @@ public class SmartPhoneService : ISmartPhoneService
             sp.Status = SmartPhoneStatus.Active;
             sp.UpdatedAt = DateTime.UtcNow;
 
-            // اطمینان از وجود وویس خوش‌آمد
-            if (string.IsNullOrEmpty(sp.WelcomeAudioPath))
-                await GenerateWelcomeAudioAsync(userId, sp, ct);
-
             await _db.SaveChangesAsync(ct);
 
             await _sms.DispatchAsync(SmsEventType.SmartPhoneCreated,
@@ -143,21 +148,59 @@ public class SmartPhoneService : ISmartPhoneService
     }
 
     // ---- helpers ----
-    private async Task GenerateWelcomeAudioAsync(int userId, SmartPhone sp, CancellationToken ct)
+    private async Task<(bool Ok, string? Error, string? Path)> GenerateWelcomeAudioAsync(
+        int userId,
+        string welcomeText,
+        CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sp.WelcomeMessageText)) return;
         try
         {
             var voice = await ResolveVoiceAsync(userId, ct);
-            // WAV avoids MP3 decoding and lets the realtime worker play the greeting immediately.
-            var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, "wav", ct);
+            // این درخواست فقط هنگام ذخیره/تغییر پیام انجام می‌شود؛ تماس‌ها همین فایل ثابت را پخش می‌کنند.
+            var audio = await _openai.TextToSpeechAsync(welcomeText, voice, "wav", ct);
+            if (AudioConvert.WavToSlin8k(audio).Length == 0)
+                throw new InvalidDataException("فایل صوتی تولیدشده خالی است.");
+
             var path = Path.Combine(_uploadsPath, $"welcome_{userId}.wav");
-            await File.WriteAllBytesAsync(path, audio, ct);
-            sp.WelcomeAudioPath = path;
+            await WriteAtomicallyAsync(path, audio, ct);
+            return (true, null, path);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Welcome TTS generation failed for user {UserId}", userId);
+            return (false, "تولید فایل صوتی پیام خوش‌آمد انجام نشد؛ تنظیمات سرویس هوش مصنوعی را بررسی و دوباره تلاش کنید.", null);
+        }
+    }
+
+    private static bool HasStaticWelcomeAudio(SmartPhone sp)
+    {
+        if (string.IsNullOrWhiteSpace(sp.WelcomeAudioPath) ||
+            !Path.GetExtension(sp.WelcomeAudioPath).Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(sp.WelcomeAudioPath))
+            return false;
+
+        try
+        {
+            return AudioConvert.WavToSlin8k(File.ReadAllBytes(sp.WelcomeAudioPath)).Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static async Task WriteAtomicallyAsync(string path, byte[] audio, CancellationToken ct)
+    {
+        var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, audio, ct);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+            catch { /* پاک‌سازی فایل موقت نباید نتیجه اصلی را تغییر دهد. */ }
         }
     }
 

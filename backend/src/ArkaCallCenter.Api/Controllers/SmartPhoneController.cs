@@ -45,8 +45,17 @@ public class SmartPhoneController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.Text))
             return BadRequest(new { error = "متن پیام خوش‌آمد نمی‌تواند خالی باشد." });
-        var sp = await _service.SetWelcomeAsync(User.GetUserId(), req.Text, ct);
-        return Ok(new { sp!.WelcomeMessageText, hasWelcomeAudio = !string.IsNullOrEmpty(sp.WelcomeAudioPath) });
+        var result = await _service.SetWelcomeAsync(User.GetUserId(), req.Text, ct);
+        if (!result.Ok)
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = result.Error });
+
+        var sp = result.SmartPhone!;
+        return Ok(new
+        {
+            sp.WelcomeMessageText,
+            hasWelcomeAudio = true,
+            message = "پیام خوش‌آمد ذخیره و فایل صوتی ثابت آن تولید شد.",
+        });
     }
 
     /// <summary>ساخت تلفن هوشمند: تخصیص داخلی، provisioning روی ایزابل و ارسال پیامک.</summary>

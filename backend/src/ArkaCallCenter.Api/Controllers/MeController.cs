@@ -19,13 +19,20 @@ public class MeController : ControllerBase
     private readonly ArkaDbContext _db;
     private readonly IAuthService _auth;
     private readonly ISettingsService _settings;
+    private readonly ISmartPhoneService _smartPhones;
     private readonly string _uploadsPath;
 
-    public MeController(ArkaDbContext db, IAuthService auth, ISettingsService settings, IConfiguration config)
+    public MeController(
+        ArkaDbContext db,
+        IAuthService auth,
+        ISettingsService settings,
+        ISmartPhoneService smartPhones,
+        IConfiguration config)
     {
         _db = db;
         _auth = auth;
         _settings = settings;
+        _smartPhones = smartPhones;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -78,12 +85,30 @@ public class MeController : ControllerBase
         var exists = await _db.VoiceOptions.AnyAsync(v => v.Enabled && v.Name == req.VoiceName, ct);
         if (!exists) return BadRequest(new { error = "گوینده‌ی انتخابی معتبر نیست." });
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
+        var user = await _db.Users
+            .Include(u => u.SmartPhone)
+            .FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
         if (user is null) return NotFound();
         user.VoiceName = req.VoiceName;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-        return Ok(new { user.VoiceName });
+
+        // اگر پیام خوش‌آمد قبلاً تنظیم شده، تغییر گوینده باید همان فایل ثابت را
+        // یک‌بار با صدای جدید بازتولید کند؛ تماس‌ها هرگز TTS زنده اجرا نمی‌کنند.
+        if (!string.IsNullOrWhiteSpace(user.SmartPhone?.WelcomeMessageText))
+        {
+            var regenerated = await _smartPhones.SetWelcomeAsync(
+                user.Id,
+                user.SmartPhone.WelcomeMessageText,
+                ct);
+            if (!regenerated.Ok)
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                {
+                    error = "گوینده ذخیره شد، اما بازتولید فایل صوتی خوش‌آمد انجام نشد؛ دوباره تلاش کنید.",
+                });
+        }
+
+        return Ok(new { user.VoiceName, welcomeAudioRegenerated = user.SmartPhone is not null });
     }
 
     // ---------------- Phone change (with OTP to the new number) ----------------

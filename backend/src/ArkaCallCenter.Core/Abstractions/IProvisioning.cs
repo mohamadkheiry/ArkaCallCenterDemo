@@ -24,13 +24,14 @@ public interface IAsteriskProvisioningService
 }
 
 public record SmartPhoneResult(bool Ok, string? Error, SmartPhone? SmartPhone);
+public record WelcomeAudioResult(bool Ok, string? Error, SmartPhone? SmartPhone);
 
 /// <summary>ارکستراسیون ساخت تلفن هوشمند: پیش‌نیازها، تخصیص داخلی، provisioning، وویس خوش‌آمد، پیامک.</summary>
 public interface ISmartPhoneService
 {
     Task<SmartPhone?> GetAsync(int userId, CancellationToken ct = default);
     Task<SmartPhoneResult> CreateAsync(int userId, CancellationToken ct = default);
-    Task<SmartPhone?> SetWelcomeAsync(int userId, string text, CancellationToken ct = default);
+    Task<WelcomeAudioResult> SetWelcomeAsync(int userId, string text, CancellationToken ct = default);
 
     /// <summary>تنظیمِ درصدِ دقت/پایبندی به پایگاه دانش (۱۰ تا ۱۰۰).</summary>
     Task<SmartPhone?> SetAccuracyAsync(int userId, int percent, CancellationToken ct = default);
