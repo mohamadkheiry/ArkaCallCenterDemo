@@ -70,9 +70,21 @@ public static class ConversationTurnClassifier
                                (tokens.Contains("این", StringComparer.OrdinalIgnoreCase) &&
                                 tokens.Contains("جا", StringComparer.OrdinalIgnoreCase))) &&
                               tokens.Any(token => token is "کجا" or "کجاست" or "کجای");
-        var asksWhoYouAre = tokens.Contains("شما", StringComparer.OrdinalIgnoreCase) &&
-                            tokens.Any(token => token is "کی" or "نام" or "اسم") &&
-                            tokens.Any(token => token is "هستید" or "چیست" or "چیه");
+        var hasSecondPersonCopula = tokens.Any(token => token is "هستی" or "هستید" or "هستین");
+        var asksWhoYouAre =
+            // In Persian the second-person verb already identifies the addressee, so
+            // callers commonly omit «شما» and simply say «کی هستی؟».
+            (tokens.Contains("کی", StringComparer.OrdinalIgnoreCase) && hasSecondPersonCopula) ||
+            (tokens.Contains("چه", StringComparer.OrdinalIgnoreCase) &&
+             tokens.Contains("کسی", StringComparer.OrdinalIgnoreCase) && hasSecondPersonCopula) ||
+            (tokens.Any(token => token is "اسمت" or "نامت" or "اسمتون" or "نامتون" or "اسمتان" or "نامتان") &&
+             tokens.Any(token => token is "چیست" or "چیه")) ||
+            (tokens.Contains("شما", StringComparer.OrdinalIgnoreCase) &&
+             tokens.Any(token => token is "نام" or "اسم") &&
+             tokens.Any(token => token is "هست" or "هستید" or "چیست" or "چیه")) ||
+            (tokens.Contains("معرفی", StringComparer.OrdinalIgnoreCase) &&
+             tokens.Any(token => token is "خودت" or "خودتو" or "خودتون" or "خودتان") &&
+             tokens.Any(token => token is "کن" or "کنید" or "بکن" or "بکنید"));
         var asksBusinessName = (tokens.Contains("کسب", StringComparer.OrdinalIgnoreCase) ||
                                 tokens.Contains("مجموعه", StringComparer.OrdinalIgnoreCase) ||
                                 tokens.Contains("شرکت", StringComparer.OrdinalIgnoreCase)) &&

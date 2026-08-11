@@ -47,6 +47,12 @@ public class ConversationTurnClassifierTests
     [InlineData("با چه مجموعه‌ای تماس گرفتم؟")]
     [InlineData("اینجا کجاست؟")]
     [InlineData("شما کی هستید؟")]
+    [InlineData("کی هستی؟")]
+    [InlineData("کی هستین؟")]
+    [InlineData("تو کی هستی؟")]
+    [InlineData("چه کسی هستید؟")]
+    [InlineData("اسمت چیه؟")]
+    [InlineData("خودت را معرفی کن")]
     [InlineData("اسم کسب و کار شما چیست؟")]
     public void Business_identity_questions_return_the_configured_brand(string text)
     {
@@ -63,6 +69,8 @@ public class ConversationTurnClassifierTests
     [Theory]
     [InlineData("آدرس شعبه شما کجاست؟")]
     [InlineData("ساعت کاری شرکت چیست؟")]
+    [InlineData("مدیر شرکت کی هست؟")]
+    [InlineData("این محصول برای کی هست؟")]
     public void Business_knowledge_questions_are_not_mistaken_for_identity(string text)
     {
         Assert.False(ConversationTurnClassifier.TryCreateBusinessIdentityResponse(text, "آرکا", out _));
