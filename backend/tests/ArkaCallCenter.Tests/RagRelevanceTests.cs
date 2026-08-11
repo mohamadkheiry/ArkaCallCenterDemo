@@ -70,4 +70,19 @@ public class RagRelevanceTests
 
         Assert.True(supportedAnswer > unrelatedSemanticLeader);
     }
+
+    [Fact]
+    public void Bm25_does_not_overrate_one_generic_match_when_product_terms_are_missing()
+    {
+        var scores = RagService.Bm25Scores(
+            "قیمت لپ تاپ چقدر است؟",
+            new[]
+            {
+                "هزینه صدور مجوز نمایندگی بیمه بر اساس آیین نامه تعیین می‌شود.",
+                "توانگری مالی شرکت‌های بیمه به صورت مستمر ارزیابی می‌شود."
+            });
+
+        Assert.InRange(scores[0], 0, 0.34);
+        Assert.Equal(0, scores[1], precision: 6);
+    }
 }

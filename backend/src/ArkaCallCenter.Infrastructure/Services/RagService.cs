@@ -22,7 +22,7 @@ public class RagService : IRagService
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> ReindexLocks = new();
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "این", "آن", "است", "هست", "بود", "برای", "چند", "چقدر", "چیست", "چیه", "آیا",
+        "این", "آن", "است", "هست", "بود", "برای", "چند", "چقدر", "چقدره", "چیست", "چیه", "آیا",
         "قبل", "بعد", "باید", "شود", "شده", "کردن", "کنم", "کنیم", "کنید", "کند", "درباره", "یعنی", "لطفا", "لطفاً",
         "من", "ما", "شما", "که", "چه", "کجا", "چطور", "چگونه", "دارم", "دارد", "دارید", "میشه",
         "the", "what", "how", "and", "for", "is", "are"
@@ -323,7 +323,15 @@ public class RagService : IRagService
         var maximum = scores.DefaultIfEmpty(0).Max();
         if (maximum <= 0) return scores;
         for (var index = 0; index < scores.Length; index++)
-            scores[index] /= maximum;
+        {
+            // A single generic match such as «قیمت» must not make a document look
+            // fully lexical when the other query concepts (for example a product
+            // name) are absent. Preserve BM25 strength but gate it by term coverage.
+            var matchedQueryTerms = queryTerms.Count(term =>
+                documentTerms[index].Contains(term, StringComparer.OrdinalIgnoreCase));
+            var queryCoverage = matchedQueryTerms / (double)queryTerms.Count;
+            scores[index] = (scores[index] / maximum) * queryCoverage * queryCoverage;
+        }
         return scores;
     }
 
@@ -419,6 +427,7 @@ public class RagService : IRagService
         AddSynonyms(map, "آدرس", "آدرس", "نشانی", "موقعیت", "مکان");
         AddSynonyms(map, "ساعت", "ساعت", "ساعات");
         AddSynonyms(map, "ثبت", "ثبت", "عضویت", "نامنویسی");
+        AddSynonyms(map, "آنلاین", "آنلاین", "اینترنتی", "غیرحضوری");
         AddSynonyms(map, "خرید", "خرید", "سفارش", "تهیه");
         AddSynonyms(map, "لغو", "لغو", "کنسل", "ابطال");
         AddSynonyms(map, "تحویل", "تحویل", "ارسال");
