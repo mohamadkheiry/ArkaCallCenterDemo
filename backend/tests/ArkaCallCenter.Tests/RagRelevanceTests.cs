@@ -36,4 +36,38 @@ public class RagRelevanceTests
 
         Assert.False(relevant);
     }
+
+    [Fact]
+    public void Bm25_uses_Persian_synonyms_to_find_a_paraphrased_answer()
+    {
+        var scores = RagService.Bm25Scores(
+            "هزینه عضویت غیرحضوری چقدره؟",
+            new[]
+            {
+                "تعرفه ثبت نام آنلاین پانصد هزار تومان است.",
+                "ساعت کاری شعبه از هشت صبح تا چهار عصر است.",
+                "نشانی دفتر مرکزی در خیابان آزادی است."
+            });
+
+        Assert.Equal(1, scores[0], precision: 6);
+        Assert.Equal(0, scores[1], precision: 6);
+        Assert.Equal(0, scores[2], precision: 6);
+    }
+
+    [Fact]
+    public void Reciprocal_rank_fusion_promotes_lexically_supported_semantic_candidate()
+    {
+        var unrelatedSemanticLeader = RagService.FuseScores(
+            semanticScore: 0.55,
+            lexicalScore: 0,
+            semanticRank: 1,
+            lexicalRank: 0);
+        var supportedAnswer = RagService.FuseScores(
+            semanticScore: 0.50,
+            lexicalScore: 1,
+            semanticRank: 2,
+            lexicalRank: 1);
+
+        Assert.True(supportedAnswer > unrelatedSemanticLeader);
+    }
 }

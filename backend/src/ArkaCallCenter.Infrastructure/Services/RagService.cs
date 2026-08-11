@@ -13,13 +13,21 @@ namespace ArkaCallCenter.Infrastructure.Services;
 public class RagService : IRagService
 {
     private const double MaxLexicalRelevanceBoost = 0.12;
+    private const double SemanticFusionWeight = 0.55;
+    private const double LexicalFusionWeight = 0.25;
+    private const double RankFusionWeight = 0.20;
+    private const double SemanticRankWeight = 0.68;
+    private const double LexicalRankWeight = 0.32;
+    private const double ReciprocalRankConstant = 60;
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> ReindexLocks = new();
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "این", "آن", "است", "هست", "بود", "برای", "چند", "چقدر", "چیست", "چیه", "آیا",
-        "قبل", "بعد", "باید", "شود", "شده", "کردن", "کنم", "کنیم", "درباره", "یعنی", "لطفا", "لطفاً",
+        "قبل", "بعد", "باید", "شود", "شده", "کردن", "کنم", "کنیم", "کنید", "کند", "درباره", "یعنی", "لطفا", "لطفاً",
+        "من", "ما", "شما", "که", "چه", "کجا", "چطور", "چگونه", "دارم", "دارد", "دارید", "میشه",
         "the", "what", "how", "and", "for", "is", "are"
     };
+    private static readonly IReadOnlyDictionary<string, string> SynonymCanonical = BuildSynonymMap();
     private readonly ArkaDbContext _db;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
@@ -77,14 +85,35 @@ public class RagService : IRagService
 
         var q = await _openai.EmbedAsync(query, ct);
 
+        var bm25Scores = Bm25Scores(query, chunks.Select(chunk => chunk.Content).ToList());
         var candidates = chunks
-            .Select(c =>
+            .Select((c, index) =>
             {
                 var semanticScore = Cosine(q, DeserializeEmbedding(c.EmbeddingJson).Vector);
-                var lexicalScore = LexicalSimilarity(query, c.Content);
-                var hybridScore = semanticScore + Math.Min(MaxLexicalRelevanceBoost,
-                    lexicalScore * MaxLexicalRelevanceBoost);
-                return new RagCandidate(c.Content, semanticScore, lexicalScore, hybridScore);
+                var fuzzyOverlap = LexicalSimilarity(query, c.Content);
+                var lexicalScore = Math.Clamp((bm25Scores[index] * 0.70) + (fuzzyOverlap * 0.30), 0, 1);
+                return new RagCandidate(index, c.Content, semanticScore, lexicalScore, 0);
+            })
+            .ToList();
+
+        var semanticRanks = candidates
+            .OrderByDescending(candidate => candidate.SemanticScore)
+            .Select((candidate, rank) => (candidate.SourceIndex, Rank: rank + 1))
+            .ToDictionary(item => item.SourceIndex, item => item.Rank);
+        var lexicalRanks = candidates
+            .Where(candidate => candidate.LexicalScore > 0)
+            .OrderByDescending(candidate => candidate.LexicalScore)
+            .Select((candidate, rank) => (candidate.SourceIndex, Rank: rank + 1))
+            .ToDictionary(item => item.SourceIndex, item => item.Rank);
+
+        candidates = candidates
+            .Select(candidate => candidate with
+            {
+                HybridScore = FuseScores(
+                    candidate.SemanticScore,
+                    candidate.LexicalScore,
+                    semanticRanks[candidate.SourceIndex],
+                    lexicalRanks.GetValueOrDefault(candidate.SourceIndex))
             })
             .OrderByDescending(candidate => candidate.HybridScore)
             .Take(topK)
@@ -100,7 +129,7 @@ public class RagService : IRagService
             threshold);
 
         var contextCandidates = found
-            ? candidates.Where(candidate => candidate.HybridScore >= best!.HybridScore - 0.12)
+            ? candidates.Where(candidate => candidate.HybridScore >= best!.HybridScore - 0.16)
             : Enumerable.Empty<RagCandidate>();
         var context = found
             ? string.Join("\n---\n", contextCandidates.Select(candidate => candidate.Content))
@@ -256,6 +285,75 @@ public class RagService : IRagService
         return matched / (double)queryTokens.Count;
     }
 
+    /// <summary>
+    /// BM25 lexical retrieval over the current user's small in-memory chunk corpus.
+    /// Scores are normalized to 0..1 so they can be fused with cosine similarity.
+    /// </summary>
+    internal static double[] Bm25Scores(string query, IReadOnlyList<string> documents)
+    {
+        var scores = new double[documents.Count];
+        if (documents.Count == 0) return scores;
+
+        var queryTerms = SearchTokens(query).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (queryTerms.Count == 0) return scores;
+
+        var documentTerms = documents.Select(SearchTokens).ToList();
+        var averageLength = Math.Max(1d, documentTerms.Average(terms => terms.Count));
+        const double k1 = 1.35;
+        const double b = 0.72;
+
+        foreach (var term in queryTerms)
+        {
+            var documentFrequency = documentTerms.Count(terms => terms.Contains(term, StringComparer.OrdinalIgnoreCase));
+            if (documentFrequency == 0) continue;
+            var inverseDocumentFrequency = Math.Log(
+                1 + ((documents.Count - documentFrequency + 0.5) / (documentFrequency + 0.5)));
+
+            for (var index = 0; index < documentTerms.Count; index++)
+            {
+                var terms = documentTerms[index];
+                var termFrequency = terms.Count(candidate => string.Equals(candidate, term, StringComparison.OrdinalIgnoreCase));
+                if (termFrequency == 0) continue;
+                var lengthNormalization = k1 * (1 - b + (b * terms.Count / averageLength));
+                scores[index] += inverseDocumentFrequency *
+                                 ((termFrequency * (k1 + 1)) / (termFrequency + lengthNormalization));
+            }
+        }
+
+        var maximum = scores.DefaultIfEmpty(0).Max();
+        if (maximum <= 0) return scores;
+        for (var index = 0; index < scores.Length; index++)
+            scores[index] /= maximum;
+        return scores;
+    }
+
+    /// <summary>
+    /// Weighted score fusion plus reciprocal-rank fusion. The rank component makes
+    /// semantic and lexical retrieval vote independently instead of treating lexical
+    /// overlap as only a small cosine bonus.
+    /// </summary>
+    internal static double FuseScores(
+        double semanticScore,
+        double lexicalScore,
+        int semanticRank,
+        int lexicalRank)
+    {
+        var reciprocalRank = SemanticRankWeight /
+                             (ReciprocalRankConstant + Math.Max(1, semanticRank));
+        if (lexicalRank > 0)
+            reciprocalRank += LexicalRankWeight /
+                              (ReciprocalRankConstant + lexicalRank);
+        var maximumReciprocalRank = 1d / (ReciprocalRankConstant + 1);
+        var normalizedRankScore = Math.Clamp(reciprocalRank / maximumReciprocalRank, 0, 1);
+
+        return Math.Clamp(
+            (Math.Max(0, semanticScore) * SemanticFusionWeight) +
+            (Math.Clamp(lexicalScore, 0, 1) * LexicalFusionWeight) +
+            (normalizedRankScore * RankFusionWeight),
+            0,
+            1);
+    }
+
     internal static bool IsRelevant(double semanticScore, double lexicalScore, double threshold)
         => semanticScore >= threshold ||
            (lexicalScore >= 0.25 &&
@@ -295,6 +393,9 @@ public class RagService : IRagService
     }
 
     private static HashSet<string> DistinctiveTokens(string text)
+        => SearchTokens(text).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static List<string> SearchTokens(string text)
     {
         var normalized = text
             .Normalize(NormalizationForm.FormKC)
@@ -307,11 +408,39 @@ public class RagService : IRagService
 
         return Regex.Split(normalized, @"[^\p{L}\p{N}]+")
             .Where(token => token.Length >= 3 && !StopWords.Contains(token))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(token => SynonymCanonical.GetValueOrDefault(token, token))
+            .ToList();
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildSynonymMap()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        AddSynonyms(map, "قیمت", "قیمت", "هزینه", "تعرفه", "مبلغ", "بها");
+        AddSynonyms(map, "آدرس", "آدرس", "نشانی", "موقعیت", "مکان");
+        AddSynonyms(map, "ساعت", "ساعت", "ساعات");
+        AddSynonyms(map, "ثبت", "ثبت", "عضویت", "نامنویسی");
+        AddSynonyms(map, "خرید", "خرید", "سفارش", "تهیه");
+        AddSynonyms(map, "لغو", "لغو", "کنسل", "ابطال");
+        AddSynonyms(map, "تحویل", "تحویل", "ارسال");
+        AddSynonyms(map, "پشتیبانی", "پشتیبانی", "کارشناس", "اپراتور");
+        AddSynonyms(map, "تماس", "تماس", "تلفن");
+        AddSynonyms(map, "خدمات", "خدمات", "سرویس");
+        AddSynonyms(map, "گارانتی", "گارانتی", "ضمانت");
+        AddSynonyms(map, "پرداخت", "پرداخت", "واریز");
+        return map;
+    }
+
+    private static void AddSynonyms(
+        IDictionary<string, string> map,
+        string canonical,
+        params string[] values)
+    {
+        foreach (var value in values) map[value] = canonical;
     }
 
     private sealed record EmbeddingEnvelope(string? Model, float[] Vector);
     private sealed record RagCandidate(
+        int SourceIndex,
         string Content,
         double SemanticScore,
         double LexicalScore,
