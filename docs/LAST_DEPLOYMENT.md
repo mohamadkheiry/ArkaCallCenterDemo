@@ -9,7 +9,7 @@
 | --- | --- |
 | تاریخ استقرار | ۲۰۲۶-۰۸-۱۳ |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit برنامه | `cce0ad697493e62dbeb708eb030510c7cc816216` |
+| commit برنامه | `a08302b` |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
 | اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
