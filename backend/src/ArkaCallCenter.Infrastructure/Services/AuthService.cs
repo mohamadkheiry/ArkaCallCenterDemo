@@ -16,16 +16,18 @@ public class AuthService : IAuthService
 
     private readonly ArkaDbContext _db;
     private readonly IVoiceCaller _voice;
+    private readonly ISmsSender _sms;
     private readonly ITokenService _tokens;
     private readonly ICrmLeadService _crm;
     private readonly IBaleNotifier _bale;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(ArkaDbContext db, IVoiceCaller voice, ITokenService tokens,
+    public AuthService(ArkaDbContext db, IVoiceCaller voice, ISmsSender sms, ITokenService tokens,
         ICrmLeadService crm, IBaleNotifier bale, ILogger<AuthService> logger)
     {
         _db = db;
         _voice = voice;
+        _sms = sms;
         _tokens = tokens;
         _crm = crm;
         _bale = bale;
@@ -43,7 +45,7 @@ public class AuthService : IAuthService
         _crm.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
         _bale.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
 
-        return await RequestOtpCallCoreAsync(phoneNumber, ct);
+        return await RequestOtpSmsCoreAsync(phoneNumber, ct);
     }
 
     public async Task<OtpRequestResult> RequestOtpByCallAsync(string phoneNumber, CancellationToken ct = default)
@@ -188,6 +190,49 @@ public class AuthService : IAuthService
     }
 
     // ---- helpers ----
+    private async Task<OtpRequestResult> RequestOtpSmsCoreAsync(string phoneNumber, CancellationToken ct)
+    {
+        var requestGate = OtpRequestGates.GetOrAdd(phoneNumber, _ => new SemaphoreSlim(1, 1));
+        await requestGate.WaitAsync(ct);
+        try
+        {
+            var previous = await _db.OtpCodes
+                .Where(x => x.PhoneNumber == phoneNumber && !x.Consumed)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var retryAfter = previous is null ? 0 : RemainingCooldownSeconds(previous.CreatedAt);
+            if (retryAfter > 0)
+                return new OtpRequestResult(
+                    false,
+                    $"برای درخواست مجدد کد، {retryAfter} ثانیه دیگر صبر کنید.",
+                    retryAfter);
+
+            if (previous is not null) previous.Consumed = true;
+
+            var otp = new OtpCode
+            {
+                PhoneNumber = phoneNumber,
+                Code = Random.Shared.Next(100000, 1000000).ToString(),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(OtpTtlMinutes),
+            };
+            _db.OtpCodes.Add(otp);
+            await _db.SaveChangesAsync(ct);
+
+            var sent = await _sms.SendVerifyCodeAsync(phoneNumber, otp.Code, ct);
+            if (sent)
+                return new OtpRequestResult(true, null, RemainingCooldownSeconds(otp.CreatedAt));
+
+            otp.Consumed = true;
+            await _db.SaveChangesAsync(ct);
+            return new OtpRequestResult(false, "ارسال پیامک تأیید ممکن نشد؛ لطفاً دوباره تلاش کنید.");
+        }
+        finally
+        {
+            requestGate.Release();
+        }
+    }
+
     private async Task<OtpRequestResult> RequestOtpCallCoreAsync(string phoneNumber, CancellationToken ct)
     {
         var requestGate = OtpRequestGates.GetOrAdd(phoneNumber, _ => new SemaphoreSlim(1, 1));

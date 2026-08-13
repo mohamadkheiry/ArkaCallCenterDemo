@@ -18,7 +18,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> RequestOtp(RequestOtpRequest req, CancellationToken ct)
     {
         var result = await _auth.RequestOtpAsync(req.PhoneNumber, ct);
-        return OtpResponse(result);
+        return OtpResponse(result, "کد تأیید از طریق پیامک برای شما ارسال شد.");
     }
 
     /// <summary>خواندنِ کد تأیید از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>
@@ -26,7 +26,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> RequestOtpByCall(RequestOtpRequest req, CancellationToken ct)
     {
         var result = await _auth.RequestOtpByCallAsync(req.PhoneNumber, ct);
-        return OtpResponse(result);
+        return OtpResponse(result, "تماس برقرار شد؛ کد برایتان خوانده می‌شود.");
     }
 
     /// <summary>اعتبارسنجی کد و صدور توکن.</summary>
@@ -54,12 +54,12 @@ public class AuthController : ControllerBase
         return Ok(new { user.FirstName, user.LastName, user.BrandName, user.ProfileCompleted });
     }
 
-    private IActionResult OtpResponse(OtpRequestResult result)
+    private IActionResult OtpResponse(OtpRequestResult result, string successMessage)
     {
         if (result.Success)
             return Ok(new
             {
-                message = "تماس برقرار شد؛ کد برایتان خوانده می‌شود.",
+                message = successMessage,
                 result.RetryAfterSeconds,
             });
 

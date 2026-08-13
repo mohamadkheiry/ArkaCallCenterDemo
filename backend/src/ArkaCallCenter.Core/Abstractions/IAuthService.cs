@@ -7,7 +7,7 @@ public record OtpRequestResult(bool Success, string? Error, int RetryAfterSecond
 
 public interface IAuthService
 {
-    /// <summary>تولید و ارسال کد OTP برای شماره‌ی موبایل.</summary>
+    /// <summary>تولید و ارسال کد OTP از طریق پیامک برای شماره‌ی موبایل.</summary>
     Task<OtpRequestResult> RequestOtpAsync(string phoneNumber, CancellationToken ct = default);
 
     /// <summary>خواندنِ کد OTP برای کاربر از طریق تماس تلفنی (صدای گنجی، رقم‌به‌رقم).</summary>

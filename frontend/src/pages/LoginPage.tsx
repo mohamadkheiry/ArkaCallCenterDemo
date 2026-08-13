@@ -269,7 +269,7 @@ export default function LoginPage() {
                     ورود به داشبورد
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    شماره موبایل خود را وارد کنید تا کد ورود طی تماس تلفنی برایتان خوانده شود.
+                    شماره موبایل خود را وارد کنید تا کد ورود از طریق پیامک برایتان ارسال شود.
                   </p>
                 </div>
 
@@ -308,7 +308,7 @@ export default function LoginPage() {
                   )}
 
                   <Button type="submit" loading={loading} className="w-full">
-                    دریافت کد با تماس تلفنی
+                    دریافت کد با پیامک
                     <ArrowLeft size={17} />
                   </Button>
 
@@ -328,7 +328,7 @@ export default function LoginPage() {
                     کد تأیید
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    کد ۶ رقمی خوانده‌شده در تماس با شماره{' '}
+                    کد ۶ رقمی ارسال‌شده با پیامک به شماره{' '}
                     <span dir="ltr" className="mx-0.5 inline-block font-bold tracking-wider text-slate-700">
                       {toFa(phone)}
                     </span>{' '}
@@ -402,7 +402,7 @@ export default function LoginPage() {
 
                   <div className="flex items-center gap-3 py-0.5 text-xs text-slate-400">
                     <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-200" />
-                    تماس را دریافت نکردید؟
+                    پیامک را دریافت نکردید؟
                     <span className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200" />
                   </div>
 
