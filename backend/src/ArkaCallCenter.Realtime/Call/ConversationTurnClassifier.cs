@@ -78,6 +78,11 @@ public static class ConversationTurnClassifier
         "ببخشید", "ببخشین", "معذرت", "پوزش", "عذر", "شرمنده", "مزاحم"
     };
 
+    private static readonly HashSet<string> EmpathyWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "حیف", "افسوس", "متاسفم", "متأسفم", "متاسفانه", "متأسفانه"
+    };
+
     private static readonly HashSet<string> CommonSocialWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "خیلی", "زیاد", "از", "بر", "به", "با", "و", "که", "من", "شما", "خودت", "خودتون", "خودتان",
@@ -100,6 +105,7 @@ public static class ConversationTurnClassifier
         NegativeWords,
         WellbeingWords,
         ApologyWords,
+        EmpathyWords,
         CommonSocialWords);
 
     private static readonly HashSet<string> GreetingAllowedWords = MergeWords(SimpleSocialWords, GreetingFillers);
@@ -210,6 +216,12 @@ public static class ConversationTurnClassifier
         if (ContainsOnlyIntent(tokens, ApologyWords, ApologyAllowedWords))
         {
             response = "خواهش می‌کنم، بفرمایید. چطور می‌توانم کمکتان کنم؟";
+            return true;
+        }
+
+        if (ContainsOnlyIntent(tokens, EmpathyWords, SimpleSocialWords))
+        {
+            response = "متوجه‌ام. اگر مایل باشید، بفرمایید چطور می‌توانم کمکتان کنم.";
             return true;
         }
 

@@ -34,6 +34,9 @@ public class ConversationTurnClassifierTests
     [InlineData("ببخشید")]
     [InlineData("شرمنده وقتتون رو گرفتم")]
     [InlineData("معذرت میخوام")]
+    [InlineData("حیف")]
+    [InlineData("افسوس")]
+    [InlineData("متأسفم")]
     [InlineData("خدا نگهدار")]
     [InlineData("خدانگهدارتون")]
     [InlineData("موفق باشید")]
@@ -56,6 +59,24 @@ public class ConversationTurnClassifierTests
     }
 
     [Theory]
+    [InlineData("سلام", "سلام!")]
+    [InlineData("خدا قوت", "سلامت باشید!")]
+    [InlineData("حالتون چطوره؟", "ممنون، خوبم")]
+    [InlineData("خیلی لطف کردید", "خواهش می‌کنم.")]
+    [InlineData("ببخشید", "خواهش می‌کنم، بفرمایید.")]
+    [InlineData("حیف", "متوجه‌ام.")]
+    [InlineData("موفق باشید", "خدانگهدار")]
+    [InlineData("بله", "بله، بفرمایید.")]
+    [InlineData("خیر", "بسیار خوب.")]
+    [InlineData("عالی بود", "حتماً.")]
+    [InlineData("نه، ممنون", "خواهش می‌کنم.")]
+    public void Social_turns_return_the_expected_response_category(string text, string expectedPrefix)
+    {
+        Assert.True(ConversationTurnClassifier.TryCreateResponse(text, out var response));
+        Assert.StartsWith(expectedPrefix, response);
+    }
+
+    [Theory]
     [InlineData("سلام، ساعت کاری شما چطور است؟")]
     [InlineData("ممنون، قیمت این خدمات چقدر است؟")]
     [InlineData("ممنون بابت راهنمایی، قیمت خدمات چقدر است؟")]
@@ -74,6 +95,7 @@ public class ConversationTurnClassifierTests
     [InlineData("سلام، راهنمایی کنید")]
     [InlineData("ببخشید، کمک کنید")]
     [InlineData("نه، منظورم قیمت محصول بود")]
+    [InlineData("حیف که این بیمه شرایط متفاوتی دارد")]
     [InlineData("سلام، شرایط دریافت وام چطوره؟")]
     [InlineData("حال سفارش من چطور است؟")]
     [InlineData("شرایط ثبت نام چیست؟")]
