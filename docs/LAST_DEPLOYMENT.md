@@ -9,7 +9,7 @@
 | --- | --- |
 | تاریخ استقرار | ۲۰۲۶-۰۸-۱۵ |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit برنامه | `81dd47b` |
+| commit برنامه | `87d1b62` |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
 | اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
@@ -26,6 +26,25 @@
 سرویس مستقل OTP یعنی `CodeSenderWithPhone` همچنان روی
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
+
+## انتشار پاسخ مستقیم کل پایگاه دانش با `evidenceIds` — ۲۰۲۶-۰۸-۱۵
+
+- مسیر تماس دیگر call-time RAG، embedding، BM25، RRF یا Top-K اجرا نمی‌کند. پس از social/identity guard، کل `RawText` تأییدشدهٔ همان کاربر در همان نوبت به segmentهای request-local از شکل `{i,t}` تبدیل و یک‌بار در `fullKnowledgeBaseSegments` به Chat داده می‌شود.
+- مدل فقط `classification` و آرایهٔ `evidenceIds` می‌دهد؛ در حالت `answerable` یک تا چهار ID لازم است و دو حالت دیگر آرایهٔ خالی دارند. سرور IDهای canonical، یکتا و متعلق به همان snapshot را resolve و متن source segmentها را به ترتیب منبع پخش می‌کند. فیلد اضافی `answer` نادیده گرفته می‌شود و legacy `evidence` یا ID نامعتبر هرگز پخش نمی‌شود.
+- نتیجه‌ها تفکیک شده‌اند: `Answered` فقط متن منبع را پخش و `AnsweredFromKb=true` ثبت می‌کند؛ انتخاب `evidenceIds` نامعتبر یا پاسخ ناموجود به `InDomainUnknown` و KB خالی به `KnowledgeBaseEmpty` می‌رود؛ هر دو به اپراتور ارجاع و در unanswered ثبت می‌شوند. `OutOfDomain` حوزهٔ مجموعه را معرفی می‌کند؛ JSON خراب، timeout یا خطای provider به `ServiceUnavailable` می‌رود و unanswered را آلوده نمی‌کند.
+- guardهای بدون truncate شامل ۹۰٬۰۰۰ کاراکتر خام، ۵٬۰۰۰ segment، ۱٬۰۰۰ کاراکتر برای هر segment، ۱۸۰٬۰۰۰ کاراکتر payload، برآورد ۱۰۰٬۰۰۰ توکن prompt، ۱٬۲۰۰ کاراکتر خروجی صوتی، timeout بیست‌وپنج‌ثانیه‌ای و completion حداکثر ۳۰۰ توکن هستند. دادهٔ legacy `KnowledgeChunk` برای rollback باقی مانده اما مسیر تماس آن را نمی‌خواند.
+- مجموعه تست Release برابر ۳۲۷ از ۳۲۷ موفق است. آزمون زنده مسیر واقعی AudioSocket برای پاسخ موجود، سؤال مرتبطِ بدون پاسخ، سؤال خارج حوزه و بزرگ‌ترین KB فعلی با ۸۶٬۷۹۳ کاراکتر موفق بود؛ در نوبت‌های دانشی یک Chat و صفر Embedding جدید ثبت شد. یک timeout گذرای provider در اجرای نخست خارج‌ازحوزه به `ServiceUnavailable` رفت و retry همان سناریو موفق شد.
+- تصویر منتشرشدهٔ Realtime برابر `sha256:76af720ffd632b9de413396bfd64151594efb52ebadd6f6a43e58dd467e78cb5` است. تصویر قبلی با tag `arkacallcenterdemo-realtime:before-segment-ids-87d1b62` برای rollback حفظ شده است.
+- داده‌های آزمایشی پس از آرشیو دارای checksum با شناسه‌های دقیق پاک شدند و خط پایهٔ واقعی حفظ شد: ۱۲ پایگاه دانش، ۳۲۴ chunk legacy، ۶۱ تماس و ۴۰۶ رکورد مصرف. هیچ volume، پایگاه دانش یا فایل تماس واقعی حذف نشد.
+- `arka-call-center.service` برابر `enabled/active` و restart policy کانتینر Realtime برابر `unless-stopped` است؛ API و وب HTTP `200` و AudioSocket روی `9092` در دسترس‌اند.
+
+بکاپ دیتابیس، سورس، image قبلی، رکوردهای آزمایش و خروجی‌های صوتی در مسیر root-only زیر نگه‌داری می‌شود:
+
+```text
+/var/backups/arka-call-center/20260815-113855-full-kb-before-b37e465
+```
+
+## سوابق استقرارهای قبلی
 
 ## انتشار مسیریابی حرفه‌ای مکالمه و RAG سه‌حالته — ۲۰۲۶-۰۸-۱۵
 

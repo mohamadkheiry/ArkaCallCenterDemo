@@ -5,7 +5,7 @@
 
 ## ۱. نمای کلی
 
-سامانه‌ای چندمستأجری (multi-tenant) است که هر کاربر یک **شماره‌ی داخلی اختصاصی** روی مرکز تلفن ایزابل (Asterisk) می‌گیرد. تماس‌های ورودی به‌صورت بلادرنگ توسط هوش مصنوعی و بر پایه‌ی **پایگاه دانش اختصاصی هر کاربر** (RAG) پاسخ داده می‌شوند.
+سامانه‌ای چندمستأجری (multi-tenant) است که هر کاربر یک **شماره‌ی داخلی اختصاصی** روی مرکز تلفن ایزابل (Asterisk) می‌گیرد. تماس‌های ورودی به‌صورت بلادرنگ توسط هوش مصنوعی و با **بررسی مستقیم کل پایگاه دانش تأییدشدهٔ همان کاربر** پاسخ داده می‌شوند.
 
 ## ۲. اجزای اصلی
 
@@ -15,7 +15,7 @@
 | API | .NET 9 (ASP.NET Core) | احراز هویت، مدیریت پایگاه دانش، provisioning، پنل ادمین |
 | Realtime Worker | .NET 9 (Worker) | پل صوتی AudioSocket ↔ OpenAI Realtime |
 | داده | MySQL (EF Core + Pomelo) | کاربران، پایگاه دانش، تماس‌ها، تنظیمات، مصرف توکن |
-| هوش مصنوعی | OpenAI (Realtime, Embeddings, TTS) + Moderation | پاسخ صوتی، نمایه‌سازی RAG، پالایش محتوا |
+| هوش مصنوعی | OpenAI (Chat, Realtime, TTS) + Moderation | طبقه‌بندی سؤال و انتخاب قطعهٔ منبع، پاسخ صوتی، پالایش محتوا |
 | تلفنی | Isabel/Asterisk (AudioSocket, PJSIP) | مرکز تلفن، شماره‌های داخلی، ترانک، مسیر خروجی |
 
 ## ۳. دیاگرام معماری
@@ -42,7 +42,7 @@ flowchart TB
 
     subgraph OpenAI["OpenAI"]
         RTApi["Realtime API"]
-        Emb["Embeddings"]
+        Chat["Chat Completions"]
         TTS["TTS"]
         Mod["Moderation"]
     end
@@ -53,7 +53,8 @@ flowchart TB
     Browser --> Nginx --> API
     API --> DB
     RT --> DB
-    API --> Emb
+    RT -->|"fullKnowledgeBaseSegments"| Chat
+    Chat -->|"classification + evidenceIds"| RT
     API --> TTS
     API --> Mod
     API -->|"provisioning (SSH)"| PBX
@@ -64,7 +65,7 @@ flowchart TB
 1. تماس‌گیرنده شماره‌ی داخلی را می‌گیرد؛ Asterisk تماس را به context `arka-ai` می‌برد.
 2. dialplan یک UUID می‌سازد که **شماره‌ی داخلی** و **شماره‌ی تماس‌گیرنده** را کد می‌کند و با `AudioSocket` به Realtime Worker وصل می‌شود.
 3. Worker شماره‌ی داخلی را استخراج و کاربر/پایگاه دانش را از دیتابیس می‌خواند.
-4. Worker به OpenAI Realtime متصل می‌شود؛ پایگاه دانش کامل وارد session نمی‌شود و برای هر سؤال فقط context بازیابی‌شده و دارای شاهد ارسال می‌گردد.
+4. Worker به OpenAI Realtime متصل می‌شود؛ پایگاه دانش وارد session صوتی نمی‌شود. برای هر سؤال، کل KB تأییدشدهٔ همان کاربر به شکل `fullKnowledgeBaseSegments` به Chat داده می‌شود؛ مدل `classification` و `evidenceIds` می‌دهد و Worker متن دقیق شناسه‌های معتبر را پخش می‌کند.
 5. نوبت اجتماعی مستقیم پاسخ می‌گیرد؛ سؤال دانشی به یکی از مسیرهای پاسخ مستند، مرتبطِ بی‌پاسخ، خارج از حوزه یا اختلال فنی می‌رود و پاسخ صوتی به Asterisk بازگردانده می‌شود.
 6. صدای caller و فریم‌هایی که واقعاً برای او پخش شده‌اند، روی clock ثابت ۲۰ میلی‌ثانیه‌ای ترکیب می‌شوند؛ سپس فقط وقفه‌های سکوتِ طولانی در سطح فریم کوتاه می‌شوند.
 7. رونوشتِ مکالمه، سوالاتِ بی‌پاسخ، فایلِ ضبط و مصرفِ توکن ثبت می‌شوند.

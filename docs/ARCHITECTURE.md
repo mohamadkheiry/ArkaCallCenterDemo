@@ -27,7 +27,7 @@
 | 3 | **تنظیمات حساس در DB (`AppSetting`) نه در کد** | سوپرادمین کلیدها را از پنل مدیریت می‌کند؛ اسرار در گیت نیست |
 | 4 | **دمو = User با `IsDemo`** (داخلی انتخابی ۱–۹۹۹، به‌جز ۱۰۰–۳۰۰) | بازاستفاده‌ی کامل منطق تماس و پاسخ دانشی بدون کد تکراری |
 | 5 | **Chat با کل `KnowledgeBase.RawText`** | هر سؤال در برابر کل متن تأییدشدهٔ همان مستأجر بررسی می‌شود؛ در مسیر تماس chunk، embedding یا Top-K وجود ندارد |
-| 6 | **خروجی typed با شاهد عینی** | مدل باید ۱ تا ۴ نقل‌قول عینی بدهد و سرور آن‌ها را در کل متن تطبیق می‌دهد؛ سؤال بی‌پاسخ، خارج حوزه و اختلال فنی گزارش متفاوت دارند |
+| 6 | **خروجی typed با شناسهٔ منبع** | در حالت `answerable` مدل فقط ۱ تا ۴ شناسه را در `evidenceIds` انتخاب می‌کند؛ سرور IDهای canonical/یکتا/شناخته‌شده را روی همان snapshot به متن منبع نگاشت می‌کند و سؤال بی‌پاسخ، خارج حوزه و اختلال فنی گزارش متفاوت دارند |
 | 7 | **استقرار با Docker Compose** | راه‌اندازی یک‌دستوری کل استک |
 
 ---
@@ -197,7 +197,7 @@ erDiagram
 | `TokenService` | صدور JWT |
 | `OpenAiService` | chat / TTS (creds از تنظیمات) + **ثبت مصرف توکن** |
 | `ModerationService` | بررسی انطباق با قوانین ج.ا. (fail-closed) |
-| `DirectKnowledgeAnswerService` | ارسال کل KB تأییدشده به Chat، خروجی typed و تطبیق شاهد عینی |
+| `DirectKnowledgeAnswerService` | ساخت `fullKnowledgeBaseSegments` از کل KB تأییدشده، دریافت خروجی typed با `evidenceIds`، اعتبارسنجی ID و خواندن متن دقیق منبع |
 | `RagService` | مسیر legacy برای rollback؛ در پاسخ‌گویی فعلی تماس فراخوانی نمی‌شود |
 | `FileTextExtractor` | استخراج متن از txt/docx |
 | `KnowledgeBaseService` | ارکستراسیون KB: اعتبارسنجی، moderation، سقف متن مستقیم، حذف فایل مغایر و رویداد |
@@ -294,9 +294,9 @@ sequenceDiagram
       PBX->>W: هدایت صدا
       W->>O: upsample 24k → append → transcription (fa)
       W->>W: social/identity guard
-      W->>K: سؤال + کل RawText همان کاربر (JSON data)
-      K-->>W: Answered / InDomainUnknown / OutOfDomain + evidence
-      W->>W: کنترل server-side شاهد در کل KB
+      W->>K: سؤال + fullKnowledgeBaseSegments همان کاربر (JSON data)
+      K-->>W: classification + evidenceIds
+      W->>W: کنترل canonical/unique/in-range ID روی همان snapshot
       W->>O: متن نهایی تأییدشده برای خواندن عینی
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
@@ -411,7 +411,7 @@ GET      /api/admin/usage/keys | usage/users ; PUT /api/admin/users/{id}/limit
 |----------|-------|
 | لاگین موبایل / تغییر شماره | `AuthService` + SMS.ir |
 | پایگاه دانش (متن/فایل) | `KnowledgeBaseService` + `FileTextExtractor` |
-| پاسخ مستقیم از کل KB | `DirectKnowledgeAnswerService` + Chat JSON + evidence gate |
+| پاسخ مستقیم از کل KB | `DirectKnowledgeAnswerService` + Chat JSON + strict `evidenceIds` gate |
 | بررسی قوانین ج.ا. | `ModerationService` |
 | تخصیص داخلی | `ExtensionAllocator` |
 | ساخت تلفن روی ایزابل | `AsteriskProvisioningService` + `SmartPhoneService` |

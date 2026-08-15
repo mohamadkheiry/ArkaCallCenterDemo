@@ -65,7 +65,7 @@
 2. **پایگاه دانش:** حداکثر **یک** منبع فعال: یا متن ≤ **۲۰۰۰ کاراکتر** یا فایل **txt/docx ≤ ۱۰۰KB**. متن استخراج‌شده برای پاسخ مستقیم حداکثر ۹۰٬۰۰۰ کاراکتر است.
 3. **Moderation:** هر ورودی متن یا فایل قبل از فعال‌شدن باید با LLM از نظر انطباق با قوانین ج.ا.ایران بررسی شود. اگر `Rejected` → حذف فایل + پیام به کاربر + رویداد `KnowledgeBaseRejected`.
 4. **ساخت تلفن هوشمند:** با کلیک «ایجاد تلفن هوشمند» → تخصیص داخلی آزاد تصادفی در [۱۰۰۰,۹۹۹۹] (unique، تضمین عدم تکرار) → Provisioning روی ایزابل → رویداد `SmartPhoneCreated` (پیامک).
-5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سؤال → پاسخ اجتماعی/هویتی یا بررسی مستقیم کل KB با Chat → تطبیق شاهد در سرور → خواندن عینی پاسخ با Realtime. پاسخ ناموجود به اپراتور ارجاع و ثبت می‌شود؛ سؤال خارج حوزه فقط محدودهٔ خدمات را معرفی می‌کند.
+5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سؤال → پاسخ اجتماعی/هویتی یا بررسی مستقیم کل KB با Chat → اعتبارسنجی ۱ تا ۴ شناسهٔ `evidenceIds` دقیق و متعلق به همان snapshot → خواندن متن عینی قطعه‌های منبع با Realtime. پاسخ ناموجود به اپراتور ارجاع و ثبت می‌شود؛ سؤال خارج حوزه فقط محدودهٔ خدمات را معرفی می‌کند.
 6. **محدودیت مکالمه:** بر حسب دقیقه. مقدار پیش‌فرض سراسری در `AppSettings`؛ سوپرادمین می‌تواند per-user override کند (`User.CallMinuteLimit`). نزدیک/رسیدن به سقف → رویدادهای مربوطه.
 7. **گوینده:** کاربر گوینده‌ی خود را از `VoiceOption`های فعال انتخاب می‌کند؛ پیش‌فرض از تنظیمات سوپرادمین.
 
@@ -74,10 +74,10 @@
 ## ۵. طراحی پاسخ مستقیم دانشی
 
 - `DirectKnowledgeAnswerService` فقط `KnowledgeBase` تأییدشدهٔ همان `UserId` را می‌خواند.
-- سؤال، نام برند، پیام خوش‌آمد و کل `RawText` با `JsonSerializer` به‌عنوان data غیرقابل‌اعتماد به مدل Chat داده می‌شوند؛ دستور داخل سند یا سؤال قابل اجرا نیست.
-- خروجی دقیقاً یکی از `Answered`، `InDomainUnknown` یا `OutOfDomain` است. `Answered` به ۱ تا ۴ نقل‌قول عینی نیاز دارد و سرور وجود آن‌ها را پس از نرمال‌سازی فارسی در کل KB دوباره کنترل می‌کند.
+- کل `RawText` به قطعه‌های server-generated از شکل `{i,t}` در `fullKnowledgeBaseSegments` تبدیل می‌شود. نام برند، پیام خوش‌آمد، سؤال و قطعه‌ها با `JsonSerializer` به‌عنوان data غیرقابل‌اعتماد ارسال می‌شوند و system prompt مدل را ملزم می‌کند دستورهای تعبیه‌شده در داده را نادیده بگیرد.
+- قرارداد JSON مدل فقط `classification` با یکی از `answerable`، `in_domain_unknown` یا `out_of_domain` و آرایهٔ `evidenceIds` است؛ سرویس آن‌ها را به `DirectKnowledgeOutcome` نگاشت می‌کند. `answerable` به ۱ تا ۴ شناسهٔ canonical (`S` + شش رقم ASCII)، یکتا و متعلق به همان درخواست نیاز دارد و دو حالت دیگر باید آرایهٔ خالی بدهند. سرور شناسه‌ها را روی همان snapshot resolve و فیلد متن آزاد اضافی را نادیده می‌گیرد.
 - در مسیر فعلی تماس `RagService.RetrieveAsync`، embedding، chunking، BM25، RRF و Top-K اجرا نمی‌شوند. جدول `KnowledgeChunk` فقط برای rollback حفظ شده است.
-- متن هرگز truncate نمی‌شود؛ بیش از ۹۰٬۰۰۰ کاراکتر با خروجی `KnowledgeBaseTooLarge` بسته می‌شود.
+- متن هرگز truncate نمی‌شود. سقف‌های ورودی fail-closed عبارت‌اند از: حداکثر ۹۰٬۰۰۰ کاراکتر خام، ۵٬۰۰۰ قطعه، ۱٬۰۰۰ کاراکتر برای هر قطعه، ۱۸۰٬۰۰۰ کاراکتر payload و برآورد ۱۰۰٬۰۰۰ توکن prompt؛ عبور از این موارد `KnowledgeBaseTooLarge` است. timeout برابر ۲۵ ثانیه، سقف completion همین فراخوانی ۳۰۰ توکن و timeout/JSON خراب/خطای provider برابر `ServiceUnavailable` است. انتخاب ID نامعتبر یا مجموع متن منتخب بیش از ۱٬۲۰۰ کاراکتر به `InDomainUnknown` تنزل و به‌عنوان سؤال بی‌پاسخ ثبت می‌شود.
 - Base URL، API key و مدل Chat از `AppSettings` (override) یا `.env` خوانده می‌شوند.
 
 ---
@@ -146,7 +146,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
 - [x] **فاز ۲ — فرانت پایه:** Vite+React+TS، Tailwind v4، Vazirmatn (self-hosted)، RTL، AuthContext (JWT/localStorage)، صفحه‌ی لاگین دو‌مرحله‌ای (موبایل→OTP)، آنبوردینگ (نام/برند)، DashboardLayout (سایدبار ریسپانسیو) + صفحه‌ی اصلی + route guardها. build و رندر تأییدشده.
-- [x] **فاز ۳ — پایگاه دانش مستقیم + Moderation:** `DirectKnowledgeAnswerService` کل RawText تأییدشدهٔ همان کاربر را با Chat بررسی می‌کند و فقط شواهد عینی تأییدشده را برمی‌گرداند. FileTextExtractor از txt/docx پشتیبانی می‌کند؛ KnowledgeBaseService moderation، سقف ۹۰٬۰۰۰ و پاک‌کردن chunkهای مشتقِ قدیم را انجام می‌دهد. `RagService` و `KnowledgeChunk` فقط برای rollback باقی مانده‌اند و مسیر تماس آن‌ها را فراخوانی نمی‌کند.
+- [x] **فاز ۳ — پایگاه دانش مستقیم + Moderation:** `DirectKnowledgeAnswerService` کل RawText تأییدشدهٔ همان کاربر را با Chat بررسی می‌کند؛ مدل فقط `evidenceIds` را انتخاب می‌کند و سرور متن دقیق segmentهای متناظر را برمی‌گرداند. legacy text-evidence و fuzzy matching پذیرفته نمی‌شوند. FileTextExtractor از txt/docx پشتیبانی می‌کند؛ KnowledgeBaseService moderation، سقف ۹۰٬۰۰۰ و پاک‌کردن chunkهای مشتقِ قدیم را انجام می‌دهد. `RagService` و `KnowledgeChunk` فقط برای rollback باقی مانده‌اند و مسیر تماس آن‌ها را فراخوانی نمی‌کند.
 - [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** تب «OpenAI و پاسخ دانشی» مدل Chat مستقیم، Realtime و TTS را تنظیم می‌کند؛ کنترل‌های RAG/Embedding legacy در UI فعال نیستند. سایر بخش‌ها SMS.ir، رویدادها، گوینده‌ها، fallback و کاربران را پوشش می‌دهند.
 - [x] **فاز ۵ — تخصیص داخلی + Provisioning + ساخت تلفن هوشمند:** ExtensionAllocator (تصادفی آزاد ۱۰۰۰–۹۹۹۹، Extension حالا nullable + migration)، AsteriskProvisioningService (SSH.NET، نوشتن بلوک PJSIP + reload؛ در نبود SSH شبیه‌سازی)، SmartPhoneService (پیش‌نیازها، تخصیص، provisioning، SIP secret، تولید وویس خوش‌آمد TTS، پیامک SmartPhoneCreated). کنترلر `smartphone` (GET/POST/PUT welcome). فرانت: SmartPhonePage (پیام خوش‌آمد + چک‌لیست پیش‌نیاز + دکمه ساخت + نمایش داخلی) + آیتم منو. ⚠️ بلوک PJSIP ممکن است بسته به پیکربندی ایزابل نیاز به تنظیم داشته باشد.
 - [x] **فاز ۶ — پل تلفنی realtime:** `OpenAiRealtimeClient` transcription و خواندن عینی متن تأییدشده را انجام می‌دهد؛ `CallHandler` پس از social/identity guard، سرویس کل KB را فراخوانی و سپس متن نهایی را literal پخش می‌کند. AudioSocketServer روی TCP:9092، سقف دقیقه، fallback و ثبت CallSession حفظ شده‌اند.
