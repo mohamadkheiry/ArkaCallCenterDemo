@@ -26,8 +26,8 @@
 | 2 | **AudioSocket** به‌جای ARI/RTP برای پل صوتی | پروتکل ساده‌تر (TCP + SLIN)، بدون نیاز به مدیریت RTP |
 | 3 | **تنظیمات حساس در DB (`AppSetting`) نه در کد** | سوپرادمین کلیدها را از پنل مدیریت می‌کند؛ اسرار در گیت نیست |
 | 4 | **دمو = User با `IsDemo`** (داخلی انتخابی ۱–۹۹۹، به‌جز ۱۰۰–۳۰۰) | بازاستفاده‌ی کامل منطق تماس/RAG بدون کد تکراری |
-| 5 | **RAG درون‌حافظه‌ای (cosine)** به‌جای vector DB | حجم پایگاه دانش کوچک است (≤۲۰۰۰ کاراکتر / ۱۰۰KB) |
-| 6 | **پیام‌های ثابت (fallback/پذیرش) از پیش‌ساخته با TTS** | صرفه‌جویی در مصرف توکن realtime |
+| 5 | **Hybrid RAG درون‌حافظه‌ای (embedding + BM25 + RRF)** به‌جای vector DB | بازیابی معنایی و واژگانی برای حجم فعلی کافی است و در آینده قابل جایگزینی با vector store است |
+| 6 | **داور answerability با شاهد عینی و خروجی typed** | similarity به‌تنهایی مجوز پاسخ نیست؛ سؤال بی‌پاسخ و خارج از حوزه گزارش متفاوت دارند |
 | 7 | **استقرار با Docker Compose** | راه‌اندازی یک‌دستوری کل استک |
 
 ---
@@ -292,12 +292,14 @@ sequenceDiagram
       C->>PBX: صدای caller (SLIN 8k)
       PBX->>W: هدایت صدا
       W->>O: upsample 24k → append → transcription (fa)
-      W->>W: retrieval نوبت‌به‌نوبت از RAG
+      W->>W: social/identity guard یا Hybrid RAG
+      W->>O: داوری JSON سه‌حالته با evidence
+      W->>W: کنترل server-side شاهد در context
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
       W->>W: قطع موسیقی → downsample 8k → پخش برای caller
     end
-    Note over W: نبود پاسخ در KB → پخش پیام fallback از پیش‌ساخته
+    Note over W: مرتبطِ بی‌پاسخ → اپراتور + unanswered؛ خارج حوزه → معرفی حوزه؛ اختلال → پیام موقت
     W->>W: ثبت CallSession + مصرف توکن
 ```
 
