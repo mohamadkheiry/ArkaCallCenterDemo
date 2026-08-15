@@ -76,10 +76,35 @@ public class OpenAiService : IOpenAiService
         return result;
     }
 
-    public async Task<string> ChatAsync(string systemPrompt, string userPrompt, bool jsonMode = false, CancellationToken ct = default)
+    public Task<string> ChatAsync(
+        string systemPrompt,
+        string userPrompt,
+        bool jsonMode = false,
+        CancellationToken ct = default)
+        => ChatInternalAsync(systemPrompt, userPrompt, jsonMode, null, ct);
+
+    public Task<string> ChatAsync(
+        string systemPrompt,
+        string userPrompt,
+        bool jsonMode,
+        int maxCompletionTokens,
+        CancellationToken ct = default)
+        => ChatInternalAsync(
+            systemPrompt,
+            userPrompt,
+            jsonMode,
+            Math.Clamp(maxCompletionTokens, 1, 4_096),
+            ct);
+
+    private async Task<string> ChatInternalAsync(
+        string systemPrompt,
+        string userPrompt,
+        bool jsonMode,
+        int? maxCompletionTokens,
+        CancellationToken ct)
     {
         var model = await ModelAsync(SettingKeys.OpenAiChatModel, "gpt-4o-mini", ct);
-        object body = jsonMode
+        object body = jsonMode && maxCompletionTokens.HasValue
             ? new
             {
                 model,
@@ -90,8 +115,21 @@ public class OpenAiService : IOpenAiService
                 },
                 response_format = new { type = "json_object" },
                 temperature = 0,
+                max_tokens = maxCompletionTokens.Value,
             }
-            : new
+            : jsonMode
+                ? new
+                {
+                    model,
+                    messages = new[]
+                    {
+                        new { role = "system", content = systemPrompt },
+                        new { role = "user", content = userPrompt },
+                    },
+                    response_format = new { type = "json_object" },
+                    temperature = 0,
+                }
+                : new
             {
                 model,
                 messages = new[]
