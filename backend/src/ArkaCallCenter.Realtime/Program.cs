@@ -9,14 +9,13 @@ using Microsoft.Extensions.DependencyInjection;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddEnvironmentVariables();
 
-// دسترسی به DbContext/RAG/Settings از لایه‌ی Infrastructure
+// Access to DbContext, direct knowledge answering, and settings from Infrastructure.
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.Configure<RealtimeOptions>(builder.Configuration.GetSection("Realtime"));
 builder.Services.AddSingleton<WelcomeAudioCache>();
 builder.Services.AddSingleton<CallHandler>();
 builder.Services.AddHostedService<AudioSocketServer>();
-builder.Services.AddHostedService<KnowledgeIndexWarmupService>();
 
 var host = builder.Build();
 

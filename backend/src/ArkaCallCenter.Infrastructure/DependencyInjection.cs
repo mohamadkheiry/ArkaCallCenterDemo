@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(120));
         services.AddScoped<IModerationService, ModerationService>();
         services.AddScoped<IRagService, RagService>();
+        services.AddScoped<IDirectKnowledgeAnswerService, DirectKnowledgeAnswerService>();
         services.AddScoped<IFileTextExtractor, FileTextExtractor>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
 

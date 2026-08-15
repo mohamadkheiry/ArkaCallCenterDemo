@@ -13,7 +13,7 @@ import BrandingTab from './BrandingTab'
 import CallsAdminTab from './CallsAdminTab'
 
 const TABS = [
-  { key: 'openai', label: 'OpenAI و RAG' },
+  { key: 'openai', label: 'OpenAI و پاسخ دانشی' },
   { key: 'sms', label: 'SMS.ir' },
   { key: 'bale', label: 'کانال بله' },
   { key: 'reception', label: 'پذیرش و انتظار' },
@@ -57,9 +57,9 @@ export default function AdminPage() {
       {tab === 'openai' && (
         <SettingsTab
           key="openai"
-          groups={['openai', 'rag', 'limits']}
-          title="OpenAI، RAG و محدودیت‌ها"
-          desc="آدرس و کلید API اوپن‌ای‌آی، مدل‌ها، آستانه‌ی RAG و سقف پیش‌فرض مکالمه."
+          groups={['openai', 'limits']}
+          title="OpenAI، پاسخ مستقیم دانشی و محدودیت‌ها"
+          desc="آدرس و کلید API، مدلی که کل پایگاه دانش را مستقیم بررسی می‌کند، مدل Realtime و سقف پیش‌فرض مکالمه."
         />
       )}
       {tab === 'sms' && (

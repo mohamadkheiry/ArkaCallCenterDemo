@@ -20,8 +20,7 @@ export const SETTING_FIELDS: {
 }[] = [
   { key: 'openai.baseUrl', label: 'Base URL', group: 'openai', hint: 'مثلاً https://api.openai.com/v1' },
   { key: 'openai.apiKey', label: 'API Key', group: 'openai', secret: true },
-  { key: 'openai.embeddingModel', label: 'مدل Embedding', group: 'openai' },
-  { key: 'openai.chatModel', label: 'مدل Chat (برای بررسی محتوا)', group: 'openai' },
+  { key: 'openai.chatModel', label: 'مدل پاسخ مستقیم از پایگاه دانش', group: 'openai' },
   { key: 'openai.realtimeModel', label: 'مدل Realtime', group: 'openai' },
   { key: 'openai.ttsModel', label: 'مدل TTS', group: 'openai' },
 
@@ -31,15 +30,6 @@ export const SETTING_FIELDS: {
 
   { key: 'limits.defaultCallMinutes', label: 'سقف پیش‌فرض مکالمه (دقیقه)', group: 'limits' },
   { key: 'limits.warningPercent', label: 'درصد هشدار نزدیک شدن به سقف', group: 'limits' },
-
-  {
-    key: 'rag.similarityThreshold',
-    label: 'آستانه شباهت RAG',
-    group: 'rag',
-    control: 'percentSlider',
-    hint: '۱۰۰٪ = دقیق‌ترین شباهت (فقط پاسخ‌های بسیار مرتبط) · ۰٪ = خلاقانه‌ترین حالت',
-  },
-  { key: 'rag.topK', label: 'تعداد قطعات بازیابی‌شده (topK)', group: 'rag' },
 
   // کانال بله — اعلامِ کاربرانِ جدیدِ دمو (حداکثر ۳ پیام برای هر کاربر)
   {

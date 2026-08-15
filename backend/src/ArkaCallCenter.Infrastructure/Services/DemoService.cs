@@ -19,18 +19,16 @@ public class DemoService : IDemoService
 
     private readonly ArkaDbContext _db;
     private readonly IAsteriskProvisioningService _asterisk;
-    private readonly IRagService _rag;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
     private readonly ILogger<DemoService> _logger;
     private readonly string _uploadsPath;
 
     public DemoService(ArkaDbContext db, IAsteriskProvisioningService asterisk,
-        IRagService rag, IOpenAiService openai, ISettingsService settings, IConfiguration config, ILogger<DemoService> logger)
+        IOpenAiService openai, ISettingsService settings, IConfiguration config, ILogger<DemoService> logger)
     {
         _db = db;
         _asterisk = asterisk;
-        _rag = rag;
         _openai = openai;
         _settings = settings;
         _logger = logger;
@@ -54,6 +52,11 @@ public class DemoService : IDemoService
     {
         if (string.IsNullOrWhiteSpace(label))
             return new DemoResult(false, "نام دمو الزامی است.", null);
+
+        if ((kbText ?? "").Trim().Length > KbLimits.MaxDirectKnowledgeChars)
+            return new DemoResult(false,
+                $"پایگاه دانش دمو باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
 
         if (extension is < DemoExtensionMin or > DemoExtensionMax)
             return new DemoResult(false, "شماره داخلی دمو باید بین ۱ تا ۹۹۹ باشد.", null);
@@ -110,8 +113,6 @@ public class DemoService : IDemoService
             return new DemoResult(false, $"داخلی {extension} آزاد نیست؛ یک شمارهٔ دیگر انتخاب کنید.", null);
         }
 
-        await TryIndexAsync(kb, ct);
-
         await TryWelcomeAudioAsync(user, sp, ct);
 
         var provision = await _asterisk.ProvisionExtensionAsync(extension, secret, ct);
@@ -127,6 +128,11 @@ public class DemoService : IDemoService
         var user = await _db.Users.Include(u => u.SmartPhone).Include(u => u.KnowledgeBase)
             .FirstOrDefaultAsync(u => u.Id == id && u.IsDemo, ct);
         if (user is null) return new DemoResult(false, "دمو یافت نشد.", null);
+
+        if (kbText is not null && kbText.Trim().Length > KbLimits.MaxDirectKnowledgeChars)
+            return new DemoResult(false,
+                $"پایگاه دانش دمو باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
 
         if (label is not null) { user.DemoLabel = label.Trim(); user.BrandName = label.Trim(); }
         var previousVoice = user.VoiceName;
@@ -169,8 +175,15 @@ public class DemoService : IDemoService
             user.KnowledgeBase.RawText = kbText.Trim();
             user.KnowledgeBase.CharCount = kbText.Trim().Length;
             user.KnowledgeBase.ModerationStatus = ModerationStatus.Approved;
+            if (user.KnowledgeBase.Id > 0)
+            {
+                var staleChunks = await _db.KnowledgeChunks
+                    .Where(chunk => chunk.KnowledgeBaseId == user.KnowledgeBase.Id)
+                    .ToListAsync(ct);
+                if (staleChunks.Count > 0)
+                    _db.KnowledgeChunks.RemoveRange(staleChunks);
+            }
             await _db.SaveChangesAsync(ct);
-            await TryIndexAsync(user.KnowledgeBase, ct);
         }
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -208,12 +221,6 @@ public class DemoService : IDemoService
         u.SmartPhone?.Status.ToString() ?? "None",
         u.SmartPhone?.WelcomeMessageText, u.KnowledgeBase?.RawText,
         u.VoiceName, u.CallMinuteLimit, u.UsedMinutes, u.IsActive);
-
-    private async Task TryIndexAsync(KnowledgeBase kb, CancellationToken ct)
-    {
-        try { if (!string.IsNullOrWhiteSpace(kb.RawText)) await _rag.IndexAsync(kb, ct); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Demo KB indexing failed (OpenAI key?)"); }
-    }
 
     private async Task<bool> TryWelcomeAudioAsync(User user, SmartPhone sp, CancellationToken ct)
     {

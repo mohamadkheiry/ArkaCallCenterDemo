@@ -26,7 +26,7 @@
   - `ArkaCallCenter.Realtime` — Worker مستقل برای پل صوتی تلفن ⇄ OpenAI Realtime (فاز ۶).
 - **DB:** MySQL 8 via EF Core 9 + `Pomelo.EntityFrameworkCore.MySql`. Migrations در Infrastructure.
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind + Vazirmatn، کاملاً RTL و ریسپانسیو. State: React Query + Context. روتینگ: react-router.
-- **AI:** OpenAI — Embeddings برای RAG، `gpt-realtime` برای مکالمه‌ی تلفنی، TTS برای پیام‌های از پیش‌ساخته (fallback / welcome).
+- **AI:** OpenAI Chat برای بررسی مستقیم کل پایگاه دانش، `gpt-realtime` برای مکالمهٔ تلفنی، TTS برای پیام‌های از پیش‌ساخته (fallback / welcome).
 - **SMS:** SMS.ir (REST v1).
 - **Telephony:** Isabel = توزیع مبتنی بر Asterisk. ادغام از طریق **ARI + externalMedia/AudioSocket**.
 
@@ -41,7 +41,7 @@
 | `User` | صاحب کسب‌وکار. فیلدها: `Id`, `PhoneNumber`(unique), `FirstName`, `LastName`, `BrandName`, `Role`, `CreatedAt`, `IsActive`, `CallMinuteLimit`(nullable override), `VoiceName`. |
 | `SmartPhone` | تلفن هوشمند کاربر. `Id`, `UserId`, `Extension`(1000–9999, unique), `WelcomeMessageText`, `WelcomeAudioPath`, `Status`, `CreatedAt`. |
 | `KnowledgeBase` | پایگاه دانش. `Id`, `UserId`, `SourceType`(Text/File), `RawText`, `FileName`, `FilePath`, `FileSizeBytes`, `CharCount`, `ModerationStatus`, `CreatedAt`, `UpdatedAt`. یک KB فعال به‌ازای هر کاربر. |
-| `KnowledgeChunk` | تکه‌های embedding‌شده. `Id`, `KnowledgeBaseId`, `Content`, `Embedding`(JSON/blob float[]), `ChunkIndex`. |
+| `KnowledgeChunk` | دادهٔ legacy نمایه RAG برای rollback؛ مسیر فعلی تماس از آن نمی‌خواند. |
 | `OtpCode` | `Id`, `PhoneNumber`, `Code`, `ExpiresAt`, `Consumed`, `Attempts`. |
 | `CallSession` | لاگ تماس. `Id`, `SmartPhoneId`, `CallerId`, `StartedAt`, `EndedAt`, `DurationSeconds`, `AnsweredFromKb`(bool), `TranscriptJson`. |
 | `AppSettings` | تنظیمات سراسری key/value (سوپرادمین). |
@@ -62,23 +62,23 @@
 ## ۴. قوانین کسب‌وکار (Business Rules)
 
 1. **لاگین:** فقط با شماره موبایل + OTP (پیامک via SMS.ir). اولین ورود = ثبت‌نام؛ سپس دریافت نام/نام‌خانوادگی/برند.
-2. **پایگاه دانش:** حداکثر **یک** منبع فعال: یا متن ≤ **۲۰۰۰ کاراکتر** یا فایل **txt/pdf ≤ ۱۰۰KB**. کاربر می‌تواند بعداً حذف/اضافه/به‌روزرسانی کند.
+2. **پایگاه دانش:** حداکثر **یک** منبع فعال: یا متن ≤ **۲۰۰۰ کاراکتر** یا فایل **txt/docx ≤ ۱۰۰KB**. متن استخراج‌شده برای پاسخ مستقیم حداکثر ۹۰٬۰۰۰ کاراکتر است.
 3. **Moderation:** هر ورودی متن یا فایل قبل از فعال‌شدن باید با LLM از نظر انطباق با قوانین ج.ا.ایران بررسی شود. اگر `Rejected` → حذف فایل + پیام به کاربر + رویداد `KnowledgeBaseRejected`.
 4. **ساخت تلفن هوشمند:** با کلیک «ایجاد تلفن هوشمند» → تخصیص داخلی آزاد تصادفی در [۱۰۰۰,۹۹۹۹] (unique، تضمین عدم تکرار) → Provisioning روی ایزابل → رویداد `SmartPhoneCreated` (پیامک).
-5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سوال → RAG روی پایگاه دانش → پاسخ realtime. اگر پاسخ در KB نبود → پلی **پیام fallback از پیش‌ساخته** (متن/وویسِ تنظیم‌شده در پنل سوپرادمین) به‌جای تولید realtime (صرفه‌جویی توکن).
+5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سؤال → پاسخ اجتماعی/هویتی یا بررسی مستقیم کل KB با Chat → تطبیق شاهد در سرور → خواندن عینی پاسخ با Realtime. پاسخ ناموجود به اپراتور ارجاع و ثبت می‌شود؛ سؤال خارج حوزه فقط محدودهٔ خدمات را معرفی می‌کند.
 6. **محدودیت مکالمه:** بر حسب دقیقه. مقدار پیش‌فرض سراسری در `AppSettings`؛ سوپرادمین می‌تواند per-user override کند (`User.CallMinuteLimit`). نزدیک/رسیدن به سقف → رویدادهای مربوطه.
 7. **گوینده:** کاربر گوینده‌ی خود را از `VoiceOption`های فعال انتخاب می‌کند؛ پیش‌فرض از تنظیمات سوپرادمین.
 
 ---
 
-## ۵. طراحی RAG
+## ۵. طراحی پاسخ مستقیم دانشی
 
-- منبع KB → **chunking** (مثلاً ~۵۰۰ کاراکتر با overlap). چون سقف ۲۰۰۰ کاراکتر/۱۰۰KB است، تعداد chunkها کم است.
-- هر chunk → `text-embedding-3-large` → بردار در `KnowledgeChunk.Embedding` همراه نام مدل.
-- هنگام تماس: سوالِ کاربر (از realtime transcript) → embedding → **cosine similarity** با chunkها (محاسبه در حافظه؛ حجم کوچک است) → top-k.
-- اگر بیشترین شباهت < آستانه (`AppSettings.RagSimilarityThreshold`) → «پاسخ در پایگاه دانش نیست» → fallback.
-- در غیر این صورت، chunkهای بازیابی‌شده به‌عنوان context به `gpt-realtime` (system/instructions) داده می‌شوند.
-- Base URL و API key از `AppSettings` (override) یا `.env`.
+- `DirectKnowledgeAnswerService` فقط `KnowledgeBase` تأییدشدهٔ همان `UserId` را می‌خواند.
+- سؤال، نام برند، پیام خوش‌آمد و کل `RawText` با `JsonSerializer` به‌عنوان data غیرقابل‌اعتماد به مدل Chat داده می‌شوند؛ دستور داخل سند یا سؤال قابل اجرا نیست.
+- خروجی دقیقاً یکی از `Answered`، `InDomainUnknown` یا `OutOfDomain` است. `Answered` به ۱ تا ۴ نقل‌قول عینی نیاز دارد و سرور وجود آن‌ها را پس از نرمال‌سازی فارسی در کل KB دوباره کنترل می‌کند.
+- در مسیر فعلی تماس `RagService.RetrieveAsync`، embedding، chunking، BM25، RRF و Top-K اجرا نمی‌شوند. جدول `KnowledgeChunk` فقط برای rollback حفظ شده است.
+- متن هرگز truncate نمی‌شود؛ بیش از ۹۰٬۰۰۰ کاراکتر با خروجی `KnowledgeBaseTooLarge` بسته می‌شود.
+- Base URL، API key و مدل Chat از `AppSettings` (override) یا `.env` خوانده می‌شوند.
 
 ---
 
@@ -88,8 +88,8 @@
 1. کانال را answer می‌کند و یک `externalMedia`/AudioSocket bridge می‌سازد (فرمت مثلاً slin16/g711).
 2. وویس خوش‌آمد را پلی می‌کند.
 3. صدای caller را از bridge می‌گیرد و به WebSocket `gpt-realtime` استریم می‌کند.
-4. instructions شامل context بازیابی‌شده از RAG است؛ خروجی صوتی realtime به bridge برگردانده و برای caller پلی می‌شود.
-5. اگر RAG پاسخی نداشت → پلی فایل fallback از پیش‌ساخته و توقف استریم realtime.
+4. متن transcript ابتدا از social/identity guard و در غیر این صورت از پاسخ مستقیم کل KB عبور می‌کند.
+5. پاسخ تأییدشده یا متن fallback/معرفی حوزه به Realtime داده می‌شود تا فقط همان متن را طبیعی بخواند.
 6. زمان مکالمه شمرده می‌شود؛ در سقف، قطع مؤدبانه.
 
 جزئیات dialplan/ARI و نمونه‌ها در `docs/TELEPHONY.md` و پوشه‌ی `telephony/`.
@@ -108,7 +108,7 @@ GET  /api/me                                                                  [a
 
 GET  /api/knowledge-base                                                      [auth]
 POST /api/knowledge-base/text     { text }                                    [auth]
-POST /api/knowledge-base/file     (multipart, txt/pdf ≤100KB)                 [auth]
+POST /api/knowledge-base/file     (multipart, txt/docx ≤100KB)                [auth]
 DELETE /api/knowledge-base                                                    [auth]
 
 POST /api/smartphone              (ایجاد: تخصیص داخلی + provisioning)         [auth]
@@ -146,10 +146,10 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
 - [x] **فاز ۲ — فرانت پایه:** Vite+React+TS، Tailwind v4، Vazirmatn (self-hosted)، RTL، AuthContext (JWT/localStorage)، صفحه‌ی لاگین دو‌مرحله‌ای (موبایل→OTP)، آنبوردینگ (نام/برند)، DashboardLayout (سایدبار ریسپانسیو) + صفحه‌ی اصلی + route guardها. build و رندر تأییدشده.
-- [x] **فاز ۳ — پایگاه دانش + RAG + Moderation:** OpenAiService (embeddings/chat/TTS via HttpClient، creds از تنظیمات)، FileTextExtractor (txt + pdf/PdfPig)، ModerationService (fail-closed، JSON)، RagService (chunk/embed/cosine + آستانه)، KnowledgeBaseService (اعتبارسنجی حجم/کاراکتر، moderation، حذف فایل مغایر، indexing، رویدادها)، SmsEventDispatcher. کنترلرها: `knowledge-base` (GET/POST text/POST file/DELETE)، `voices`، `me/voice`. فرانت: صفحات پایگاه دانش (متن/فایل drag-drop) و انتخاب گوینده. ⚠️ تست زنده نیاز به MySQL + کلید OpenAI دارد.
-- [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** SmsIrSender (REST v1، fallback به لاگ در نبود کلید)، AdminController (settings با ماسک سِری، sms-templates، sms-events با چند شماره، voices + پیش‌فرض، fallback-message + تولید TTS، users + محدودیت). فرانت: AdminPage شش‌تب (OpenAI/RAG، SMS.ir، پیامک‌ها/رویدادها، گوینده‌ها، پیام fallback، کاربران).
+- [x] **فاز ۳ — پایگاه دانش مستقیم + Moderation:** `DirectKnowledgeAnswerService` کل RawText تأییدشدهٔ همان کاربر را با Chat بررسی می‌کند و فقط شواهد عینی تأییدشده را برمی‌گرداند. FileTextExtractor از txt/docx پشتیبانی می‌کند؛ KnowledgeBaseService moderation، سقف ۹۰٬۰۰۰ و پاک‌کردن chunkهای مشتقِ قدیم را انجام می‌دهد. `RagService` و `KnowledgeChunk` فقط برای rollback باقی مانده‌اند و مسیر تماس آن‌ها را فراخوانی نمی‌کند.
+- [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** تب «OpenAI و پاسخ دانشی» مدل Chat مستقیم، Realtime و TTS را تنظیم می‌کند؛ کنترل‌های RAG/Embedding legacy در UI فعال نیستند. سایر بخش‌ها SMS.ir، رویدادها، گوینده‌ها، fallback و کاربران را پوشش می‌دهند.
 - [x] **فاز ۵ — تخصیص داخلی + Provisioning + ساخت تلفن هوشمند:** ExtensionAllocator (تصادفی آزاد ۱۰۰۰–۹۹۹۹، Extension حالا nullable + migration)، AsteriskProvisioningService (SSH.NET، نوشتن بلوک PJSIP + reload؛ در نبود SSH شبیه‌سازی)، SmartPhoneService (پیش‌نیازها، تخصیص، provisioning، SIP secret، تولید وویس خوش‌آمد TTS، پیامک SmartPhoneCreated). کنترلر `smartphone` (GET/POST/PUT welcome). فرانت: SmartPhonePage (پیام خوش‌آمد + چک‌لیست پیش‌نیاز + دکمه ساخت + نمایش داخلی) + آیتم منو. ⚠️ بلوک PJSIP ممکن است بسته به پیکربندی ایزابل نیاز به تنظیم داشته باشد.
-- [x] **فاز ۶ — پل تلفنی realtime:** پروژه‌ی `ArkaCallCenter.Realtime` (worker): AudioSocketServer (TCP:9092)، AudioSocketProtocol (فریم‌بندی + استخراج داخلی از UUID)، AudioResampler (۸k↔۲۴k)، OpenAiRealtimeClient (WebSocket، session.update، greet، append/receive audio)، CallHandler (یافتن SmartPhone، instructions با KB + قانون fallback، سقف دقیقه، ثبت CallSession). dialplan نمونه در `telephony/extensions_arka.conf`. کنترلر `calls` + صفحه‌ی تماس‌ها در فرانت. ⚠️ نیازمند تنظیم زنده: app_audiosocket، کلید OpenAI، هماهنگی context ایزابل.
+- [x] **فاز ۶ — پل تلفنی realtime:** `OpenAiRealtimeClient` transcription و خواندن عینی متن تأییدشده را انجام می‌دهد؛ `CallHandler` پس از social/identity guard، سرویس کل KB را فراخوانی و سپس متن نهایی را literal پخش می‌کند. AudioSocketServer روی TCP:9092، سقف دقیقه، fallback و ثبت CallSession حفظ شده‌اند.
 
 ---
 

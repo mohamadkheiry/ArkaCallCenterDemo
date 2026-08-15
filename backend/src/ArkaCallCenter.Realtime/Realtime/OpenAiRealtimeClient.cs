@@ -85,7 +85,8 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                             threshold = _vadThreshold,
                             silence_duration_ms = 600,
                             interrupt_response = true,
-                            // پاسخ فقط بعد از transcription و بازیابی قطعه مرتبط از RAG ساخته می‌شود.
+                            // The application classifies the transcript, checks the complete KB,
+                            // and explicitly creates a literal response after server-side evidence validation.
                             create_response = false,
                         },
                         // Persian phone audio is especially sensitive to language detection errors.

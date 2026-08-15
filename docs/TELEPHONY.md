@@ -17,7 +17,7 @@
 1. dialplan تماسِ داخلی کاربر را وارد Stasis app به نام `arka-ai` می‌کند.
 2. Worker از طریق **ARI** کانال را `answer` می‌کند و یک `externalMedia` (یا AudioSocket) با فرمت `slin16` می‌سازد.
 3. پخش فوری «وویس خوش‌آمد» از کش WAV مشترک؛ در نبود کش معتبر، greeting آنلاین به‌عنوان fallback.
-4. صدای caller → استریم به WebSocket `gpt-realtime`؛ transcription فارسی با مدل تنظیم‌شده و سپس retrieval نوبت‌به‌نوبت از RAG.
+4. صدای caller → استریم به WebSocket `gpt-realtime`؛ transcription فارسی با مدل تنظیم‌شده و سپس بررسی مستقیم کل پایگاه دانش همان کاربر با Chat.
 5. صدای خروجی realtime → برگشت به bridge → پلی برای caller.
 6. مسیریابی هر نوبت به پاسخ اجتماعی، پاسخ مستند از KB، سؤال مرتبطِ بی‌پاسخ، سؤال خارج از حوزه یا اختلال بازیابی؛ هر مسیر پیام و گزارش مستقل دارد.
 7. شمارش زمان مکالمه؛ در سقف دقیقه، پیام و قطع.
@@ -41,7 +41,7 @@
   3. اتصال به OpenAI Realtime (`OpenAiRealtimeClient`) با گوینده‌ی کاربر.
   4. تبدیل WAV خوش‌آمد به SLIN 8kHz و ورود مستقیم به صف خروجی؛ فقط در نبود WAV، `GreetAsync` اجرا می‌شود.
   5. صدای caller (SLIN 8kHz) → noise gate فریم‌های کم‌دامنه → upsample به ۲۴kHz → `input_audio_buffer.append`؛ مدل `gpt-4o-transcribe` فقط با language hint=`fa` متن نوبت را می‌سازد. prompt واژگانی ارسال نمی‌شود تا در سکوت عبارت‌های زمینه‌ای توهم نشوند.
-  6. پس از پایان هر نوبت، هویت کسب‌وکار و نیت‌های اجتماعی/کنترلی فارسی پیش از RAG بررسی می‌شوند؛ این نوبت‌ها پاسخ مستقیم می‌گیرند، `AnsweredFromKb=false` دارند و سؤال بی‌پاسخ نمی‌سازند. سؤال واقعی سپس با Hybrid RAG (embedding، BM25 و RRF) بازیابی می‌شود. داور JSON سه‌حالته فقط با شاهد عینی موجود در context اجازهٔ `AnswerCandidate` می‌دهد؛ سؤال مرتبطِ بدون شاهد به `InDomainUnknown` و ارجاع اپراتور، و سؤال آشکارا نامرتبط به `OutOfDomain` و معرفی حوزه می‌رود. timeout/خطای فنی `RetrievalUnavailable` است و در unanswered ثبت نمی‌شود. query embedding سقف ۸ ثانیه و داور سقف ۵ ثانیه دارد.
+  6. پس از پایان هر نوبت، هویت کسب‌وکار و نیت‌های اجتماعی/کنترلی فارسی پیش از سرویس دانشی بررسی می‌شوند و پاسخ مستقیم می‌گیرند. سؤال واقعی به همراه کل `KnowledgeBase.RawText` تأییدشدهٔ همان کاربر، به‌صورت JSON data غیرقابل‌اعتماد به مدل Chat داده می‌شود. مدل یکی از `Answered`، `InDomainUnknown` یا `OutOfDomain` را بازمی‌گرداند؛ `Answered` فقط با ۱ تا ۴ شاهد عینی که سرور دوباره در کل متن تطبیق می‌دهد مجاز است. تماس دیگر `RetrieveAsync`، embedding، BM25، RRF یا Top-K اجرا نمی‌کند. سؤال مرتبطِ بی‌پاسخ ثبت و به اپراتور ارجاع می‌شود؛ سؤال خارج حوزه فقط حوزه را معرفی می‌کند و خطا/timeout در unanswered ثبت نمی‌شود.
   7. صدای پاسخ (PCM16 24kHz) → downsample به ۸kHz → فریم‌های AudioSocket.
   8. اعمال سقف دقیقه و timeout سکوت؛ ثبت `CallSession`، transcript و مصرف توکن.
 - **صوت:** `AudioResampler` تبدیل خطی ۸k↔۲۴k. فرمت realtime = `pcm16`.

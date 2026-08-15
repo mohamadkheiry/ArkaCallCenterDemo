@@ -9,7 +9,7 @@
 
 ## ۱. هدف و دامنه
 
-هر «کاربر» (صاحب کسب‌وکار) یک **تلفن هوشمند** دریافت می‌کند: یک داخلی روی سرور ایزابل (Asterisk) که تماس‌های ورودی را با **OpenAI gpt-realtime** و بر پایه‌ی **پایگاه دانش اختصاصی همان کاربر (RAG)** پاسخ می‌دهد.
+هر «کاربر» (صاحب کسب‌وکار) یک **تلفن هوشمند** دریافت می‌کند: یک داخلی روی سرور ایزابل (Asterisk) که تماس‌های ورودی را با **OpenAI Realtime** و **بررسی مستقیم کل پایگاه دانش اختصاصی همان کاربر** پاسخ می‌دهد.
 
 سه نقش:
 - **User** — لاگین با موبایل، مدیریت پایگاه دانش، پیام خوش‌آمد، گوینده، پروفایل.
@@ -25,9 +25,9 @@
 | 1 | **Clean Architecture** سه‌لایه (Api / Core / Infrastructure) + worker مجزا | جداسازی دامنه از زیرساخت، تست‌پذیری، جایگزینی آسان سرویس‌های خارجی |
 | 2 | **AudioSocket** به‌جای ARI/RTP برای پل صوتی | پروتکل ساده‌تر (TCP + SLIN)، بدون نیاز به مدیریت RTP |
 | 3 | **تنظیمات حساس در DB (`AppSetting`) نه در کد** | سوپرادمین کلیدها را از پنل مدیریت می‌کند؛ اسرار در گیت نیست |
-| 4 | **دمو = User با `IsDemo`** (داخلی انتخابی ۱–۹۹۹، به‌جز ۱۰۰–۳۰۰) | بازاستفاده‌ی کامل منطق تماس/RAG بدون کد تکراری |
-| 5 | **Hybrid RAG درون‌حافظه‌ای (embedding + BM25 + RRF)** به‌جای vector DB | بازیابی معنایی و واژگانی برای حجم فعلی کافی است و در آینده قابل جایگزینی با vector store است |
-| 6 | **داور answerability با شاهد عینی و خروجی typed** | similarity به‌تنهایی مجوز پاسخ نیست؛ سؤال بی‌پاسخ و خارج از حوزه گزارش متفاوت دارند |
+| 4 | **دمو = User با `IsDemo`** (داخلی انتخابی ۱–۹۹۹، به‌جز ۱۰۰–۳۰۰) | بازاستفاده‌ی کامل منطق تماس و پاسخ دانشی بدون کد تکراری |
+| 5 | **Chat با کل `KnowledgeBase.RawText`** | هر سؤال در برابر کل متن تأییدشدهٔ همان مستأجر بررسی می‌شود؛ در مسیر تماس chunk، embedding یا Top-K وجود ندارد |
+| 6 | **خروجی typed با شاهد عینی** | مدل باید ۱ تا ۴ نقل‌قول عینی بدهد و سرور آن‌ها را در کل متن تطبیق می‌دهد؛ سؤال بی‌پاسخ، خارج حوزه و اختلال فنی گزارش متفاوت دارند |
 | 7 | **استقرار با Docker Compose** | راه‌اندازی یک‌دستوری کل استک |
 
 ---
@@ -40,7 +40,7 @@ flowchart TB
     user([کاربر / سوپرادمین])
 
     subgraph ext ["سرویس‌های بیرونی"]
-      openai["OpenAI — Embeddings · gpt-realtime · TTS"]
+      openai["OpenAI — Chat دانشی · gpt-realtime · TTS"]
       smsir["SMS.ir"]
       isabel["Isabel / Asterisk PBX — SSH + AudioSocket"]
     end
@@ -56,13 +56,13 @@ flowchart TB
     web -->|/api proxy| api
     api <-->|EF Core| db
     realtime <-->|EF Core| db
-    api -->|embeddings/chat/TTS| openai
+    api -->|moderation/chat/TTS| openai
     api -->|پیامک| smsir
     api -->|SSH: provision + آپلود صوت| isabel
 
     caller -->|SIP| isabel
     isabel -->|AudioSocket TCP:9092| realtime
-    realtime <-->|WebSocket| openai
+    realtime <-->|Chat + WebSocket| openai
 ```
 
 نگاشت پورت‌ها (پیش‌فرض): وب `8081` · API `8080` · AudioSocket `9092` · MySQL داخلی `3306`.
@@ -76,10 +76,10 @@ flowchart TB
 | Frontend | React 18 · Vite · TypeScript · Tailwind CSS v4 · Vazirmatn (RTL) · lucide-react · React Query · React Router |
 | Backend | .NET 9 · ASP.NET Core Web API · Clean Architecture |
 | ORM / DB | EF Core 9 · Pomelo.MySql · **MySQL 8** |
-| AI | OpenAI Embeddings (`text-embedding-3-large`) · `gpt-realtime` · TTS (`gpt-4o-mini-tts`) |
+| AI | OpenAI Chat با کل پایگاه دانش · `gpt-realtime` · TTS (`gpt-4o-mini-tts`) |
 | SMS | SMS.ir REST v1 |
 | Telephony | Asterisk (Isabel) · AudioSocket · SSH.NET (provisioning + SCP) |
-| صوت | PdfPig (استخراج متن) · resampler خطی ۸k↔۲۴k · WAV/SLIN داخلی |
+| صوت/فایل | استخراج txt/docx · resampler خطی ۸k↔۲۴k · WAV/SLIN داخلی |
 | Deploy | Docker · Docker Compose · nginx |
 
 ---
@@ -122,7 +122,7 @@ flowchart RL
 erDiagram
     User ||--o| SmartPhone : دارد
     User ||--o| KnowledgeBase : دارد
-    KnowledgeBase ||--o{ KnowledgeChunk : "chunk + embedding"
+    KnowledgeBase ||--o{ KnowledgeChunk : "legacy rollback data (unused by current call path)"
     SmartPhone ||--o{ CallSession : "لاگ تماس"
     User ||--o{ TokenUsage : "مصرف منتسب"
 
@@ -195,11 +195,12 @@ erDiagram
 | `AuthService` | OTP ورود، صدور JWT، تکمیل پروفایل، **تغییر شماره با OTP** |
 | `SettingsService` | خواندن/نوشتن `AppSetting` با fallback به env؛ ماسک اسرار |
 | `TokenService` | صدور JWT |
-| `OpenAiService` | embeddings / chat / TTS (creds از تنظیمات) + **ثبت مصرف توکن** |
+| `OpenAiService` | chat / TTS (creds از تنظیمات) + **ثبت مصرف توکن** |
 | `ModerationService` | بررسی انطباق با قوانین ج.ا. (fail-closed) |
-| `RagService` | chunking + embedding + بازیابی cosine با آستانه |
-| `FileTextExtractor` | استخراج متن از txt/pdf (PdfPig) |
-| `KnowledgeBaseService` | ارکستراسیون KB: اعتبارسنجی، moderation، حذف فایل مغایر، index، رویداد |
+| `DirectKnowledgeAnswerService` | ارسال کل KB تأییدشده به Chat، خروجی typed و تطبیق شاهد عینی |
+| `RagService` | مسیر legacy برای rollback؛ در پاسخ‌گویی فعلی تماس فراخوانی نمی‌شود |
+| `FileTextExtractor` | استخراج متن از txt/docx |
+| `KnowledgeBaseService` | ارکستراسیون KB: اعتبارسنجی، moderation، سقف متن مستقیم، حذف فایل مغایر و رویداد |
 | `ExtensionAllocator` | تخصیص خودکار داخلی یکتای کاربران عادی (۱۰۰۰–۹۹۹۹) |
 | `AsteriskProvisioningService` | ساخت داخلی (PJSIP via SSH) + **آپلود صوت (SCP)** |
 | `SmartPhoneService` | پیش‌نیازها، تخصیص، provision، وویس خوش‌آمد، پیامک |
@@ -232,7 +233,7 @@ sequenceDiagram
 
 تغییر شماره مشابه است اما کد به **شماره‌ی جدید** ارسال می‌شود و پس از تأیید، `User.PhoneNumber` به‌روزرسانی می‌گردد.
 
-### ۸.۲ پایگاه دانش + RAG + Moderation
+### ۸.۲ پایگاه دانش مستقیم + Moderation
 
 ```mermaid
 sequenceDiagram
@@ -242,15 +243,14 @@ sequenceDiagram
     participant O as OpenAI
     participant D as (DB)
     U->>K: POST /knowledge-base/text|file
-    K->>K: اعتبارسنجی حجم/کاراکتر/نوع (+ استخراج pdf/txt)
+    K->>K: اعتبارسنجی حجم/کاراکتر/نوع (+ استخراج docx/txt)
     K->>M: بررسی محتوا
     M->>O: chat (JSON) انطباق با قوانین
     alt رد شد
       K->>K: حذف فایل → رویداد KnowledgeBaseRejected
       K-->>U: خطا + دلیل
     else تأیید شد
-      K->>O: embeddings برای chunkها
-      K->>D: ذخیره KnowledgeChunkها
+      K->>D: ذخیره کل RawText بدون chunk/index جدید
       K->>K: رویداد KnowledgeBaseUpdated
       K-->>U: موفق
     end
@@ -281,6 +281,7 @@ sequenceDiagram
     participant C as تماس‌گیرنده
     participant PBX as Asterisk
     participant W as CallHandler (worker)
+    participant K as Chat دانشی
     participant O as gpt-realtime
     C->>PBX: تماس با شماره‌ی اصلی
     PBX->>PBX: [arka-main] پخش پیام پذیرش + Read داخلی (DTMF)
@@ -292,9 +293,11 @@ sequenceDiagram
       C->>PBX: صدای caller (SLIN 8k)
       PBX->>W: هدایت صدا
       W->>O: upsample 24k → append → transcription (fa)
-      W->>W: social/identity guard یا Hybrid RAG
-      W->>O: داوری JSON سه‌حالته با evidence
-      W->>W: کنترل server-side شاهد در context
+      W->>W: social/identity guard
+      W->>K: سؤال + کل RawText همان کاربر (JSON data)
+      K-->>W: Answered / InDomainUnknown / OutOfDomain + evidence
+      W->>W: کنترل server-side شاهد در کل KB
+      W->>O: متن نهایی تأییدشده برای خواندن عینی
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
       W->>W: قطع موسیقی → downsample 8k → پخش برای caller
@@ -317,7 +320,7 @@ sequenceDiagram
 ## ۹. مدل چند-مستأجری و دموها
 
 - هر کاربر یک tenant است؛ داده‌ها با `UserId` جدا می‌شوند.
-- **دمو** یک `User` با `IsDemo=true` است که سوپرادمین داخلی آن را از بازهٔ ۱–۹۹۹ انتخاب می‌کند؛ بازهٔ ۱۰۰–۳۰۰ محافظت‌شده و داخلی تکراری غیرمجاز است. سوپرادمین پیام خوش‌آمد، KB، گوینده و محدودیت را نیز کنترل می‌کند. چون از همان موجودیت‌ها استفاده می‌شود، منطق RAG و پاسخ‌گویی بدون تغییر روی دموها کار می‌کند.
+- **دمو** یک `User` با `IsDemo=true` است که سوپرادمین داخلی آن را از بازهٔ ۱–۹۹۹ انتخاب می‌کند؛ بازهٔ ۱۰۰–۳۰۰ محافظت‌شده و داخلی تکراری غیرمجاز است. سوپرادمین پیام خوش‌آمد، KB، گوینده و محدودیت را نیز کنترل می‌کند. چون از همان موجودیت‌ها استفاده می‌شود، منطق پاسخ مستقیم دانشی بدون تغییر روی دموها کار می‌کند.
 
 ---
 
@@ -408,7 +411,7 @@ GET      /api/admin/usage/keys | usage/users ; PUT /api/admin/users/{id}/limit
 |----------|-------|
 | لاگین موبایل / تغییر شماره | `AuthService` + SMS.ir |
 | پایگاه دانش (متن/فایل) | `KnowledgeBaseService` + `FileTextExtractor` |
-| RAG | `RagService` (embeddings + cosine) |
+| پاسخ مستقیم از کل KB | `DirectKnowledgeAnswerService` + Chat JSON + evidence gate |
 | بررسی قوانین ج.ا. | `ModerationService` |
 | تخصیص داخلی | `ExtensionAllocator` |
 | ساخت تلفن روی ایزابل | `AsteriskProvisioningService` + `SmartPhoneService` |
@@ -427,7 +430,7 @@ GET      /api/admin/usage/keys | usage/users ; PUT /api/admin/users/{id}/limit
 
 ## ۱۵. نقاط توسعه‌ی آینده
 
-- جایگزینی RAG درون‌حافظه‌ای با vector store در صورت بزرگ‌شدن پایگاه دانش.
+- افزودن شمارش دقیق توکن و مسیر hierarchical full-document برای KBهایی که از سقف مستقیم ۹۰۰۰۰ کاراکتر بزرگ‌تر می‌شوند.
 - barge-in واقعی (قطع پاسخ AI هنگام صحبت caller).
 - پخش fallback به‌صورت فایل کاملاً ضبط‌شده (به‌جای گفتن متن توسط مدل) برای صرفه‌جویی بیشتر.
 - صف/مقیاس‌پذیری worker برای تماس‌های همزمان بالا.

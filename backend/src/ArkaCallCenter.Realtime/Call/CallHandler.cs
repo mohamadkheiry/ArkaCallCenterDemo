@@ -74,7 +74,7 @@ public class CallHandler
 
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
-        var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
+        var knowledge = scope.ServiceProvider.GetRequiredService<IDirectKnowledgeAnswerService>();
 
         var sp = await db.SmartPhones
             .Include(s => s.User)
@@ -91,8 +91,8 @@ public class CallHandler
             return;
         }
 
-        // مصرف Embedding/Chat همین تماس باید با کاربر و شمارهٔ تماس‌گیرنده ثبت شود؛
-        // RagService و TokenUsageTracker از همین scope استفاده می‌کنند.
+        // Chat usage for direct knowledge answering must be attributed to this caller.
+        // The knowledge answer service and usage tracker share this request scope.
         var usageContext = scope.ServiceProvider.GetRequiredService<IUsageContext>();
         usageContext.UserId = sp.User.Id;
         usageContext.PhoneNumber = callerId;
@@ -183,12 +183,12 @@ public class CallHandler
 
         var recordingEnabled = GetSetting(SettingKeys.CallRecordingEnabled, "true") != "false";
 
-        var instructions = BuildInstructions(sp.User.BrandName, fallback, accuracy);
+        var instructions = BuildInstructions(sp.User.BrandName, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
-        var answeredFromKb = true;
+        var answeredFromKb = false;
         long inputFrames = 0, noiseGatedFrames = 0;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
         var userSpeaking = 0;
@@ -196,7 +196,7 @@ public class CallHandler
         CancellationTokenSource? pendingTurnCts = null;
         var pendingTurnLock = new object();
         var pendingTurns = new List<Task>();
-        using var ragGate = new SemaphoreSlim(1, 1);
+        using var knowledgeGate = new SemaphoreSlim(1, 1);
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model,
             _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _vadThreshold, _logger);
@@ -366,13 +366,13 @@ public class CallHandler
                     turnCts = pendingTurnCts;
                 }
 
-                var task = AnswerGroundedAsync(question, turnCts.Token);
+                var task = AnswerFromKnowledgeAsync(question, turnCts.Token);
                 lock (pendingTurnLock) pendingTurns.Add(task);
             }
             return Task.CompletedTask;
         };
 
-        async Task AnswerGroundedAsync(string question, CancellationToken turnCt)
+        async Task AnswerFromKnowledgeAsync(string question, CancellationToken turnCt)
         {
             try
             {
@@ -381,7 +381,6 @@ public class CallHandler
                         sp.User.BrandName,
                         out var identityResponse))
                 {
-                    answeredFromKb = false;
                     _logger.LogInformation(
                         "Answering business identity question for ext {Ext}: {Question}",
                         extension,
@@ -392,28 +391,40 @@ public class CallHandler
 
                 if (ConversationTurnClassifier.TryCreateResponse(question, out var conversationalResponse))
                 {
-                    answeredFromKb = false;
                     _logger.LogInformation(
-                        "Handling conversational turn without RAG for ext {Ext}: {Question}",
+                        "Handling conversational turn without knowledge AI for ext {Ext}: {Question}",
                         extension,
                         question);
                     await realtime.CreateConversationalResponseAsync(conversationalResponse, turnCt);
                     return;
                 }
 
-                await ragGate.WaitAsync(turnCt);
-                RagAnswer result;
-                try { result = await rag.RetrieveAsync(sp.User.Id, question, turnCt); }
-                finally { ragGate.Release(); }
+                await knowledgeGate.WaitAsync(turnCt);
+                DirectKnowledgeAnswer result;
+                try
+                {
+                    result = await knowledge.AnswerAsync(
+                        sp.User.Id,
+                        question,
+                        accuracy,
+                        turnCt);
+                }
+                finally { knowledgeGate.Release(); }
 
                 switch (result.Outcome)
                 {
-                    case RagOutcome.AnswerCandidate:
-                        await realtime.CreateGroundedResponseAsync(question, result.Context, fallback, turnCt);
+                    case DirectKnowledgeOutcome.Answered:
+                        if (string.IsNullOrWhiteSpace(result.AnswerText))
+                            throw new InvalidOperationException("Direct knowledge answer was empty.");
+                        answeredFromKb = true;
+                        _logger.LogInformation(
+                            "Answering from the complete knowledge base for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(result.AnswerText, turnCt);
                         return;
 
-                    case RagOutcome.OutOfDomain:
-                        answeredFromKb = false;
+                    case DirectKnowledgeOutcome.OutOfDomain:
                         var scopeResponse = ConversationMessages.CreateOutOfDomain(
                             sp.User.BrandName,
                             result.ScopeDescription);
@@ -424,21 +435,29 @@ public class CallHandler
                         await realtime.CreateConversationalResponseAsync(scopeResponse, turnCt);
                         return;
 
-                    case RagOutcome.InDomainUnknown:
-                    case RagOutcome.KnowledgeBaseEmpty:
-                        answeredFromKb = false;
+                    case DirectKnowledgeOutcome.InDomainUnknown:
+                    case DirectKnowledgeOutcome.KnowledgeBaseEmpty:
                         lock (turnsLock) unanswered.Add(question);
                         _logger.LogInformation(
                             "No grounded answer for in-domain question on ext {Ext}: {Question}",
                             extension,
                             question);
-                        await realtime.CreateGroundedResponseAsync(question, null, fallback, turnCt);
+                        await realtime.CreateConversationalResponseAsync(fallback, turnCt);
                         return;
 
-                    case RagOutcome.RetrievalUnavailable:
-                        answeredFromKb = false;
+                    case DirectKnowledgeOutcome.KnowledgeBaseTooLarge:
                         _logger.LogWarning(
-                            "Knowledge retrieval unavailable for ext {Ext}; not recording as unanswered: {Question}",
+                            "Complete knowledge base exceeds the safe direct-context limit for ext {Ext}; not recording as unanswered: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.RetrievalUnavailable,
+                            turnCt);
+                        return;
+
+                    case DirectKnowledgeOutcome.ServiceUnavailable:
+                        _logger.LogWarning(
+                            "Direct knowledge answering unavailable for ext {Ext}; not recording as unanswered: {Question}",
                             extension,
                             question);
                         await realtime.CreateConversationalResponseAsync(
@@ -447,15 +466,14 @@ public class CallHandler
                         return;
 
                     default:
-                        throw new InvalidOperationException($"Unsupported RAG outcome: {result.Outcome}");
+                        throw new InvalidOperationException($"Unsupported direct knowledge outcome: {result.Outcome}");
                 }
             }
             catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
             catch (Exception ex)
             {
-                answeredFromKb = false;
                 _logger.LogWarning(ex,
-                    "RAG retrieval failed for ext {Ext}; reporting a temporary retrieval problem without marking the question unanswered.",
+                    "Direct knowledge answering failed for ext {Ext}; reporting a temporary problem without marking the question unanswered.",
                     extension);
                 try
                 {
@@ -536,7 +554,7 @@ public class CallHandler
             lock (pendingTurnLock) pendingSnapshot = pendingTurns.ToArray();
             try { await Task.WhenAll(pendingSnapshot); }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { _logger.LogWarning(ex, "Pending RAG response failed during call shutdown."); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Pending knowledge response failed during call shutdown."); }
         }
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
@@ -682,23 +700,20 @@ public class CallHandler
         }
     }
 
-    private static string BuildInstructions(string? brand, string fallback, int accuracyPercent)
+    private static string BuildInstructions(string? brand, int accuracyPercent)
     {
-        // «دقتِ پاسخ‌ها» (۱۰..۱۰۰) via پرامپت اعمال می‌شود چون Realtime GA دیگر temperature ندارد.
-        var faithfulness = accuracyPercent switch
+        var readingStyle = accuracyPercent switch
         {
-            >= 80 => "پایبندیِ تو باید بسیار سخت‌گیرانه باشد: فقط از پایگاه دانش استفاده کن، هیچ حدس، برداشت یا افزوده‌ی شخصی نزن، و در کوچک‌ترین تردید همان جمله‌ی بالا را بگو.",
-            >= 40 => "فقط بر اساس پایگاه دانش پاسخ بده؛ بازنویسی روان و خلاصه‌سازی مجاز است، اما هیچ اطلاعات یا حدسی از بیرونِ قطعه اضافه نکن.",
-            _ => "پاسخ را ساده‌تر و محاوره‌ای‌تر بیان کن، اما همچنان فقط از قطعهٔ پایگاه دانش استفاده کن و هیچ دانشی از بیرون آن اضافه نکن.",
+            >= 80 => "متن تأییدشده را دقیق، شمرده و بدون افزودن توضیح دیگر بخوان.",
+            >= 40 => "متن تأییدشده را روان و طبیعی، بدون تغییر معنا بخوان.",
+            _ => "متن تأییدشده را کاملاً محاوره‌ای اما بدون افزودن اطلاعات جدید بخوان.",
         };
         return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
         با فارسی معیار ایران، کاملاً روان و طبیعی و بدون لهجه انگلیسی صحبت کن؛ از مکث‌های غیرضروری پرهیز کن.
-        برای هر نوبت، قطعه مرتبط پایگاه دانش جداگانه در دستور همان پاسخ در اختیارت قرار می‌گیرد.
-        احوال‌پرسی، تشکر، تأیید کوتاه و خداحافظی را طبیعی و مؤدبانه پاسخ بده؛ این موارد نیازمند پایگاه دانش نیستند.
-        برای پرسش‌های دانشی فقط بر اساس قطعه ارائه‌شده پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
-        این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
-        میزانِ پایبندی به پایگاه دانش: {faithfulness}
+        سامانه پیش از هر پاسخ، کل پایگاه دانش را جداگانه بررسی و پاسخ نهایی را تأیید می‌کند.
+        هرگاه متن تأییدشده در دستور پاسخ ارائه شد، فقط همان متن را بخوان و هیچ اطلاعاتی از حافظه یا دانش عمومی اضافه نکن.
+        سبک خواندن: {readingStyle}
         """;
     }
 
