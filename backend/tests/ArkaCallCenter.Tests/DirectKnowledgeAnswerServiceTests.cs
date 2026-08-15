@@ -126,6 +126,279 @@ public class DirectKnowledgeAnswerServiceTests
         Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
     }
 
+    [Fact]
+    public void Evidence_with_the_same_words_and_normalized_punctuation_is_accepted()
+    {
+        const string knowledge =
+            "بیمه مرکزی با هدف تنظیم، تعمیم و هدایت امر بیمه در ایران فعالیت می‌کند.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"پاسخ مستند",
+              "evidence":["بیمه مرکزی با هدف تنظیم تعمیم و هدایت امر بیمه در ایران فعالیت می‌کند"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal(
+            "بیمه مرکزی با هدف تنظیم، تعمیم و هدایت امر بیمه در ایران فعالیت می‌کند.",
+            result.AnswerText);
+    }
+
+    [Fact]
+    public void Punctuation_normalization_never_changes_the_spoken_source_fact()
+    {
+        const string knowledge = "نه، تخفیف داریم.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"تخفیف داریم",
+              "evidence":["نه تخفیف داریم"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("نه، تخفیف داریم.", result.AnswerText);
+        Assert.Equal("نه، تخفیف داریم.", Assert.Single(result.Evidence));
+    }
+
+    [Theory]
+    [InlineData("حداقل دمای مجاز −۵ درجه است.", "حداقل دمای مجاز ۵ درجه است", "−۵")]
+    [InlineData("مقدار باید کمتر از < ۱۰ باشد.", "مقدار باید کمتر از ۱۰ باشد", "< ۱۰")]
+    [InlineData("تخفیف این طرح ۲۰٪ است.", "تخفیف این طرح ۲۰ است", "۲۰٪")]
+    [InlineData("نرخ دقیق این خدمت 1,5 درصد است.", "نرخ دقیق این خدمت 1 5 درصد است", "1,5")]
+    public void Normalized_signs_are_restored_from_the_source_before_speaking(
+        string knowledge,
+        string normalizedEvidence,
+        string requiredSourceFragment)
+    {
+        var raw = JsonSerializer.Serialize(new
+        {
+            classification = "answerable",
+            answer = "پاسخ ساختگی",
+            evidence = new[] { normalizedEvidence },
+        });
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Contains(requiredSourceFragment, result.AnswerText, StringComparison.Ordinal);
+        Assert.NotEqual(normalizedEvidence, result.AnswerText);
+    }
+
+    [Theory]
+    [InlineData("−۵ درجه حداقل دمای مجاز است.", "۵ درجه حداقل دمای مجاز است", "−۵")]
+    [InlineData("میزان تخفیف نهایی ۲۰٪.", "میزان تخفیف نهایی ۲۰", "۲۰٪.")]
+    public void Source_signs_at_evidence_boundaries_are_restored_before_speaking(
+        string knowledge,
+        string normalizedEvidence,
+        string requiredSourceFragment)
+    {
+        var raw = JsonSerializer.Serialize(new
+        {
+            classification = "answerable",
+            answer = "پاسخ ساختگی",
+            evidence = new[] { normalizedEvidence },
+        });
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Contains(requiredSourceFragment, result.AnswerText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Exact_semantic_sign_selects_the_correct_source_when_words_collide()
+    {
+        const string knowledge = """
+            نرخ تغییر +۵ درصد است.
+            نرخ تغییر −۵ درصد است.
+            """;
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"نرخ منفی است",
+              "evidence":["نرخ تغییر −۵ درصد است."]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Contains("−۵", result.AnswerText, StringComparison.Ordinal);
+        Assert.DoesNotContain("+۵", result.AnswerText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Missing_semantic_sign_with_conflicting_sources_fails_closed()
+    {
+        const string knowledge = """
+            نرخ تغییر +۵ درصد است.
+            نرخ تغییر −۵ درصد است.
+            """;
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"نرخ پنج درصد است",
+              "evidence":["نرخ تغییر ۵ درصد است"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.InDomainUnknown, result.Outcome);
+        Assert.Empty(result.AnswerText);
+    }
+
+    [Fact]
+    public void Spaced_prefix_sign_is_restored_from_the_source()
+    {
+        const string knowledge = "− ۵ درجه حداقل دمای مجاز است.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"دمای مجاز منفی است",
+              "evidence":["۵ درجه حداقل دمای مجاز است"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.StartsWith("− ۵", result.AnswerText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_unique_evidence_match_is_kept_when_unrelated_text_follows_it()
+    {
+        const string knowledge = """
+            دوره سطح A1 مخصوص زبان‌آموزان مبتدی است.
+            این پاراگراف درباره برنامه کلاس‌ها و پشتیبانی دوره توضیح می‌دهد.
+            """;
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"دوره A1 مناسب است",
+              "evidence":["دوره سطح A1 مخصوص زبان‌آموزان مبتدی است."]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("دوره سطح A1 مخصوص زبان‌آموزان مبتدی است.", result.AnswerText);
+    }
+
+    [Fact]
+    public void Spaced_sign_is_restored_when_number_was_converted_to_a_word()
+    {
+        const string knowledge = "− پَنج درجه حداقل دمای مجاز است.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"دمای مجاز منفی است",
+              "evidence":["پنج درجه حداقل دمای مجاز است"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.StartsWith("− پَنج", result.AnswerText, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(
+        "این خدمت رایگان نیست.",
+        "این خدمت رایگان",
+        "این خدمت رایگان نیست.")]
+    [InlineData(
+        "تخفیف پنجاه درصد فقط برای کارکنان رسمی است.",
+        "تخفیف پنجاه درصد",
+        "تخفیف پنجاه درصد فقط برای کارکنان رسمی است.")]
+    public void Partial_evidence_is_expanded_to_include_negation_and_conditions(
+        string knowledge,
+        string partialEvidence,
+        string expectedSpokenSentence)
+    {
+        var raw = JsonSerializer.Serialize(new
+        {
+            classification = "answerable",
+            answer = "پاسخ ناقص مدل",
+            evidence = new[] { partialEvidence },
+        });
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal(expectedSpokenSentence, result.AnswerText);
+    }
+
+    [Fact]
+    public void Spaced_sign_resolution_never_crosses_a_line_boundary()
+    {
+        const string knowledge = """
+            −
+            ۵ درجه حداقل دمای مجاز است.
+            """;
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"پنج درجه",
+              "evidence":["۵ درجه حداقل دمای مجاز است"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("۵ درجه حداقل دمای مجاز است.", result.AnswerText);
+    }
+
+    [Fact]
+    public void Evidence_from_one_sentence_never_consumes_the_next_sentence_on_the_same_line()
+    {
+        const string knowledge = "محصول الف رایگان است. محصول ب گران است.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"محصول الف رایگان است",
+              "evidence":["محصول الف رایگان است."]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("محصول الف رایگان است.", result.AnswerText);
+    }
+
+    [Fact]
+    public void Trailing_semantic_sign_does_not_consume_the_next_sentence()
+    {
+        const string knowledge = "تخفیف نهایی ۲۰٪. محصول دوم بدون تخفیف است.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"تخفیف بیست درصد است",
+              "evidence":["تخفیف نهایی ۲۰"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("تخفیف نهایی ۲۰٪.", result.AnswerText);
+    }
+
+    [Fact]
+    public void Spaced_sign_resolution_never_crosses_a_form_feed_page_boundary()
+    {
+        const string knowledge = "−\f۵ درجه حداقل دمای مجاز است.";
+        const string raw = """
+            {
+              "classification":"answerable",
+              "answer":"پنج درجه",
+              "evidence":["۵ درجه حداقل دمای مجاز است"]
+            }
+            """;
+
+        Assert.True(DirectKnowledgeAnswerService.TryParseAnswer(raw, knowledge, out var result));
+        Assert.Equal(DirectKnowledgeOutcome.Answered, result.Outcome);
+        Assert.Equal("۵ درجه حداقل دمای مجاز است.", result.AnswerText);
+    }
+
     [Theory]
     [InlineData("in_domain_unknown", DirectKnowledgeOutcome.InDomainUnknown)]
     [InlineData("out_of_domain", DirectKnowledgeOutcome.OutOfDomain)]
