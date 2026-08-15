@@ -91,6 +91,12 @@ public class CallHandler
             return;
         }
 
+        // مصرف Embedding/Chat همین تماس باید با کاربر و شمارهٔ تماس‌گیرنده ثبت شود؛
+        // RagService و TokenUsageTracker از همین scope استفاده می‌کنند.
+        var usageContext = scope.ServiceProvider.GetRequiredService<IUsageContext>();
+        usageContext.UserId = sp.User.Id;
+        usageContext.PhoneNumber = callerId;
+
         var recorder = new CallRecordingBuffer();
         using var welcomePlaybackCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var hasStaticWelcome = _welcomeCache.TryGet(extension.Value, sp.WelcomeAudioPath, out var staticWelcome);
@@ -135,10 +141,7 @@ public class CallHandler
 
         const string defaultFallback = ConversationMessages.UnknownKnowledge;
         var configuredFallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
-        var fallback = ConversationMessages.LegacyUnknownKnowledgeMessages
-            .Contains(configuredFallback, StringComparer.Ordinal)
-            ? defaultFallback
-            : configuredFallback;
+        var fallback = ConversationMessages.EnsureOperatorEscalation(configuredFallback);
         var voice = sp.User.VoiceName ?? GetSetting(SettingKeys.DefaultVoiceName, "alloy") ?? "alloy";
         // درصدِ دقت/پایبندی به پایگاه دانش (۱۰..۱۰۰). چون Realtime GA دیگر temperature ندارد،
         // این پارامتر از طریقِ instructions (پرامپت) به مدل منتقل می‌شود؛ درصدِ بالاتر = پایبندیِ سخت‌گیرانه‌تر.
@@ -371,7 +374,6 @@ public class CallHandler
 
         async Task AnswerGroundedAsync(string question, CancellationToken turnCt)
         {
-            var unansweredRecorded = false;
             try
             {
                 if (ConversationTurnClassifier.TryCreateBusinessIdentityResponse(
@@ -379,6 +381,7 @@ public class CallHandler
                         sp.User.BrandName,
                         out var identityResponse))
                 {
+                    answeredFromKb = false;
                     _logger.LogInformation(
                         "Answering business identity question for ext {Ext}: {Question}",
                         extension,
@@ -389,6 +392,7 @@ public class CallHandler
 
                 if (ConversationTurnClassifier.TryCreateResponse(question, out var conversationalResponse))
                 {
+                    answeredFromKb = false;
                     _logger.LogInformation(
                         "Handling conversational turn without RAG for ext {Ext}: {Question}",
                         extension,
@@ -401,22 +405,64 @@ public class CallHandler
                 RagAnswer result;
                 try { result = await rag.RetrieveAsync(sp.User.Id, question, turnCt); }
                 finally { ragGate.Release(); }
-                if (!result.Found)
+
+                switch (result.Outcome)
                 {
-                    answeredFromKb = false;
-                    lock (turnsLock) unanswered.Add(question);
-                    unansweredRecorded = true;
+                    case RagOutcome.AnswerCandidate:
+                        await realtime.CreateGroundedResponseAsync(question, result.Context, fallback, turnCt);
+                        return;
+
+                    case RagOutcome.OutOfDomain:
+                        answeredFromKb = false;
+                        var scopeResponse = ConversationMessages.CreateOutOfDomain(
+                            sp.User.BrandName,
+                            result.ScopeDescription);
+                        _logger.LogInformation(
+                            "Answering out-of-domain question without knowledge fallback for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(scopeResponse, turnCt);
+                        return;
+
+                    case RagOutcome.InDomainUnknown:
+                    case RagOutcome.KnowledgeBaseEmpty:
+                        answeredFromKb = false;
+                        lock (turnsLock) unanswered.Add(question);
+                        _logger.LogInformation(
+                            "No grounded answer for in-domain question on ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateGroundedResponseAsync(question, null, fallback, turnCt);
+                        return;
+
+                    case RagOutcome.RetrievalUnavailable:
+                        answeredFromKb = false;
+                        _logger.LogWarning(
+                            "Knowledge retrieval unavailable for ext {Ext}; not recording as unanswered: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.RetrievalUnavailable,
+                            turnCt);
+                        return;
+
+                    default:
+                        throw new InvalidOperationException($"Unsupported RAG outcome: {result.Outcome}");
                 }
-                await realtime.CreateGroundedResponseAsync(question, result.Found ? result.Context : null, fallback, turnCt);
             }
             catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
             catch (Exception ex)
             {
                 answeredFromKb = false;
-                if (!unansweredRecorded)
-                    lock (turnsLock) unanswered.Add(question);
-                _logger.LogWarning(ex, "RAG retrieval failed for ext {Ext}; using fallback.", extension);
-                try { await realtime.CreateGroundedResponseAsync(question, null, fallback, turnCt); }
+                _logger.LogWarning(ex,
+                    "RAG retrieval failed for ext {Ext}; reporting a temporary retrieval problem without marking the question unanswered.",
+                    extension);
+                try
+                {
+                    await realtime.CreateConversationalResponseAsync(
+                        ConversationMessages.RetrievalUnavailable,
+                        turnCt);
+                }
                 catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
             }
         }
@@ -642,8 +688,8 @@ public class CallHandler
         var faithfulness = accuracyPercent switch
         {
             >= 80 => "پایبندیِ تو باید بسیار سخت‌گیرانه باشد: فقط از پایگاه دانش استفاده کن، هیچ حدس، برداشت یا افزوده‌ی شخصی نزن، و در کوچک‌ترین تردید همان جمله‌ی بالا را بگو.",
-            >= 40 => "عمدتاً بر اساس پایگاه دانش پاسخ بده؛ اگر موضوع خیلی نزدیک بود می‌توانی مختصر توضیح دهی، اما از اطلاعاتِ نامطمئن و حدس پرهیز کن.",
-            _ => "اولویت با پایگاه دانش است، اما برای روان‌تر شدنِ گفتگو می‌توانی کمی از دانشِ عمومی و خلاقیت هم کمک بگیری؛ با این حال هرگز چیزی خلافِ پایگاه دانش نگو.",
+            >= 40 => "فقط بر اساس پایگاه دانش پاسخ بده؛ بازنویسی روان و خلاصه‌سازی مجاز است، اما هیچ اطلاعات یا حدسی از بیرونِ قطعه اضافه نکن.",
+            _ => "پاسخ را ساده‌تر و محاوره‌ای‌تر بیان کن، اما همچنان فقط از قطعهٔ پایگاه دانش استفاده کن و هیچ دانشی از بیرون آن اضافه نکن.",
         };
         return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
