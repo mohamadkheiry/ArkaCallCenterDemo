@@ -50,6 +50,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [callLoading, setCallLoading] = useState(false)
   const [callMsg, setCallMsg] = useState('')
+  const [deliveryMethod, setDeliveryMethod] = useState<'sms' | 'call'>('sms')
   const [otpFocused, setOtpFocused] = useState(false)
   const [retryAfter, setRetryAfter] = useState(0)
   const { setToken } = useAuth()
@@ -69,6 +70,8 @@ export default function LoginPage() {
     try {
       const { data } = await api.post('/api/auth/request-otp-call', { phoneNumber: toEn(phone) })
       setRetryAfter(Math.max(0, Number(data.retryAfterSeconds) || 0))
+      setDeliveryMethod('call')
+      setStep('otp')
       setCallMsg('در حال تماس با شما… کد به‌صورت صوتی و رقم‌به‌رقم خوانده می‌شود.')
     } catch (err) {
       setRetryAfter(apiRetryAfter(err))
@@ -85,6 +88,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.post('/api/auth/request-otp', { phoneNumber: toEn(phone) })
       setRetryAfter(Math.max(0, Number(data.retryAfterSeconds) || 0))
+      setDeliveryMethod('sms')
       setStep('otp')
     } catch (err) {
       setRetryAfter(apiRetryAfter(err))
@@ -312,6 +316,26 @@ export default function LoginPage() {
                     <ArrowLeft size={17} />
                   </Button>
 
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-200" />
+                    یا
+                    <span className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200" />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={callLoading}
+                    onClick={requestOtpByCall}
+                    disabled={loading || retryAfter > 0}
+                    className="w-full"
+                  >
+                    <PhoneCall size={16} className="text-brand-600" />
+                    {retryAfter > 0
+                      ? `دریافت کد با تماس تا ${toFa(retryAfter)} ثانیه دیگر`
+                      : 'دریافت کد با تماس تلفنی'}
+                  </Button>
+
                   <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-slate-400">
                     <ShieldCheck size={14} className="text-brand-400" />
                     ورود امن با رمز یک‌بارمصرف — بدون نیاز به گذرواژه
@@ -328,7 +352,8 @@ export default function LoginPage() {
                     کد تأیید
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    کد ۶ رقمی ارسال‌شده با پیامک به شماره{' '}
+                    کد ۶ رقمی{' '}
+                    {deliveryMethod === 'call' ? 'خوانده‌شده در تماس با' : 'ارسال‌شده با پیامک به'} شماره{' '}
                     <span dir="ltr" className="mx-0.5 inline-block font-bold tracking-wider text-slate-700">
                       {toFa(phone)}
                     </span>{' '}
@@ -402,7 +427,7 @@ export default function LoginPage() {
 
                   <div className="flex items-center gap-3 py-0.5 text-xs text-slate-400">
                     <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-200" />
-                    پیامک را دریافت نکردید؟
+                    {deliveryMethod === 'call' ? 'تماس را دریافت نکردید؟' : 'پیامک را دریافت نکردید؟'}
                     <span className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200" />
                   </div>
 
