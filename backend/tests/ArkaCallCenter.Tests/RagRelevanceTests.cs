@@ -85,4 +85,25 @@ public class RagRelevanceTests
         Assert.InRange(scores[0], 0, 0.34);
         Assert.Equal(0, scores[1], precision: 6);
     }
+
+    [Fact]
+    public void Lexical_fallback_accepts_a_well_covered_knowledge_question()
+    {
+        var documents = new[]
+        {
+            "وظیفه اصلی بیمه مرکزی تنظیم مقررات و نظارت بر شرکت‌های بیمه است.",
+            "آدرس شعبه مرکزی در خیابان آزادی است."
+        };
+        var bm25 = RagService.Bm25Scores("با تشکر، وظیفه اصلی بیمه مرکزی چیست؟", documents);
+        var fuzzy = RagService.LexicalSimilarity("با تشکر، وظیفه اصلی بیمه مرکزی چیست؟", documents[0]);
+        var lexicalScore = (bm25[0] * 0.70) + (fuzzy * 0.30);
+
+        Assert.True(RagService.IsLexicalFallbackRelevant(lexicalScore));
+    }
+
+    [Fact]
+    public void Lexical_fallback_rejects_a_partial_generic_overlap()
+    {
+        Assert.False(RagService.IsLexicalFallbackRelevant(0.34));
+    }
 }

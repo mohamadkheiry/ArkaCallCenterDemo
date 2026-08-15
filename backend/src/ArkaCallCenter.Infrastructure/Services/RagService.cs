@@ -7,6 +7,7 @@ using ArkaCallCenter.Core.Constants;
 using ArkaCallCenter.Core.Entities;
 using ArkaCallCenter.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ArkaCallCenter.Infrastructure.Services;
 
@@ -19,24 +20,32 @@ public class RagService : IRagService
     private const double SemanticRankWeight = 0.68;
     private const double LexicalRankWeight = 0.32;
     private const double ReciprocalRankConstant = 60;
+    private static readonly TimeSpan QueryEmbeddingTimeout = TimeSpan.FromSeconds(8);
     private static readonly ConcurrentDictionary<int, SemaphoreSlim> ReindexLocks = new();
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "این", "آن", "است", "هست", "بود", "برای", "چند", "چقدر", "چقدره", "چیست", "چیه", "آیا",
         "قبل", "بعد", "باید", "شود", "شده", "کردن", "کنم", "کنیم", "کنید", "کند", "درباره", "یعنی", "لطفا", "لطفاً",
         "من", "ما", "شما", "که", "چه", "کجا", "چطور", "چگونه", "دارم", "دارد", "دارید", "میشه",
+        "ممنون", "ممنونم", "تشکر", "متشکرم", "مرسی", "سپاس", "ببخشید",
         "the", "what", "how", "and", "for", "is", "are"
     };
     private static readonly IReadOnlyDictionary<string, string> SynonymCanonical = BuildSynonymMap();
     private readonly ArkaDbContext _db;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
+    private readonly ILogger<RagService> _logger;
 
-    public RagService(ArkaDbContext db, IOpenAiService openai, ISettingsService settings)
+    public RagService(
+        ArkaDbContext db,
+        IOpenAiService openai,
+        ISettingsService settings,
+        ILogger<RagService> logger)
     {
         _db = db;
         _openai = openai;
         _settings = settings;
+        _logger = logger;
     }
 
     public async Task IndexAsync(KnowledgeBase kb, CancellationToken ct = default)
@@ -83,9 +92,31 @@ public class RagService : IRagService
         if (chunks.Count == 0)
             return new RagAnswer(false, Array.Empty<RagHit>(), "");
 
-        var q = await _openai.EmbedAsync(query, ct);
-
         var bm25Scores = Bm25Scores(query, chunks.Select(chunk => chunk.Content).ToList());
+        float[]? q;
+        try
+        {
+            using var embeddingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            embeddingCts.CancelAfter(QueryEmbeddingTimeout);
+            q = await _openai.EmbedAsync(query, embeddingCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Query embedding exceeded {Seconds}s for user {UserId}; using lexical retrieval.",
+                QueryEmbeddingTimeout.TotalSeconds,
+                userId);
+            q = null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Query embedding failed for user {UserId}; using lexical retrieval.", userId);
+            q = null;
+        }
+
+        if (q is null)
+            return BuildLexicalFallback(query, chunks, bm25Scores, topK);
+
         var candidates = chunks
             .Select((c, index) =>
             {
@@ -366,6 +397,39 @@ public class RagService : IRagService
         => semanticScore >= threshold ||
            (lexicalScore >= 0.25 &&
             semanticScore + Math.Min(MaxLexicalRelevanceBoost, lexicalScore * MaxLexicalRelevanceBoost) >= threshold);
+
+    internal static bool IsLexicalFallbackRelevant(double lexicalScore)
+        => lexicalScore >= 0.55;
+
+    private static RagAnswer BuildLexicalFallback(
+        string query,
+        IReadOnlyList<KnowledgeChunk> chunks,
+        IReadOnlyList<double> bm25Scores,
+        int topK)
+    {
+        var candidates = chunks
+            .Select((chunk, index) =>
+            {
+                var fuzzyOverlap = LexicalSimilarity(query, chunk.Content);
+                var lexicalScore = Math.Clamp((bm25Scores[index] * 0.70) + (fuzzyOverlap * 0.30), 0, 1);
+                return new RagCandidate(index, chunk.Content, 0, lexicalScore, lexicalScore);
+            })
+            .OrderByDescending(candidate => candidate.LexicalScore)
+            .Take(topK)
+            .ToList();
+
+        var best = candidates.FirstOrDefault();
+        var found = best is not null && IsLexicalFallbackRelevant(best.LexicalScore);
+        var context = found
+            ? string.Join("\n---\n", candidates
+                .Where(candidate => candidate.LexicalScore >= best!.LexicalScore - 0.16)
+                .Select(candidate => candidate.Content))
+            : "";
+        var hits = candidates
+            .Select(candidate => new RagHit(candidate.Content, candidate.LexicalScore))
+            .ToList();
+        return new RagAnswer(found, hits, context);
+    }
 
     private static bool TokensAreSimilar(string left, string right)
     {
