@@ -41,7 +41,7 @@
   3. اتصال به OpenAI Realtime (`OpenAiRealtimeClient`) با گوینده‌ی کاربر.
   4. تبدیل WAV خوش‌آمد به SLIN 8kHz و ورود مستقیم به صف خروجی؛ فقط در نبود WAV، `GreetAsync` اجرا می‌شود.
   5. صدای caller (SLIN 8kHz) → noise gate فریم‌های کم‌دامنه → upsample به ۲۴kHz → `input_audio_buffer.append`؛ مدل `gpt-4o-transcribe` فقط با language hint=`fa` متن نوبت را می‌سازد. prompt واژگانی ارسال نمی‌شود تا در سکوت عبارت‌های زمینه‌ای توهم نشوند.
-  6. پس از پایان هر نوبت، `RagService` فقط قطعه‌های مرتبط را بازیابی می‌کند و `response.create` با همان context یا fallback قطعی ارسال می‌شود.
+  6. پس از پایان هر نوبت، تشخیص هویت کسب‌وکار و نیت‌های اجتماعی فارسی پیش از RAG اجرا می‌شود؛ سلام، احوال‌پرسی، تشکر، عذرخواهی، تأیید/رد کوتاه و خداحافظی پاسخ مستقیم می‌گیرند و در سؤال‌های بی‌پاسخ ثبت نمی‌شوند. سؤال واقعی یا جمله ترکیبی سپس به `RagService` می‌رود تا فقط قطعه‌های مرتبط را بازیابی کند و `response.create` با همان context یا fallback قطعی ارسال شود.
   7. صدای پاسخ (PCM16 24kHz) → downsample به ۸kHz → فریم‌های AudioSocket.
   8. اعمال سقف دقیقه و timeout سکوت؛ ثبت `CallSession`، transcript و مصرف توکن.
 - **صوت:** `AudioResampler` تبدیل خطی ۸k↔۲۴k. فرمت realtime = `pcm16`.
