@@ -2,7 +2,7 @@ param(
     [ValidateRange(1, 999999)]
     [int]$Extension = 2,
     [string]$HostName = "127.0.0.1",
-    [ValidateRange(1, 30)]
+    [ValidateRange(1, 60)]
     [int]$DurationSeconds = 8,
     [string]$InputSlinPath,
     [ValidateRange(0, 30000)]
