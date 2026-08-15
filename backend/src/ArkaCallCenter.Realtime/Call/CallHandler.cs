@@ -28,6 +28,8 @@ public class CallHandler
     private readonly string _transcriptionModel;
     private readonly string _transcriptionLanguage;
     private readonly string _transcriptionPrompt;
+    private readonly double _vadThreshold;
+    private readonly int _inputNoiseGateRms;
 
     /// <summary>یک نوبت گفتگو در رونوشت.</summary>
     private record TranscriptTurn(string Role, string Text);
@@ -44,6 +46,8 @@ public class CallHandler
         _transcriptionModel = realtimeOptions.Value.TranscriptionModel;
         _transcriptionLanguage = realtimeOptions.Value.TranscriptionLanguage;
         _transcriptionPrompt = realtimeOptions.Value.TranscriptionPrompt;
+        _vadThreshold = realtimeOptions.Value.VadThreshold;
+        _inputNoiseGateRms = Math.Clamp(realtimeOptions.Value.InputNoiseGateRms, 20, 2000);
         Directory.CreateDirectory(_uploadsPath);
     }
 
@@ -182,6 +186,7 @@ public class CallHandler
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
         var answeredFromKb = true;
+        long inputFrames = 0, noiseGatedFrames = 0;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
         var userSpeaking = 0;
         var lastSpeechTicks = Stopwatch.GetTimestamp();
@@ -191,7 +196,7 @@ public class CallHandler
         using var ragGate = new SemaphoreSlim(1, 1);
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model,
-            _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _logger);
+            _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _vadThreshold, _logger);
 
         realtime.OnUsage += (p, c, t) =>
         {
@@ -329,6 +334,13 @@ public class CallHandler
         realtime.OnAssistantText += text => { asstBuf.Append(text); return Task.CompletedTask; };
         realtime.OnUserTranscript += text =>
         {
+            if (!ConversationTurnClassifier.HasMeaningfulInput(text))
+            {
+                Volatile.Write(ref thinking, 0);
+                _logger.LogInformation("Ignoring empty/non-lexical transcript on ext {Ext}.", extension);
+                return Task.CompletedTask;
+            }
+
             if (!string.IsNullOrWhiteSpace(text))
             {
                 var question = text.Trim();
@@ -449,7 +461,12 @@ public class CallHandler
                 {
                     // ضبط روی clock پخش انجام می‌شود تا صدای caller و AI روی یک timeline باشند.
                     recorder.EnqueueInbound(frame.Value.Payload);
-                    var pcm24k = AudioResampler.Upsample8kTo24k(frame.Value.Payload);
+                    Interlocked.Increment(ref inputFrames);
+                    var isLowLevelNoise = AudioPostProcess.IsSilentFrame(frame.Value.Payload, _inputNoiseGateRms);
+                    if (isLowLevelNoise) Interlocked.Increment(ref noiseGatedFrames);
+                    var pcm24k = isLowLevelNoise
+                        ? new byte[frame.Value.Payload.Length * 3]
+                        : AudioResampler.Upsample8kTo24k(frame.Value.Payload);
                     await realtime.AppendAudioAsync(pcm24k, ct);
                 }
             }
@@ -506,6 +523,12 @@ public class CallHandler
             ? System.Text.Json.JsonSerializer.Serialize(unansweredSnapshot)
             : null;
         var durationSeconds = (int)sw.Elapsed.TotalSeconds;
+        _logger.LogInformation(
+            "Input noise gate on ext {Ext}: gated {GatedFrames} of {InputFrames} frames (RMS threshold {Threshold}).",
+            extension,
+            Interlocked.Read(ref noiseGatedFrames),
+            Interlocked.Read(ref inputFrames),
+            _inputNoiseGateRms);
         await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, unansweredJson, recordingPath);
 
         // افزودن دقایق مصرف‌شده به کاربر (هر تماس به بالاترین دقیقه گرد می‌شود؛ مثل صورتحساب مخابراتی).

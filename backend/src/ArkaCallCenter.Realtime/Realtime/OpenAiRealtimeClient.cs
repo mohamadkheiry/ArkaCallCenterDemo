@@ -20,6 +20,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
     private readonly string _transcriptionModel;
     private readonly string _transcriptionLanguage;
     private readonly string _transcriptionPrompt;
+    private readonly double _vadThreshold;
 
     public event Func<byte[], Task>? OnAudioDelta;   // PCM16 24kHz
     public event Func<string, Task>? OnAssistantText; // رونوشت پاسخ دستیار (delta)
@@ -31,7 +32,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
 
     public OpenAiRealtimeClient(string apiKey, string baseUrl, string model,
         string transcriptionModel, string transcriptionLanguage, string transcriptionPrompt,
-        ILogger logger)
+        double vadThreshold, ILogger logger)
     {
         _apiKey = apiKey;
         _baseUrl = baseUrl;
@@ -39,6 +40,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         _transcriptionModel = transcriptionModel;
         _transcriptionLanguage = transcriptionLanguage;
         _transcriptionPrompt = transcriptionPrompt;
+        _vadThreshold = Math.Clamp(vadThreshold, 0.1, 0.95);
         _logger = logger;
     }
 
@@ -48,6 +50,16 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
         var uri = new Uri($"wss://{host}/v1/realtime?model={_model}");
         _ws.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
         await _ws.ConnectAsync(uri, ct);
+
+        var transcription = new Dictionary<string, object>
+        {
+            ["model"] = _transcriptionModel,
+            ["language"] = _transcriptionLanguage,
+        };
+        // A domain phrase list can be hallucinated when the telephone line is silent.
+        // Keep the explicit Persian language hint, but omit an empty prompt entirely.
+        if (!string.IsNullOrWhiteSpace(_transcriptionPrompt))
+            transcription["prompt"] = _transcriptionPrompt;
 
         // نکته: Realtime API نسخه‌ی GA پارامترِ temperature را حذف کرده است؛ اگر ارسال شود کلِ
         // session.update با «unknown parameter: session.temperature» رد می‌شود و transcription هم اعمال
@@ -70,7 +82,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                         turn_detection = new
                         {
                             type = "server_vad",
-                            threshold = 0.5,
+                            threshold = _vadThreshold,
                             silence_duration_ms = 600,
                             interrupt_response = true,
                             // پاسخ فقط بعد از transcription و بازیابی قطعه مرتبط از RAG ساخته می‌شود.
@@ -80,12 +92,7 @@ public sealed class OpenAiRealtimeClient : IAsyncDisposable
                         // gpt-4o-transcribe provides materially better recognition than whisper-1,
                         // while the explicit hint prevents short Persian phrases from being
                         // misclassified as English or Hebrew.
-                        transcription = new
-                        {
-                            model = _transcriptionModel,
-                            language = _transcriptionLanguage,
-                            prompt = _transcriptionPrompt,
-                        },
+                        transcription,
                     },
                     output = new
                     {

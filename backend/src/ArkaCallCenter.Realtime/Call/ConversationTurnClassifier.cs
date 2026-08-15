@@ -41,6 +41,11 @@ public static class ConversationTurnClassifier
         "باشه", "حتما", "حتماً", "اوکی", "فهمیدم", "متوجه", "شدم", "بسیار", "خوب", "درسته", "درست"
     };
 
+    private static readonly HashSet<string> AffirmationWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "بله", "بلی", "آره", "اره", "آها"
+    };
+
     private static readonly HashSet<string> WellbeingWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "حال", "حالت", "حالتون", "احوال", "خوبی", "خوبید", "چطوری", "چطورید", "چطوره", "خبر"
@@ -55,7 +60,7 @@ public static class ConversationTurnClassifier
     {
         "خیلی", "زیاد", "از", "بر", "به", "با", "و", "که", "من", "شما", "خودت", "خودتون", "خودتان",
         "لطف", "دارید", "کنید", "کردید", "می", "کنم", "هستم", "هستی", "هستید", "هست", "است",
-        "چه", "چطور", "چطوره", "چطورید", "بابت", "واقعا", "واقعاً"
+        "چه", "چطور", "چطوره", "چطورید", "بابت", "واقعا", "واقعاً", "بفرما", "بفرمایید"
     };
 
     public static bool TryCreateBusinessIdentityResponse(string text, string? brandName, out string response)
@@ -111,6 +116,7 @@ public static class ConversationTurnClassifier
             .Concat(ThanksWords)
             .Concat(GoodbyeWords)
             .Concat(AcknowledgmentWords)
+            .Concat(AffirmationWords)
             .Concat(WellbeingWords)
             .Concat(ApologyWords)
             .Concat(CommonSocialWords)
@@ -149,6 +155,12 @@ public static class ConversationTurnClassifier
             return true;
         }
 
+        if (ContainsOnlyIntent(tokens, AffirmationWords, allSocialWords))
+        {
+            response = "بله، بفرمایید. چطور می‌توانم کمکتان کنم؟";
+            return true;
+        }
+
         if (ContainsOnlyIntent(tokens, AcknowledgmentWords, allSocialWords))
         {
             response = "حتماً. اگر سؤال دیگری دارید، بفرمایید.";
@@ -157,6 +169,8 @@ public static class ConversationTurnClassifier
 
         return false;
     }
+
+    public static bool HasMeaningfulInput(string text) => Tokenize(text).Count > 0;
 
     private static bool ContainsOnlyIntent(
         IReadOnlyCollection<string> tokens,

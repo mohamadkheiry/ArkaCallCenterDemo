@@ -20,6 +20,8 @@ public class ConversationTurnClassifierTests
     [InlineData("خدا نگهدار")]
     [InlineData("روز خوش")]
     [InlineData("باشه متوجه شدم")]
+    [InlineData("بله")]
+    [InlineData("آره، بفرمایید")]
     public void Social_turns_are_handled_without_rag(string text)
     {
         var handled = ConversationTurnClassifier.TryCreateResponse(text, out var response);
@@ -40,6 +42,23 @@ public class ConversationTurnClassifierTests
         var handled = ConversationTurnClassifier.TryCreateResponse(text, out _);
 
         Assert.False(handled);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("...")]
+    [InlineData("؟؟؟")]
+    public void Empty_or_non_lexical_transcripts_are_not_meaningful(string text)
+    {
+        Assert.False(ConversationTurnClassifier.HasMeaningfulInput(text));
+    }
+
+    [Fact]
+    public void Standalone_affirmation_gets_a_polite_prompt_instead_of_fallback()
+    {
+        Assert.True(ConversationTurnClassifier.TryCreateResponse("بله.", out var response));
+        Assert.Contains("بفرمایید", response);
     }
 
     [Theory]
