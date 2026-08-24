@@ -27,7 +27,7 @@
 | 3 | **تنظیمات حساس در DB (`AppSetting`) نه در کد** | سوپرادمین کلیدها را از پنل مدیریت می‌کند؛ اسرار در گیت نیست |
 | 4 | **دمو = User با `IsDemo`** (داخلی انتخابی ۱–۹۹۹، به‌جز ۱۰۰–۳۰۰) | بازاستفاده‌ی کامل منطق تماس و پاسخ دانشی بدون کد تکراری |
 | 5 | **Chat با کل `KnowledgeBase.RawText`** | هر سؤال در برابر کل متن تأییدشدهٔ همان مستأجر بررسی می‌شود؛ در مسیر تماس chunk، embedding یا Top-K وجود ندارد |
-| 6 | **خروجی typed با شناسهٔ منبع** | در حالت `answerable` مدل فقط ۱ تا ۴ شناسه را در `evidenceIds` انتخاب می‌کند؛ سرور IDهای canonical/یکتا/شناخته‌شده را روی همان snapshot به متن منبع نگاشت می‌کند و سؤال بی‌پاسخ، خارج حوزه و اختلال فنی گزارش متفاوت دارند |
+| 6 | **خروجی typed با شناسهٔ منبع و حافظهٔ محدود همان تماس** | در حالت `answerable` مدل فقط ۱ تا ۴ شناسه را در `evidenceIds` انتخاب می‌کند؛ شش نوبت اخیر فقط برای فهم ارجاع و ترجیح کاربر همراه سؤال می‌رود و سرور IDها را روی snapshot فعلی KB نگاشت می‌کند. سؤال نیازمند معیارِ نگفته‌شده با `needs_clarification` از پاسخ ساختگی جدا می‌شود |
 | 7 | **استقرار با Docker Compose** | راه‌اندازی یک‌دستوری کل استک |
 
 ---
@@ -197,7 +197,7 @@ erDiagram
 | `TokenService` | صدور JWT |
 | `OpenAiService` | chat / TTS (creds از تنظیمات) + **ثبت مصرف توکن** |
 | `ModerationService` | بررسی انطباق با قوانین ج.ا. (fail-closed) |
-| `DirectKnowledgeAnswerService` | ساخت `fullKnowledgeBaseSegments` از کل KB تأییدشده، دریافت خروجی typed با `evidenceIds`، اعتبارسنجی ID و خواندن متن دقیق منبع |
+| `DirectKnowledgeAnswerService` | ساخت `fullKnowledgeBaseSegments` از کل KB تأییدشده، دریافت حداکثر شش نوبت `conversationHistory` همان تماس، خروجی typed با `evidenceIds`، جلوگیری از حدس ترجیح شخصی، اعتبارسنجی ID و خواندن متن دقیق منبع |
 | `RagService` | مسیر legacy برای rollback؛ در پاسخ‌گویی فعلی تماس فراخوانی نمی‌شود |
 | `FileTextExtractor` | استخراج متن از txt/docx |
 | `KnowledgeBaseService` | ارکستراسیون KB: اعتبارسنجی، moderation، سقف متن مستقیم، حذف فایل مغایر و رویداد |
@@ -294,17 +294,19 @@ sequenceDiagram
       PBX->>W: هدایت صدا
       W->>O: upsample 24k → append → transcription (fa)
       W->>W: social/identity guard
-      W->>K: سؤال + fullKnowledgeBaseSegments همان کاربر (JSON data)
-      K-->>W: classification + evidenceIds
+      W->>K: سؤال + شش نوبت اخیر تماس + fullKnowledgeBaseSegments فعلی (JSON data)
+      K-->>W: classification + evidenceIds یا needs_clarification
       W->>W: کنترل canonical/unique/in-range ID روی همان snapshot
       W->>O: متن نهایی تأییدشده برای خواندن عینی
       Note over W: speech_stopped → پخش موسیقی انتظار
       O-->>W: صدای پاسخ (PCM 24k)
       W->>W: قطع موسیقی → downsample 8k → پخش برای caller
     end
-    Note over W: مرتبطِ بی‌پاسخ → اپراتور + unanswered؛ خارج حوزه → معرفی حوزه؛ اختلال → پیام موقت
+    Note over W: نیاز به معیار → سؤال تکمیلی؛ مرتبطِ بی‌پاسخ → اپراتور + unanswered؛ خارج حوزه → معرفی حوزه؛ اختلال → پیام موقت
     W->>W: ثبت CallSession + مصرف توکن
 ```
+
+`conversationHistory` در حافظهٔ محلی همان نمونهٔ `CallHandler` است، بین تماس‌گیرنده‌ها مشترک نیست و با پایان اتصال آزاد می‌شود. فقط نقش‌های `user` و `assistant`، حداکثر شش نوبت و حداکثر ۸۰۰ کاراکتر از هر نوبت پذیرفته می‌شود. این تاریخچه برای رفع ارجاع‌هایی مانند «دومی» یا «از بین ساعت‌هایی که گفتی» است و منبع واقعیت محسوب نمی‌شود؛ بنابراین تغییر پایگاه دانش در تماس بعدی و حتی نوبت بعدی بر اساس `RawText` تأییدشدهٔ فعلی ارزیابی می‌شود.
 
 ### ۸.۵ موتور رویداد → پیامک
 
