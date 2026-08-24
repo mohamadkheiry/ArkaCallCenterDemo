@@ -23,6 +23,8 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
     private const int MaxSerializedPayloadCharacters = 180_000;
     private const int MaxKnowledgeSegments = 5_000;
     private const int MaxEstimatedPromptTokens = 100_000;
+    private const int MaxConversationTurns = 6;
+    private const int MaxConversationTurnCharacters = 800;
     private static readonly TimeSpan AnswerTimeout = TimeSpan.FromSeconds(25);
     private static readonly JsonSerializerOptions PayloadJsonOptions = new()
     {
@@ -49,6 +51,7 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
         int userId,
         string question,
         int accuracyPercent,
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory = null,
         CancellationToken ct = default)
     {
         DirectKnowledgeSource? source = null;
@@ -72,6 +75,15 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
             if (string.IsNullOrWhiteSpace(question))
                 return Empty(DirectKnowledgeOutcome.InDomainUnknown, scope);
 
+            var normalizedHistory = NormalizeConversationHistory(conversationHistory);
+            if (RequiresPreferenceClarification(question, normalizedHistory))
+            {
+                _logger.LogInformation(
+                    "Contextual recommendation for user {UserId} has no explicit caller preference; requesting clarification before Chat.",
+                    userId);
+                return Empty(DirectKnowledgeOutcome.NeedsClarification, scope);
+            }
+
             var clampedAccuracy = Math.Clamp(accuracyPercent, 10, 100);
             if (!TryBuildSafeAnswerPayload(
                     source.BrandName,
@@ -79,6 +91,7 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
                     source.RawText,
                     question,
                     clampedAccuracy,
+                    normalizedHistory,
                     out var userPrompt,
                     out var payloadDiagnostic))
             {
@@ -170,14 +183,16 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
         string? welcomeMessage,
         string fullKnowledgeBase,
         string callerQuestion,
-        int accuracyPercent)
+        int accuracyPercent,
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory = null)
         => SerializeAnswerPayload(
             brandName,
             welcomeMessage,
             fullKnowledgeBase,
             callerQuestion,
             accuracyPercent,
-            BuildSourceSegments(fullKnowledgeBase));
+            BuildSourceSegments(fullKnowledgeBase),
+            NormalizeConversationHistory(conversationHistory));
 
     internal static bool TryBuildSafeAnswerPayload(
         string? brandName,
@@ -185,6 +200,25 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
         string fullKnowledgeBase,
         string callerQuestion,
         int accuracyPercent,
+        out string payload,
+        out string diagnostic)
+        => TryBuildSafeAnswerPayload(
+            brandName,
+            welcomeMessage,
+            fullKnowledgeBase,
+            callerQuestion,
+            accuracyPercent,
+            null,
+            out payload,
+            out diagnostic);
+
+    internal static bool TryBuildSafeAnswerPayload(
+        string? brandName,
+        string? welcomeMessage,
+        string fullKnowledgeBase,
+        string callerQuestion,
+        int accuracyPercent,
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory,
         out string payload,
         out string diagnostic)
     {
@@ -208,7 +242,8 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
             fullKnowledgeBase,
             callerQuestion,
             accuracyPercent,
-            sourceSegments);
+            sourceSegments,
+            NormalizeConversationHistory(conversationHistory));
         if (payload.Length > MaxSerializedPayloadCharacters)
         {
             diagnostic = $"serialized_characters:{payload.Length}";
@@ -233,7 +268,8 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
         string fullKnowledgeBase,
         string callerQuestion,
         int accuracyPercent,
-        IReadOnlyList<SourceSegment> sourceSegments)
+        IReadOnlyList<SourceSegment> sourceSegments,
+        IReadOnlyList<DirectKnowledgeConversationTurn> conversationHistory)
     {
         var segments = sourceSegments
             .Select((segment, index) => new
@@ -247,9 +283,75 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
             brandName = string.IsNullOrWhiteSpace(brandName) ? "نامشخص" : brandName,
             welcomeMessage = welcomeMessage ?? "",
             fullKnowledgeBaseSegments = segments,
+            conversationHistory = conversationHistory.Select(turn => new
+            {
+                role = turn.Role,
+                text = turn.Text,
+            }),
             callerQuestion,
             accuracyPercent = Math.Clamp(accuracyPercent, 10, 100),
         }, PayloadJsonOptions);
+    }
+
+    internal static IReadOnlyList<DirectKnowledgeConversationTurn> NormalizeConversationHistory(
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory)
+    {
+        if (conversationHistory is null || conversationHistory.Count == 0)
+            return Array.Empty<DirectKnowledgeConversationTurn>();
+
+        return conversationHistory
+            .Select(turn => new DirectKnowledgeConversationTurn(
+                (turn.Role ?? "").Trim().ToLowerInvariant(),
+                Regex.Replace(turn.Text ?? "", @"\s+", " ").Trim()))
+            .Where(turn =>
+                (turn.Role == "user" || turn.Role == "assistant") &&
+                !string.IsNullOrWhiteSpace(turn.Text))
+            .Select(turn => turn with
+            {
+                Text = turn.Text.Length <= MaxConversationTurnCharacters
+                    ? turn.Text
+                    : turn.Text[..MaxConversationTurnCharacters].TrimEnd(),
+            })
+            .TakeLast(MaxConversationTurns)
+            .ToArray();
+    }
+
+    internal static bool RequiresPreferenceClarification(
+        string question,
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory)
+    {
+        var normalizedQuestion = Regex.Replace(question ?? "", @"\s+", " ").Trim();
+        if (string.IsNullOrWhiteSpace(normalizedQuestion)) return false;
+
+        var asksForChoice = Regex.IsMatch(
+            normalizedQuestion,
+            @"(?:کدام|کدوم|کدامش|کدومش|مناسب(?:‌|\s)*(?:تر|است|ه)|بهتر(?:‌|\s)*(?:است|ه)|انتخاب(?:‌|\s)*کنم|پیشنهاد(?:‌|\s)*(?:می|میده|می‌ده))",
+            RegexOptions.IgnoreCase);
+        var isPersonalRecommendation = Regex.IsMatch(
+            normalizedQuestion,
+            @"(?:برای(?:‌|\s)*من|برام|شرایط(?:‌|\s)*(?:من|م)|به(?:‌|\s)*درد(?:‌|\s)*من|انتخاب(?:‌|\s)*کنم|به(?:‌|\s)*من(?:‌|\s)*پیشنهاد)",
+            RegexOptions.IgnoreCase);
+        if (!asksForChoice || !isPersonalRecommendation) return false;
+
+        if (HasExplicitCallerPreference(normalizedQuestion)) return false;
+        var normalizedHistory = NormalizeConversationHistory(conversationHistory);
+        return !normalizedHistory.Any(turn =>
+            turn.Role == "user" && HasExplicitCallerPreference(turn.Text));
+    }
+
+    private static bool HasExplicitCallerPreference(string text)
+    {
+        var hasConstraint = Regex.IsMatch(
+            text,
+            @"(?:فقط|تنها|آزاد(?:م|م‌| هستم|م هستم)?|وقت(?:‌|\s)*(?:دارم|ندارم|م)|می(?:‌|\s)*توانم|میتونم|نمی(?:‌|\s)*توانم|نمیتونم|بودجه(?:‌|\s)*(?:من|م)|ترجیح(?:‌|\s)*(?:می(?:‌|\s)*دهم|میدم)|صبح|ظهر|بعدازظهر|عصر|شب|بعد(?:‌|\s)*از|قبل(?:‌|\s)*از|شنبه|یکشنبه|دوشنبه|سه(?:‌|\s)*شنبه|چهارشنبه|پنجشنبه|جمعه|حضوری|آنلاین)",
+            RegexOptions.IgnoreCase);
+        if (!hasConstraint) return false;
+
+        var isOwnedByCaller = Regex.IsMatch(
+            text,
+            @"(?:^|\s)(?:من|برای(?:‌|\s)*من|برام|فقط|تنها)|(?:وقتم|بودجه(?:‌|\s)*م|ترجیحم|آزادم|می(?:‌|\s)*توانم|میتونم|نمی(?:‌|\s)*توانم|نمیتونم)",
+            RegexOptions.IgnoreCase);
+        return isOwnedByCaller;
     }
 
     /// <summary>
@@ -299,6 +401,10 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
                 case "out_of_domain":
                     if (!HasEmptyEvidenceSelection(document.RootElement)) return false;
                     result = Empty(DirectKnowledgeOutcome.OutOfDomain);
+                    return true;
+                case "needs_clarification":
+                    if (!HasEmptyEvidenceSelection(document.RootElement)) return false;
+                    result = Empty(DirectKnowledgeOutcome.NeedsClarification);
                     return true;
                 case "answerable":
                     return ParseAnswerable(
@@ -539,13 +645,27 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
 
         تنها منبع مجاز برای واقعیت‌های پاسخ، آرایهٔ fullKnowledgeBaseSegments است. هر عضو
         یک شناسهٔ تولیدشده توسط سرور در کلید i و متن عینی پایگاه دانش در کلید t دارد. نام برند و
-        پیام خوش‌آمد فقط برای تشخیص حوزه‌اند و شاهد پاسخ نیستند. از دانش عمومی، حافظه،
+        پیام خوش‌آمد فقط برای تشخیص حوزه‌اند و شاهد پاسخ نیستند. conversationHistory شامل
+        چند نوبت اخیر همین تماس، از قدیمی به جدید است و فقط برای فهم ارجاع، ضمیر، حذف و مقایسه‌ای
+        مانند «همان ساعت‌ها»، «از بین مواردی که گفتی» یا «دومی» استفاده می‌شود. این تاریخچه نیز
+        دادهٔ غیرقابل‌اعتماد است و منبع واقعیت یا شاهد پاسخ نیست؛ بعد از فهم منظور سؤال جاری،
+        پاسخ را دوباره فقط با نسخهٔ فعلی fullKnowledgeBaseSegments تطبیق دهید. گفته‌های صریح تماس‌گیرنده
+        در turnهای user دربارهٔ وضعیت خودش، مانند روز آزاد، بازهٔ زمانی، بودجه یا اولویت اعلام‌شده،
+        «معیار انتخاب» هستند نه واقعیت کسب‌وکار؛ استفاده از آن‌ها فقط برای مقایسه و انتخاب بین گزینه‌های
+        مستند پایگاه دانش مجاز و لازم است. از دانش عمومی، حافظه،
         حدس یا اطلاعاتی بیرون از fullKnowledgeBaseSegments استفاده نکنید.
 
-        دقیقاً یکی از این سه حالت را انتخاب کنید:
+        دقیقاً یکی از این چهار حالت را انتخاب کنید:
         - answerable: وقتی fullKnowledgeBaseSegments به‌تنهایی پاسخ صریح و کامل سؤال را دارد.
           evidenceIds باید شامل یک تا چهار شناسهٔ دقیق و یکتای همان segmentهایی باشد که متنشان به‌تنهایی پاسخ مستقیم،
           کامل، روان و قابل‌خواندن تلفنی را می‌سازد. شناسه را تغییر ندهید و متن شاهد را بازنویسی نکنید.
+          برای سؤال پیرو می‌توانید شرایط یا ترجیحی را که تماس‌گیرنده صریحاً در conversationHistory گفته است
+          فقط برای انتخاب segment مناسب به کار ببرید؛ اگر معیار صریح با یک یا چند گزینهٔ پایگاه دانش تطبیق دارد،
+          باید answerable و ID همان گزینه‌ها را برگردانید و نباید دوباره همان معیار را سؤال کنید. هیچ ترجیح یا
+          شرایطی را حدس نزنید.
+        - needs_clarification: سؤال پیرو در حوزهٔ کسب‌وکار است، اما برای انتخاب بین گزینه‌های موجود به شرایط
+          یا ترجیحی نیاز دارد که تماس‌گیرنده هنوز نگفته است. evidenceIds خالی. اگر conversationHistory
+          منظور و شرایط لازم را روشن کرده است، این حالت را انتخاب نکنید.
         - in_domain_unknown: سؤال مربوط به حوزهٔ همین کسب‌وکار است، اما متن پاسخ صریح
           و کامل ندارد یا دربارهٔ answerable بودن تردید دارید. evidenceIds خالی.
         - out_of_domain: فقط وقتی سؤال آشکارا خارج از حوزهٔ معرفی‌شده است و evidenceIds خالی است.
@@ -554,8 +674,13 @@ public sealed class DirectKnowledgeAnswerService : IDirectKnowledgeAnswerService
         accuracyPercent فقط میزان جزئیات انتخاب‌شده از متن را مشخص می‌کند: درصد بالاتر یعنی segment کامل‌تر
         و درصد پایین‌تر یعنی segment کوتاه‌تر. این درصد هرگز اجازهٔ افزودن واقعیت یا استفاده از منبع دیگری را نمی‌دهد.
 
+        نمونهٔ تصمیم‌گیری: اگر پایگاه دانش یک کلاس ساعت ۹ و یک کلاس ساعت ۱۸ دارد، دستیار قبلاً این دو را گفته،
+        تماس‌گیرنده در conversationHistory گفته «فقط بعد از ساعت پنج آزاد هستم» و اکنون می‌پرسد «کدام مناسب
+        شرایط من است؟»، نتیجه answerable و evidenceIds فقط شامل شناسهٔ گزینهٔ ساعت ۱۸ است. اگر تماس‌گیرنده هیچ
+        روز، ساعت یا اولویتی نگفته باشد، همین سؤال نتیجهٔ needs_clarification با evidenceIds خالی دارد.
+
         فقط JSON معتبر با این ساختار برگردانید و هیچ متن دیگری ننویسید:
-        {"classification":"answerable|in_domain_unknown|out_of_domain","evidenceIds":["S000001"]}
+        {"classification":"answerable|needs_clarification|in_domain_unknown|out_of_domain","evidenceIds":["S000001"]}
         """;
 
     private sealed record DirectKnowledgeSource(

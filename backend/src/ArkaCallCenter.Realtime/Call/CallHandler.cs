@@ -186,6 +186,8 @@ public class CallHandler
         var instructions = BuildInstructions(sp.User.BrandName, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
+        var conversationMemory = new List<DirectKnowledgeConversationTurn>();
+        var conversationMemoryLock = new object(); // حافظهٔ کوتاه و مجزای همین تماس برای سؤال‌های پیرو.
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
         var answeredFromKb = false;
@@ -386,6 +388,7 @@ public class CallHandler
                         extension,
                         question);
                     await realtime.CreateConversationalResponseAsync(identityResponse, turnCt);
+                    RememberConversationTurn(question, identityResponse);
                     return;
                 }
 
@@ -396,17 +399,22 @@ public class CallHandler
                         extension,
                         question);
                     await realtime.CreateConversationalResponseAsync(conversationalResponse, turnCt);
+                    RememberConversationTurn(question, conversationalResponse);
                     return;
                 }
 
                 await knowledgeGate.WaitAsync(turnCt);
                 DirectKnowledgeAnswer result;
+                IReadOnlyList<DirectKnowledgeConversationTurn> historySnapshot;
+                lock (conversationMemoryLock)
+                    historySnapshot = conversationMemory.ToArray();
                 try
                 {
                     result = await knowledge.AnswerAsync(
                         sp.User.Id,
                         question,
                         accuracy,
+                        historySnapshot,
                         turnCt);
                 }
                 finally { knowledgeGate.Release(); }
@@ -422,6 +430,18 @@ public class CallHandler
                             extension,
                             question);
                         await realtime.CreateConversationalResponseAsync(result.AnswerText, turnCt);
+                        RememberConversationTurn(question, result.AnswerText);
+                        return;
+
+                    case DirectKnowledgeOutcome.NeedsClarification:
+                        _logger.LogInformation(
+                            "Asking for clarification on a contextual follow-up for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.FollowUpClarification,
+                            turnCt);
+                        RememberConversationTurn(question, ConversationMessages.FollowUpClarification);
                         return;
 
                     case DirectKnowledgeOutcome.OutOfDomain:
@@ -433,6 +453,7 @@ public class CallHandler
                             extension,
                             question);
                         await realtime.CreateConversationalResponseAsync(scopeResponse, turnCt);
+                        RememberConversationTurn(question, scopeResponse);
                         return;
 
                     case DirectKnowledgeOutcome.InDomainUnknown:
@@ -443,6 +464,7 @@ public class CallHandler
                             extension,
                             question);
                         await realtime.CreateConversationalResponseAsync(fallback, turnCt);
+                        RememberConversationTurn(question, fallback);
                         return;
 
                     case DirectKnowledgeOutcome.KnowledgeBaseTooLarge:
@@ -482,6 +504,18 @@ public class CallHandler
                         turnCt);
                 }
                 catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
+            }
+        }
+
+        void RememberConversationTurn(string userText, string assistantText)
+        {
+            lock (conversationMemoryLock)
+            {
+                conversationMemory.Add(new DirectKnowledgeConversationTurn("user", userText));
+                conversationMemory.Add(new DirectKnowledgeConversationTurn("assistant", assistantText));
+                // سرویس دانش نیز تاریخچه را محدود می‌کند؛ این برش زودهنگام مانع رشد حافظهٔ تماس می‌شود.
+                if (conversationMemory.Count > 6)
+                    conversationMemory.RemoveRange(0, conversationMemory.Count - 6);
             }
         }
 

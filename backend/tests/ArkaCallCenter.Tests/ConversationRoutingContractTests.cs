@@ -96,6 +96,17 @@ public class ConversationRoutingContractTests
     }
 
     [Fact]
+    public void Contextual_follow_up_requests_missing_preferences_instead_of_escalating()
+    {
+        var message = ConversationMessages.FollowUpClarification;
+
+        Assert.Contains("شرایط", message);
+        Assert.Contains("اولویت", message);
+        Assert.DoesNotContain("نمی‌دانم", message);
+        Assert.DoesNotContain("اپراتور", message);
+    }
+
+    [Fact]
     public void Domain_excerpt_is_bounded_and_samples_the_whole_knowledge_base()
     {
         var raw = $"FIRST-{new string('ا', 8_000)}-MIDDLE-{new string('ب', 8_000)}-LAST";

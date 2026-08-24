@@ -62,6 +62,101 @@ public class DirectKnowledgeAnswerServiceTests
     }
 
     [Fact]
+    public void Payload_carries_recent_same_call_turns_separately_from_the_current_question()
+    {
+        const string knowledge =
+            "کلاس صبح شنبه ساعت نه برگزار می‌شود. کلاس عصر شنبه ساعت هجده برگزار می‌شود.";
+        var history = new[]
+        {
+            new DirectKnowledgeConversationTurn("user", "کلاس‌ها چه ساعتی برگزار می‌شوند؟"),
+            new DirectKnowledgeConversationTurn("assistant", knowledge),
+            new DirectKnowledgeConversationTurn("user", "من فقط بعد از ساعت پنج آزاد هستم."),
+        };
+
+        var payload = DirectKnowledgeAnswerService.BuildAnswerPayload(
+            "آموزشگاه نمونه",
+            "خوش آمدید",
+            knowledge,
+            "از بین ساعت‌هایی که گفتی کدام مناسب شرایط من است؟",
+            70,
+            history);
+
+        using var document = JsonDocument.Parse(payload);
+        var turns = document.RootElement.GetProperty("conversationHistory")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(3, turns.Length);
+        Assert.Equal("user", turns[0].GetProperty("role").GetString());
+        Assert.Equal(knowledge, turns[1].GetProperty("text").GetString());
+        Assert.Equal("از بین ساعت‌هایی که گفتی کدام مناسب شرایط من است؟",
+            document.RootElement.GetProperty("callerQuestion").GetString());
+        Assert.DoesNotContain("conversationHistory", knowledge, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Conversation_history_is_role_filtered_trimmed_and_bounded_to_recent_turns()
+    {
+        var history = Enumerable.Range(1, 9)
+            .Select(index => new DirectKnowledgeConversationTurn(
+                index == 2 ? "system" : index % 2 == 0 ? "ASSISTANT" : "USER",
+                $"  نوبت {index}  " + new string('آ', 1_000)))
+            .ToArray();
+
+        var normalized = DirectKnowledgeAnswerService.NormalizeConversationHistory(history);
+
+        Assert.Equal(6, normalized.Count);
+        Assert.All(normalized, turn =>
+        {
+            Assert.Contains(turn.Role, new[] { "user", "assistant" });
+            Assert.InRange(turn.Text.Length, 1, 800);
+            Assert.Equal(turn.Text.Trim(), turn.Text);
+        });
+        Assert.DoesNotContain(normalized, turn => turn.Text.StartsWith("نوبت 1", StringComparison.Ordinal));
+        Assert.DoesNotContain(normalized, turn => turn.Role == "system");
+    }
+
+    [Fact]
+    public void Personal_follow_up_without_an_explicit_preference_requires_clarification()
+    {
+        var history = new[]
+        {
+            new DirectKnowledgeConversationTurn("user", "کلاس‌ها چه ساعتی برگزار می‌شوند؟"),
+            new DirectKnowledgeConversationTurn("assistant", "کلاس صبح ساعت نه و کلاس عصر ساعت هجده است."),
+        };
+
+        Assert.True(DirectKnowledgeAnswerService.RequiresPreferenceClarification(
+            "از بین ساعت‌هایی که گفتی کدام مناسب شرایط من است؟",
+            history));
+    }
+
+    [Theory]
+    [InlineData("من فقط بعد از ساعت پنج آزاد هستم.")]
+    [InlineData("برای من تنها روز جمعه مناسب است.")]
+    [InlineData("بودجه من حداکثر ده میلیون تومان است.")]
+    [InlineData("من کلاس آنلاین را ترجیح می‌دهم.")]
+    public void Explicit_caller_preference_allows_contextual_selection(string preference)
+    {
+        var history = new[]
+        {
+            new DirectKnowledgeConversationTurn("user", "گزینه‌ها را بگو."),
+            new DirectKnowledgeConversationTurn("assistant", "گزینه‌های موجود اعلام شدند."),
+            new DirectKnowledgeConversationTurn("user", preference),
+        };
+
+        Assert.False(DirectKnowledgeAnswerService.RequiresPreferenceClarification(
+            "کدام گزینه برای من مناسب‌تر است؟",
+            history));
+    }
+
+    [Fact]
+    public void Concrete_non_personal_filter_is_not_blocked_as_a_missing_preference()
+    {
+        Assert.False(DirectKnowledgeAnswerService.RequiresPreferenceClarification(
+            "کدام کلاس بعد از ساعت پنج برگزار می‌شود؟",
+            Array.Empty<DirectKnowledgeConversationTurn>()));
+    }
+
+    [Fact]
     public void Segmentation_keeps_decimals_domains_and_urls_intact()
     {
         const string knowledge =
@@ -260,6 +355,7 @@ public class DirectKnowledgeAnswerServiceTests
     [Theory]
     [InlineData("in_domain_unknown", DirectKnowledgeOutcome.InDomainUnknown)]
     [InlineData("out_of_domain", DirectKnowledgeOutcome.OutOfDomain)]
+    [InlineData("needs_clarification", DirectKnowledgeOutcome.NeedsClarification)]
     public void Non_answer_classifications_require_empty_ids(
         string classification,
         DirectKnowledgeOutcome expected)
@@ -273,6 +369,7 @@ public class DirectKnowledgeAnswerServiceTests
     [Theory]
     [InlineData("in_domain_unknown")]
     [InlineData("out_of_domain")]
+    [InlineData("needs_clarification")]
     public void Non_answer_classification_with_id_or_legacy_evidence_is_rejected(string classification)
     {
         var withId = $"{{\"classification\":\"{classification}\",\"evidenceIds\":[\"S000001\"]}}";

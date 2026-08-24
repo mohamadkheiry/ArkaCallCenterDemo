@@ -9,6 +9,9 @@ public static class ConversationMessages
     public const string RetrievalUnavailable =
         "در حال حاضر امکان بررسی اطلاعات فراهم نیست. لطفاً کمی بعد دوباره تلاش کنید یا با کارشناس و اپراتور صحبت کنید.";
 
+    public const string FollowUpClarification =
+        "برای راهنمایی دقیق‌تر، لطفاً شرایط و اولویت مدنظرتان را کمی توضیح دهید.";
+
     public static readonly string[] LegacyUnknownKnowledgeMessages =
     {
         "پاسخ این سوال در پایگاه دانش من موجود نیست.",

@@ -12,6 +12,9 @@ public enum DirectKnowledgeOutcome
     /// <summary>پرسش به‌وضوح خارج از حوزهٔ کسب‌وکار است.</summary>
     OutOfDomain,
 
+    /// <summary>سؤال پیرو است، اما برای انتخاب پاسخ مناسب به توضیح بیشتری از تماس‌گیرنده نیاز دارد.</summary>
+    NeedsClarification,
+
     /// <summary>پایگاه دانش تأییدشده و قابل استفاده‌ای وجود ندارد.</summary>
     KnowledgeBaseEmpty,
 
@@ -32,6 +35,13 @@ public sealed record DirectKnowledgeAnswer(
 }
 
 /// <summary>
+/// یک نوبت محدود از همین تماس که فقط برای رفع ارجاع‌هایی مانند «همان ساعت‌ها»
+/// استفاده می‌شود. متن دستیار منبع حقیقت نیست و پاسخ همچنان باید از پایگاه دانش
+/// فعلی شاهد داشته باشد.
+/// </summary>
+public sealed record DirectKnowledgeConversationTurn(string Role, string Text);
+
+/// <summary>
 /// پرسش را همراه با کل متن پایگاه دانش تأییدشده به مدل می‌دهد. این مسیر هیچ chunk،
 /// embedding یا بازیابی RAG انجام نمی‌دهد و پاسخ مستند را همان‌جا تولید می‌کند.
 /// </summary>
@@ -41,5 +51,6 @@ public interface IDirectKnowledgeAnswerService
         int userId,
         string question,
         int accuracyPercent,
+        IReadOnlyList<DirectKnowledgeConversationTurn>? conversationHistory = null,
         CancellationToken ct = default);
 }
