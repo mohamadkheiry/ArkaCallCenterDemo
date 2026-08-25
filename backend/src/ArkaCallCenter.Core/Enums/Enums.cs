@@ -10,6 +10,14 @@ public enum KbSourceType
 {
     Text = 0,
     File = 1,
+    QuestionAnswer = 2,
+}
+
+public enum KnowledgeAnswerAudioStatus
+{
+    Pending = 0,
+    Ready = 1,
+    Failed = 2,
 }
 
 public enum ModerationStatus

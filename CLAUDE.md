@@ -8,7 +8,7 @@
 ## ۱. هدف محصول
 
 یک سامانه‌ی چند-مستأجری که به هر «کاربر» (صاحب کسب‌وکار) یک **تلفن هوشمند** می‌دهد:
-یک **داخلی (extension)** روی سرور ایزابل که تماس‌های ورودی را با هوش مصنوعی OpenAI (`gpt-realtime`) و بر اساس **پایگاه دانش اختصاصی همان کاربر** پاسخ می‌دهد.
+یک **داخلی (extension)** روی سرور ایزابل که تماس‌های ورودی را بر اساس **پایگاه دانش سؤال‌وجواب اختصاصی همان کاربر** و با پخش صوت‌های ثابت پاسخ می‌دهد.
 
 سه نقش:
 - **User** — صاحب کسب‌وکار؛ لاگین با موبایل، آنبوردینگ، مدیریت پایگاه دانش، انتخاب گوینده.
@@ -23,10 +23,10 @@
   - `ArkaCallCenter.Core` — Entities، Enums، DTOs، Interfaces (بدون وابستگی خارجی).
   - `ArkaCallCenter.Infrastructure` — EF Core/MySQL، پیاده‌سازی سرویس‌های خارجی (OpenAI, SMS.ir, Asterisk)، Repositoryها، Migrations.
   - `ArkaCallCenter.Api` — Controllerها، Auth/JWT، DI، Middleware، Swagger.
-  - `ArkaCallCenter.Realtime` — Worker مستقل برای پل صوتی تلفن ⇄ OpenAI Realtime (فاز ۶).
+  - `ArkaCallCenter.Realtime` — Worker مستقل AudioSocket برای VAD، STT، تطبیق سؤال و پخش صوت ثابت.
 - **DB:** MySQL 8 via EF Core 9 + `Pomelo.EntityFrameworkCore.MySql`. Migrations در Infrastructure.
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind + Vazirmatn، کاملاً RTL و ریسپانسیو. State: React Query + Context. روتینگ: react-router.
-- **AI:** OpenAI Chat برای بررسی مستقیم کل پایگاه دانش، `gpt-realtime` برای مکالمهٔ تلفنی، TTS برای پیام‌های از پیش‌ساخته (fallback / welcome).
+- **AI:** Whisper سازگار با OpenAI برای STT؛ GapGPT `gemini-3.6-flash` برای بازسازی رونوشت/داوری معنایی و `gemini-2.5-pro-preview-tts` برای ساخت صوت ثابت پاسخ‌ها.
 - **SMS:** SMS.ir (REST v1).
 - **Telephony:** Isabel = توزیع مبتنی بر Asterisk. ادغام از طریق **ARI + externalMedia/AudioSocket**.
 
@@ -41,6 +41,7 @@
 | `User` | صاحب کسب‌وکار. فیلدها: `Id`, `PhoneNumber`(unique), `FirstName`, `LastName`, `BrandName`, `Role`, `CreatedAt`, `IsActive`, `CallMinuteLimit`(nullable override), `VoiceName`. |
 | `SmartPhone` | تلفن هوشمند کاربر. `Id`, `UserId`, `Extension`(1000–9999, unique), `WelcomeMessageText`, `WelcomeAudioPath`, `Status`, `CreatedAt`. |
 | `KnowledgeBase` | پایگاه دانش. `Id`, `UserId`, `SourceType`(Text/File), `RawText`, `FileName`, `FilePath`, `FileSizeBytes`, `CharCount`, `ModerationStatus`, `CreatedAt`, `UpdatedAt`. یک KB فعال به‌ازای هر کاربر. |
+| `KnowledgeAnswer` | یک سؤال‌وجواب مستقل با سؤال نرمال‌شده، ترتیب، متن پاسخ، مسیر/hash/status صوت ثابت. تعداد رکوردها محدودیت محصولی ندارد و API صفحه‌بندی می‌شود. |
 | `KnowledgeChunk` | دادهٔ legacy نمایه RAG برای rollback؛ مسیر فعلی تماس از آن نمی‌خواند. |
 | `OtpCode` | `Id`, `PhoneNumber`, `Code`, `ExpiresAt`, `Consumed`, `Attempts`. |
 | `CallSession` | لاگ تماس. `Id`, `SmartPhoneId`, `CallerId`, `StartedAt`, `EndedAt`, `DurationSeconds`, `AnsweredFromKb`(bool), `TranscriptJson`. |
@@ -62,40 +63,40 @@
 ## ۴. قوانین کسب‌وکار (Business Rules)
 
 1. **لاگین:** فقط با شماره موبایل + OTP (پیامک via SMS.ir). اولین ورود = ثبت‌نام؛ سپس دریافت نام/نام‌خانوادگی/برند.
-2. **پایگاه دانش:** حداکثر **یک** منبع فعال: یا متن ≤ **۲۰۰۰ کاراکتر** یا فایل **txt/docx ≤ ۱۰۰KB**. متن استخراج‌شده برای پاسخ مستقیم حداکثر ۹۰٬۰۰۰ کاراکتر است.
+2. **پایگاه دانش فعال تماس:** تعداد نامحدود سؤال‌وجواب صفحه‌بندی‌شده؛ سؤال ≤ **۵۰۰** و پاسخ ≤ **۴۰۰۰** کاراکتر. سؤال نرمال‌شده در هر پایگاه یکتا است. متن/فایل قدیمی برای حفظ داده و rollback پاک نمی‌شود ولی مسیر جدید تماس آن را نمی‌خواند.
 3. **Moderation:** هر ورودی متن یا فایل قبل از فعال‌شدن باید با LLM از نظر انطباق با قوانین ج.ا.ایران بررسی شود. اگر `Rejected` → حذف فایل + پیام به کاربر + رویداد `KnowledgeBaseRejected`.
 4. **ساخت تلفن هوشمند:** با کلیک «ایجاد تلفن هوشمند» → تخصیص داخلی آزاد تصادفی در [۱۰۰۰,۹۹۹۹] (unique، تضمین عدم تکرار) → Provisioning روی ایزابل → رویداد `SmartPhoneCreated` (پیامک).
-5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سؤال → پاسخ اجتماعی/هویتی یا بررسی مستقیم کل KB با Chat همراه حداکثر شش نوبت اخیر همان تماس → اعتبارسنجی ۱ تا ۴ شناسهٔ `evidenceIds` دقیق و متعلق به snapshot فعلی → خواندن متن عینی قطعه‌های منبع با Realtime. تاریخچه فقط برای فهم سؤال پیرو و ترجیح صریح است و با پایان تماس حذف می‌شود. انتخاب شخصی بدون معیار به سؤال تکمیلی می‌رود؛ پاسخ ناموجود به اپراتور ارجاع و ثبت می‌شود؛ سؤال خارج حوزه فقط محدودهٔ خدمات را معرفی می‌کند.
+5. **پاسخ‌گویی تماس:** پخش پیام خوش‌آمد بدون VAD → جداسازی گفتار با VAD محلی → Whisper → بازسازی محافظت‌شدهٔ متن → پاسخ اجتماعی/هویتی یا تطبیق قطعی/فازی/معنایی با سؤال‌های ذخیره‌شده → پخش همان WAV ثابت. در نبود تطبیق، پیام اختصاصی سؤال بی‌پاسخ پخش و متن سؤال در `CallSession` ثبت می‌شود؛ سکوت یا متن بی‌معنا سؤال بی‌پاسخ محسوب نمی‌شود.
 6. **محدودیت مکالمه:** بر حسب دقیقه. مقدار پیش‌فرض سراسری در `AppSettings`؛ سوپرادمین می‌تواند per-user override کند (`User.CallMinuteLimit`). نزدیک/رسیدن به سقف → رویدادهای مربوطه.
 7. **گوینده:** کاربر گوینده‌ی خود را از `VoiceOption`های فعال انتخاب می‌کند؛ پیش‌فرض از تنظیمات سوپرادمین.
 8. **CRM فروش:** رویدادهای `PhoneEntered`، `ProfileCompleted` و `SmartPhoneCreated` هرکدام حداکثر یک‌بار پس از موفقیت ارسال می‌شوند. قرارداد عملیاتی: Login در `/api/User/Login`، دریافت Bearer token و ثبت multipart در `/api/ContactUs/InsertContactUsByAdmin`. رمز فقط در secret setting/environment است و هرگز در Git یا لاگ قرار نمی‌گیرد.
 
 ---
 
-## ۵. طراحی پاسخ مستقیم دانشی
+## ۵. طراحی پایگاه دانش سؤال‌وجواب
 
-- `DirectKnowledgeAnswerService` فقط `KnowledgeBase` تأییدشدهٔ همان `UserId` را می‌خواند.
-- کل `RawText` به قطعه‌های server-generated از شکل `{i,t}` در `fullKnowledgeBaseSegments` تبدیل می‌شود. نام برند، پیام خوش‌آمد، سؤال، قطعه‌ها و `conversationHistory` با `JsonSerializer` به‌عنوان data غیرقابل‌اعتماد ارسال می‌شوند و system prompt مدل را ملزم می‌کند دستورهای تعبیه‌شده در داده را نادیده بگیرد. تاریخچه حداکثر شش نوبت و ۸۰۰ کاراکتر در هر نوبت، فقط با نقش‌های `user`/`assistant` است؛ منبع واقعیت نیست و فقط ارجاع یا ترجیح صریح تماس‌گیرنده را روشن می‌کند.
-- قرارداد JSON مدل فقط `classification` با یکی از `answerable`، `needs_clarification`، `in_domain_unknown` یا `out_of_domain` و آرایهٔ `evidenceIds` است؛ سرویس آن‌ها را به `DirectKnowledgeOutcome` نگاشت می‌کند. `answerable` به ۱ تا ۴ شناسهٔ canonical (`S` + شش رقم ASCII)، یکتا و متعلق به همان درخواست نیاز دارد و سه حالت دیگر باید آرایهٔ خالی بدهند. سرور شناسه‌ها را روی همان snapshot فعلی resolve و فیلد متن آزاد اضافی را نادیده می‌گیرد. guard قطعیِ انتخاب شخصیِ فاقد معیار پیش از Chat، حدس مدل را مسدود می‌کند.
-- در مسیر فعلی تماس `RagService.RetrieveAsync`، embedding، chunking، BM25، RRF و Top-K اجرا نمی‌شوند. جدول `KnowledgeChunk` فقط برای rollback حفظ شده است.
-- متن هرگز truncate نمی‌شود. سقف‌های ورودی fail-closed عبارت‌اند از: حداکثر ۹۰٬۰۰۰ کاراکتر خام، ۵٬۰۰۰ قطعه، ۱٬۰۰۰ کاراکتر برای هر قطعه، ۱۸۰٬۰۰۰ کاراکتر payload و برآورد ۱۰۰٬۰۰۰ توکن prompt؛ عبور از این موارد `KnowledgeBaseTooLarge` است. timeout برابر ۲۵ ثانیه، سقف completion همین فراخوانی ۳۰۰ توکن و timeout/JSON خراب/خطای provider برابر `ServiceUnavailable` است. انتخاب ID نامعتبر یا مجموع متن منتخب بیش از ۱٬۲۰۰ کاراکتر به `InDomainUnknown` تنزل و به‌عنوان سؤال بی‌پاسخ ثبت می‌شود.
-- Base URL، API key و مدل Chat از `AppSettings` (override) یا `.env` خوانده می‌شوند.
+- `KnowledgeAnswerService` فقط رکوردهای متعلق به `KnowledgeBase.UserId` همان کاربر را می‌خواند؛ سؤال نرمال‌شده در هر پایگاه یکتا است و فهرست با `skip/take` صفحه‌بندی می‌شود.
+- هنگام افزودن یا تغییر متن پاسخ، moderation اجرا و سپس صوت WAV هشت‌کیلوهرتز ساخته می‌شود. همان مدل و گوینده Gemini ابتدا از مسیر سالم `/audio/speech` با `response_format=wav` فراخوانی می‌شود. مسیر Google-compatible فقط برای سازگاری ثانویه نگه داشته شده، چون adapter فعلی GapGPT ممکن است با وجود محاسبهٔ audio token، `parts` خالی بدهد. فقط اگر هر دو مسیر مدل اصلی شکست بخورند مدل fallback تنظیم‌شده استفاده می‌شود.
+- فایل جدید پیش از تغییر DB در مسیر یکتا و به‌صورت atomic نوشته می‌شود. در ویرایش، فایل قبلی تا موفقیت کامل تولید و `SaveChanges` حفظ می‌شود و سپس حذف می‌گردد؛ بنابراین شکست provider نسخهٔ سالم قبلی را از بین نمی‌برد.
+- تطبیق ابتدا exact پس از نرمال‌سازی فارسی، سپس امتیاز ترکیبی token/trigram/edit و در حالت نامطمئن داوری معنایی `gemini-3.6-flash` روی shortlist محدود انجام می‌دهد. مدل فقط `matchedId` متعلق به گزینه‌های همان درخواست را می‌تواند برگرداند و هر ID دیگر رد می‌شود.
+- سؤال، گزینه‌ها و رونوشت با `JsonSerializer` به‌عنوان دادهٔ غیرقابل‌اعتماد وارد prompt می‌شوند؛ دستورهای احتمالی تماس‌گیرنده یا متن سؤال مجاز به تغییر قرارداد matcher/cleaner نیستند.
+- `RawText`، `KnowledgeChunk`، RAG و `DirectKnowledgeAnswerService` برای نگهداری داده‌های قدیمی و rollback باقی مانده‌اند ولی `QaCallHandler` آن‌ها را فراخوانی نمی‌کند.
 
 ---
 
 ## ۶. طراحی تلفنی (فاز ۶)
 
-جریان: تماس ورودی به داخلی کاربر → dialplan آن را به Stasis app (`arka-ai`) در ARI می‌فرستد → `ArkaCallCenter.Realtime`:
-1. کانال را answer می‌کند و یک `externalMedia`/AudioSocket bridge می‌سازد (فرمت مثلاً slin16/g711).
-2. وویس خوش‌آمد را پلی می‌کند.
-3. صدای caller را از bridge می‌گیرد و به WebSocket `gpt-realtime` استریم می‌کند.
-4. متن transcript ابتدا از social/identity guard و در غیر این صورت از پاسخ مستقیم کل KB همراه تاریخچهٔ محدود همان تماس عبور می‌کند.
-5. پاسخ تأییدشده یا متن fallback/معرفی حوزه به Realtime داده می‌شود تا فقط همان متن را طبیعی بخواند.
-6. زمان مکالمه شمرده می‌شود؛ در سقف، قطع مؤدبانه.
+جریان: تماس ورودی به داخلی کاربر → dialplan/AudioSocket → `ArkaCallCenter.Realtime`:
+1. `AudioSocketServer` داخلی و caller ID را می‌گیرد و `QaCallHandler` تلفن فعال همان tenant را resolve می‌کند.
+2. پیام خوش‌آمد ثابت بدون فعال بودن VAD پخش و صدای ورودی این بازه دور ریخته می‌شود.
+3. VAD محلی با noise gate، pre-roll و پایان سکوت، نوبت PCM را جدا می‌کند و WAV هشت‌کیلوهرتز را به `/v1/audio/transcriptions` می‌فرستد.
+4. رونوشت با cleaner بازسازی می‌شود؛ سکوت/متن بی‌معنا حذف و پاسخ‌های اجتماعی/هویتی پیش از جست‌وجوی دانش مدیریت می‌شوند.
+5. در تطبیق موفق، WAV ذخیره‌شده مستقیماً پخش می‌شود؛ در غیر این صورت WAV پیام اختصاصی سؤال بی‌پاسخ پخش و سؤال در گزارش تماس ثبت می‌شود.
+6. barge-in خروجی و پردازش نوبت قبلی را لغو می‌کند؛ ضبط، سقف دقیقه، موسیقی انتظار و idle timeout حفظ شده‌اند.
 
 جزئیات dialplan/ARI و نمونه‌ها در `docs/TELEPHONY.md` و پوشه‌ی `telephony/`.
 
-> نکته: نام مدل realtime در نیازمندی «gpt-realtime-2» ذکر شده؛ چون قابل تغییر است، به‌صورت `OPENAI_REALTIME_MODEL` قابل‌تنظیم گذاشته شده.
+> نام پروژهٔ worker برای سازگاری استقرار همچنان `Realtime` است، اما مسیر فعال تماس از WebSocket Realtime استفاده نمی‌کند.
 
 ---
 
@@ -108,6 +109,13 @@ POST /api/auth/profile            { firstName, lastName, brandName }         [au
 GET  /api/me                                                                  [auth]
 
 GET  /api/knowledge-base                                                      [auth]
+GET  /api/knowledge-base/answers?skip=0&take=100                              [auth]
+POST /api/knowledge-base/answers      { question, answer }                    [auth]
+PUT/DELETE /api/knowledge-base/answers/{id}                                   [auth]
+POST /api/knowledge-base/answers/{id}/regenerate-audio                        [auth]
+GET  /api/knowledge-base/answers/{id}/audio                                   [auth]
+GET/PUT /api/knowledge-base/fallback                                          [auth]
+GET  /api/knowledge-base/fallback/audio                                       [auth]
 POST /api/knowledge-base/text     { text }                                    [auth]
 POST /api/knowledge-base/file     (multipart, txt/docx ≤100KB)                [auth]
 DELETE /api/knowledge-base                                                    [auth]
@@ -147,10 +155,10 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
 - [x] **فاز ۲ — فرانت پایه:** Vite+React+TS، Tailwind v4، Vazirmatn (self-hosted)، RTL، AuthContext (JWT/localStorage)، صفحه‌ی لاگین دو‌مرحله‌ای (موبایل→OTP)، آنبوردینگ (نام/برند)، DashboardLayout (سایدبار ریسپانسیو) + صفحه‌ی اصلی + route guardها. build و رندر تأییدشده.
-- [x] **فاز ۳ — پایگاه دانش مستقیم + Moderation:** `DirectKnowledgeAnswerService` کل RawText تأییدشدهٔ همان کاربر را با Chat بررسی می‌کند؛ مدل فقط `evidenceIds` را انتخاب می‌کند و سرور متن دقیق segmentهای متناظر را برمی‌گرداند. legacy text-evidence و fuzzy matching پذیرفته نمی‌شوند. FileTextExtractor از txt/docx پشتیبانی می‌کند؛ KnowledgeBaseService moderation، سقف ۹۰٬۰۰۰ و پاک‌کردن chunkهای مشتقِ قدیم را انجام می‌دهد. `RagService` و `KnowledgeChunk` فقط برای rollback باقی مانده‌اند و مسیر تماس آن‌ها را فراخوانی نمی‌کند.
-- [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** تب «OpenAI و پاسخ دانشی» مدل Chat مستقیم، Realtime و TTS را تنظیم می‌کند؛ کنترل‌های RAG/Embedding legacy در UI فعال نیستند. سایر بخش‌ها SMS.ir، رویدادها، گوینده‌ها، fallback و کاربران را پوشش می‌دهند.
+- [x] **فاز ۳ — پایگاه دانش سؤال‌وجواب + Moderation:** CRUD صفحه‌بندی‌شده و نامحدود `KnowledgeAnswer`، یکتایی سؤال نرمال‌شده، صوت ثابت پاسخ، صوت اختصاصی fallback و مسیرهای کاربر/دمو پیاده شده‌اند. متن/فایل و سرویس‌های دانشی قبلی فقط برای حفظ داده و rollback باقی مانده‌اند.
+- [x] **فاز ۴ — SMS.ir + پنل سوپرادمین:** تب تنظیمات، GapGPT/Whisper، SMS.ir، رویدادها، گوینده‌ها، fallback و کاربران را پوشش می‌دهد. سوپرادمین سؤال‌وجواب‌های هر دمو را با پخش/بازتولید صوت و صفحه‌بندی مدیریت می‌کند.
 - [x] **فاز ۵ — تخصیص داخلی + Provisioning + ساخت تلفن هوشمند:** ExtensionAllocator (تصادفی آزاد ۱۰۰۰–۹۹۹۹، Extension حالا nullable + migration)، AsteriskProvisioningService (SSH.NET، نوشتن بلوک PJSIP + reload؛ در نبود SSH شبیه‌سازی)، SmartPhoneService (پیش‌نیازها، تخصیص، provisioning، SIP secret، تولید وویس خوش‌آمد TTS، پیامک SmartPhoneCreated). کنترلر `smartphone` (GET/POST/PUT welcome). فرانت: SmartPhonePage (پیام خوش‌آمد + چک‌لیست پیش‌نیاز + دکمه ساخت + نمایش داخلی) + آیتم منو. ⚠️ بلوک PJSIP ممکن است بسته به پیکربندی ایزابل نیاز به تنظیم داشته باشد.
-- [x] **فاز ۶ — پل تلفنی realtime:** `OpenAiRealtimeClient` transcription و خواندن عینی متن تأییدشده را انجام می‌دهد؛ `CallHandler` پس از social/identity guard، سرویس کل KB را فراخوانی و سپس متن نهایی را literal پخش می‌کند. AudioSocketServer روی TCP:9092، سقف دقیقه، fallback و ثبت CallSession حفظ شده‌اند.
+- [x] **فاز ۶ — پل تلفنی AudioSocket سؤال‌وجواب:** `QaCallHandler` با VAD محلی، Whisper، cleaner و matcher کار می‌کند و WAV پاسخ یا fallback را مستقیم پخش می‌کند. `AudioSocketServer` روی TCP:9092، barge-in، سقف دقیقه، ضبط، fallback و ثبت سؤال‌های بی‌پاسخ را حفظ می‌کند؛ Realtime API در مسیر فعال نیست.
 
 ---
 

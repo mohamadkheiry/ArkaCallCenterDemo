@@ -11,6 +11,18 @@ public static class SettingKeys
     public const string OpenAiTtsModel = "openai.ttsModel";
     public const string OpenAiChatModel = "openai.chatModel";           // برای moderation و ابزارهای متنی
 
+    // GapGPT + Whisper — مسیر غیر Realtime برای دموهای سؤال‌وجواب
+    public const string GapGptBaseUrl = "gapgpt.baseUrl";
+    public const string GapGptApiKey = "gapgpt.apiKey";                 // secret
+    public const string GapGptCleanerModel = "gapgpt.cleanerModel";
+    public const string GapGptTtsModel = "gapgpt.ttsModel";
+    public const string GapGptTtsVoice = "gapgpt.ttsVoice";
+    public const string GapGptFallbackTtsModel = "gapgpt.fallbackTtsModel";
+    public const string GapGptFallbackTtsVoice = "gapgpt.fallbackTtsVoice";
+    public const string WhisperBaseUrl = "whisper.baseUrl";
+    public const string WhisperModel = "whisper.model";
+    public const string WhisperLanguage = "whisper.language";
+
     // SMS.ir
     public const string SmsIrApiKey = "smsir.apiKey";                   // secret
     public const string SmsIrLineNumber = "smsir.lineNumber";           // برای پیامک‌های bulk رویدادها

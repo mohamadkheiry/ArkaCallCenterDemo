@@ -28,20 +28,26 @@ function UnansweredSection() {
   const [loaded, setLoaded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<UnansweredItem[]>([])
+  const [error, setError] = useState('')
+
+  async function loadItems() {
+    setLoading(true)
+    setError('')
+    try {
+      const { data } = await api.get<UnansweredItem[]>('/api/calls/unanswered')
+      setItems(data)
+      setLoaded(true)
+    } catch {
+      setError('دریافت سؤال‌های بی‌پاسخ ممکن نشد؛ دوباره تلاش کنید.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function toggleOpen() {
     const next = !open
     setOpen(next)
-    if (next && !loaded) {
-      setLoading(true)
-      try {
-        const { data } = await api.get<UnansweredItem[]>('/api/calls/unanswered')
-        setItems(data)
-      } finally {
-        setLoading(false)
-        setLoaded(true)
-      }
-    }
+    if (next && !loaded) await loadItems()
   }
 
   return (
@@ -63,6 +69,10 @@ function UnansweredSection() {
         <div className="mt-4 border-t border-slate-100 pt-4">
           {loading ? (
             <p className="text-sm text-slate-400">در حال بارگذاری…</p>
+          ) : error ? (
+            <button type="button" onClick={loadItems} className="w-full rounded-xl bg-rose-50 px-3 py-3 text-sm text-rose-700">
+              {error}
+            </button>
           ) : items.length === 0 ? (
             <p className="py-4 text-center text-sm text-slate-500">سوال بی‌پاسخی ثبت نشده است. 👌</p>
           ) : (

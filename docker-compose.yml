@@ -46,6 +46,16 @@ services:
       OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-}
       OPENAI_TTS_MODEL: ${OPENAI_TTS_MODEL:-}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-}
+      GAPGPT_BASE_URL: ${GAPGPT_BASE_URL:-https://api.gapgpt.app/v1}
+      GAPGPT_API_KEY: ${GAPGPT_API_KEY:-}
+      GAPGPT_CLEANER_MODEL: ${GAPGPT_CLEANER_MODEL:-gemini-3.6-flash}
+      GAPGPT_TTS_MODEL: ${GAPGPT_TTS_MODEL:-gemini-2.5-pro-preview-tts}
+      GAPGPT_TTS_VOICE: ${GAPGPT_TTS_VOICE:-Kore}
+      GAPGPT_FALLBACK_TTS_MODEL: ${GAPGPT_FALLBACK_TTS_MODEL:-gpt-4o-mini-tts}
+      GAPGPT_FALLBACK_TTS_VOICE: ${GAPGPT_FALLBACK_TTS_VOICE:-alloy}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-http://192.168.20.189:8101}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-fa}
       SMSIR_API_KEY: ${SMSIR_API_KEY:-}
       SMSIR_VERIFY_TEMPLATE_ID: ${SMSIR_VERIFY_TEMPLATE_ID:-}
       SMSIR_LINE_NUMBER: ${SMSIR_LINE_NUMBER:-}
@@ -70,6 +80,20 @@ services:
       Realtime__IdleTimeoutSeconds: "${CALL_IDLE_TIMEOUT_SECONDS:-60}"
       Realtime__TranscriptionModel: "${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-transcribe}"
       Realtime__TranscriptionLanguage: "${TRANSCRIPTION_LANGUAGE:-fa}"
+      Realtime__SpeechStartFrames: "${SPEECH_START_FRAMES:-2}"
+      Realtime__SpeechEndSilenceMs: "${SPEECH_END_SILENCE_MS:-800}"
+      Realtime__MinimumSpeechMs: "${MINIMUM_SPEECH_MS:-180}"
+      Realtime__MaximumUtteranceSeconds: "${MAXIMUM_UTTERANCE_SECONDS:-20}"
+      GAPGPT_BASE_URL: ${GAPGPT_BASE_URL:-https://api.gapgpt.app/v1}
+      GAPGPT_API_KEY: ${GAPGPT_API_KEY:-}
+      GAPGPT_CLEANER_MODEL: ${GAPGPT_CLEANER_MODEL:-gemini-3.6-flash}
+      GAPGPT_TTS_MODEL: ${GAPGPT_TTS_MODEL:-gemini-2.5-pro-preview-tts}
+      GAPGPT_TTS_VOICE: ${GAPGPT_TTS_VOICE:-Kore}
+      GAPGPT_FALLBACK_TTS_MODEL: ${GAPGPT_FALLBACK_TTS_MODEL:-gpt-4o-mini-tts}
+      GAPGPT_FALLBACK_TTS_VOICE: ${GAPGPT_FALLBACK_TTS_VOICE:-alloy}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-http://192.168.20.189:8101}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-fa}
       Storage__UploadsPath: "/app/uploads"
     volumes:
       - uploads:/app/uploads

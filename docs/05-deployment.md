@@ -55,6 +55,9 @@ DEFAULT_VOICE=marin
 - تنظیم `ARKA_WORKER_HOST` به IP ماشینِ استقرار و `ARKA_WORKER_PORT=9092`.
 - پس از هر ویرایش: `asterisk -rx 'dialplan reload'`.
 - در context `arka-ai` از الگوی `_X!` استفاده کنید تا داخلی تک‌رقمی مثل `2` نیز match شود؛ `_X.` فقط داخلی‌های دو رقمی و بیشتر را می‌پذیرد.
+- مبدأ اپ/PWA در `arka-softphone-origin` نیز باید `_X!` باشد و الگوی `_[1-9]` در
+  `from-internal-custom` پس از بررسی `DB_EXISTS(DEVICE/${EXTEN}/dial)` داخلی تک‌رقمی
+  را به `arka-ai` هدایت کند؛ این ترتیب داخلی واقعی را در اولویت نگه می‌دارد.
 - مسیر صداها: `/var/lib/asterisk/sounds/arka/`.
 
 ## ۵. اتوماسیون اطلاع‌رسانی صوتی جیرا

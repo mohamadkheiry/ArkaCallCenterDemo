@@ -36,11 +36,13 @@ public static class DependencyInjection
         // TTS فارسی روی شبکه‌ی سرور گاهی بیش از ۶۰ ثانیه زمان می‌برد؛ timeout کوتاه
         // باعث 502 در صوت سؤال بی‌پاسخ و بازتولید خوش‌آمد می‌شد.
         services.AddHttpClient<IOpenAiService, OpenAiService>(c => c.Timeout = TimeSpan.FromSeconds(120));
+        services.AddHttpClient<IGapAiService, GapAiService>(c => c.Timeout = TimeSpan.FromSeconds(180));
         services.AddScoped<IModerationService, ModerationService>();
         services.AddScoped<IRagService, RagService>();
         services.AddScoped<IDirectKnowledgeAnswerService, DirectKnowledgeAnswerService>();
         services.AddScoped<IFileTextExtractor, FileTextExtractor>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
+        services.AddScoped<IKnowledgeAnswerService, KnowledgeAnswerService>();
 
         // فاز ۵: تخصیص داخلی + provisioning + ساخت تلفن هوشمند
         services.AddScoped<IExtensionAllocator, ExtensionAllocator>();

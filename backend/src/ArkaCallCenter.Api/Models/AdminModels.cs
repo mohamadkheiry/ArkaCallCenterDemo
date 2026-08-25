@@ -22,6 +22,8 @@ public record CreateSuperAdminRequest(string PhoneNumber, string? FirstName, str
 
 public record CreateDemoRequest(int Extension, string Label, string WelcomeText, string KbText, string? Voice, int? MinuteLimit);
 public record UpdateDemoRequest(string? Label, string? WelcomeText, string? KbText, string? Voice, int? MinuteLimit, bool? IsActive);
+public record KnowledgeAnswerRequest(string Question, string Answer);
+public record KnowledgeFallbackRequest(string Text);
 
 public record MainGreetingRequest(string Text, string Voice);
 public record HoldEnabledRequest(bool Enabled);

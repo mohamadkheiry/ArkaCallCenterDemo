@@ -20,6 +20,7 @@ public class AdminController : ControllerBase
     private static readonly HashSet<string> SecretKeys = new()
     {
         SettingKeys.OpenAiApiKey,
+        SettingKeys.GapGptApiKey,
         SettingKeys.SmsIrApiKey,
         SettingKeys.CrmPassword,
         SettingKeys.CrmApiKey,
@@ -29,6 +30,7 @@ public class AdminController : ControllerBase
     private readonly ISettingsService _settings;
     private readonly IOpenAiService _openai;
     private readonly IDemoService _demos;
+    private readonly IKnowledgeAnswerService _answers;
     private readonly IAsteriskProvisioningService _asterisk;
     private readonly ITokenService _tokens;
     private readonly ILogger<AdminController> _logger;
@@ -37,13 +39,14 @@ public class AdminController : ControllerBase
     private readonly IBaleNotifier _bale;
 
     public AdminController(ArkaDbContext db, ISettingsService settings, IOpenAiService openai,
-        IDemoService demos, IAsteriskProvisioningService asterisk, ITokenService tokens,
+        IDemoService demos, IKnowledgeAnswerService answers, IAsteriskProvisioningService asterisk, ITokenService tokens,
         IBaleNotifier bale, IConfiguration config, ILogger<AdminController> logger)
     {
         _db = db;
         _settings = settings;
         _openai = openai;
         _demos = demos;
+        _answers = answers;
         _asterisk = asterisk;
         _tokens = tokens;
         _logger = logger;
@@ -602,6 +605,91 @@ public class AdminController : ControllerBase
         await _demos.DeleteAsync(id, ct);
         return Ok(new { message = "دمو حذف شد." });
     }
+
+    [HttpGet("demos/{id:int}/knowledge-answers")]
+    public async Task<IActionResult> GetDemoAnswers(int id, [FromQuery] int skip = 0,
+        [FromQuery] int take = 100, CancellationToken ct = default)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        return Ok(await _answers.ListAsync(id, skip, take, ct));
+    }
+
+    [HttpPost("demos/{id:int}/knowledge-answers")]
+    public async Task<IActionResult> AddDemoAnswer(int id, KnowledgeAnswerRequest request, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var result = await _answers.AddAsync(id, request.Question, request.Answer, ct);
+        return result.Ok ? Ok(result.Item) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("demos/{id:int}/knowledge-answers/{answerId:int}")]
+    public async Task<IActionResult> UpdateDemoAnswer(
+        int id, int answerId, KnowledgeAnswerRequest request, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var result = await _answers.UpdateAsync(id, answerId, request.Question, request.Answer, ct);
+        return result.Ok ? Ok(result.Item) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpDelete("demos/{id:int}/knowledge-answers/{answerId:int}")]
+    public async Task<IActionResult> DeleteDemoAnswer(int id, int answerId, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        await _answers.DeleteAsync(id, answerId, ct);
+        return Ok(new { message = "سؤال و پاسخ حذف شد." });
+    }
+
+    [HttpPost("demos/{id:int}/knowledge-answers/{answerId:int}/regenerate-audio")]
+    public async Task<IActionResult> RegenerateDemoAnswerAudio(
+        int id, int answerId, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var result = await _answers.RegenerateAudioAsync(id, answerId, ct);
+        return result.Ok ? Ok(result.Item) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("demos/{id:int}/knowledge-answers/{answerId:int}/audio")]
+    public async Task<IActionResult> GetDemoAnswerAudio(int id, int answerId, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var path = await _db.KnowledgeAnswers.AsNoTracking()
+            .Where(item => item.Id == answerId && item.KnowledgeBase.UserId == id)
+            .Select(item => item.AudioPath).FirstOrDefaultAsync(ct);
+        return HasPlayableWav(path)
+            ? PhysicalFile(path!, "audio/wav", enableRangeProcessing: true)
+            : NotFound(new { error = "فایل صوتی پاسخ موجود یا معتبر نیست." });
+    }
+
+    [HttpGet("demos/{id:int}/knowledge-fallback")]
+    public async Task<IActionResult> GetDemoFallback(int id, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        return Ok(await _answers.GetFallbackAsync(id, ct));
+    }
+
+    [HttpPut("demos/{id:int}/knowledge-fallback")]
+    public async Task<IActionResult> SetDemoFallback(int id, KnowledgeFallbackRequest request, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var result = await _answers.SetFallbackAsync(id, request.Text, ct);
+        return result.Ok ? Ok(result) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("demos/{id:int}/knowledge-fallback/audio")]
+    public async Task<IActionResult> GetDemoFallbackAudio(int id, CancellationToken ct)
+    {
+        if (!await IsDemoAsync(id, ct)) return NotFound();
+        var path = await _db.KnowledgeBases.AsNoTracking()
+            .Where(item => item.UserId == id)
+            .Select(item => item.FallbackAudioPath)
+            .FirstOrDefaultAsync(ct);
+        return HasPlayableWav(path)
+            ? PhysicalFile(path!, "audio/wav", enableRangeProcessing: true)
+            : NotFound(new { error = "فایل صوتی پیام سؤال بی‌پاسخ موجود یا معتبر نیست." });
+    }
+
+    private Task<bool> IsDemoAsync(int id, CancellationToken ct)
+        => _db.Users.AsNoTracking().AnyAsync(user => user.Id == id && user.IsDemo, ct);
 
     // ---------------- Main greeting (IVR reception) ----------------
     [HttpGet("main-greeting")]

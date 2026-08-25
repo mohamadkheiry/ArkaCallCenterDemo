@@ -1,58 +1,105 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pause, Play, TriangleAlert } from 'lucide-react'
 import { api, apiError } from '../lib/api'
 
+let sharedAudioContext: AudioContext | null = null
+
+function getAudioContext() {
+  sharedAudioContext ??= new AudioContext()
+  return sharedAudioContext
+}
+
 /**
- * فایل محافظت‌شده را با JWT به‌صورت Blob می‌گیرد و سپس پخش می‌کند. خطاهای HTTP،
+ * فایل محافظت‌شده را با JWT به‌صورت ArrayBuffer می‌گیرد و سپس پخش می‌کند. خطاهای HTTP،
  * فایل خالی/غیرصوتی و خطای خود مرورگر به‌جای سکوت کامل به کاربر نمایش داده می‌شوند.
  */
 export default function AudioPlayButton({ path, showText = true }: { path: string; showText?: boolean }) {
-  const [url, setUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [error, setError] = useState('')
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const bufferRef = useRef<AudioBuffer | null>(null)
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const loadPromiseRef = useRef<Promise<AudioBuffer> | null>(null)
+
+  const loadDecoded = useCallback(async (context: AudioContext): Promise<AudioBuffer> => {
+    if (bufferRef.current) return bufferRef.current
+    if (loadPromiseRef.current) return loadPromiseRef.current
+
+    const promise = (async () => {
+      const response = await api.get<ArrayBuffer>(path, { responseType: 'arraybuffer' })
+      const contentType = String(response.headers['content-type'] ?? '').toLowerCase()
+      if (!(response.data instanceof ArrayBuffer) || response.data.byteLength <= 44 || !contentType.startsWith('audio/'))
+        throw new Error('invalid-audio-response')
+      const decoded = await context.decodeAudioData(response.data.slice(0))
+      bufferRef.current = decoded
+      return decoded
+    })()
+    loadPromiseRef.current = promise
+    try { return await promise } finally {
+      if (loadPromiseRef.current === promise) loadPromiseRef.current = null
+    }
+  }, [path])
 
   useEffect(() => {
+    sourceRef.current?.stop()
+    sourceRef.current = null
+    bufferRef.current = null
+    loadPromiseRef.current = null
+    setPlaying(false)
+    setError('')
+
+    const button = buttonRef.current
+    if (!button || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      observer.disconnect()
+      // Only audio controls close to the viewport are prefetched. This keeps the
+      // first click immediate without downloading a long knowledge-base page.
+      void loadDecoded(getAudioContext()).catch(() => undefined)
+    }, { rootMargin: '200px' })
+    observer.observe(button)
     return () => {
-      audioRef.current?.pause()
-      if (url) URL.revokeObjectURL(url)
+      observer.disconnect()
+      sourceRef.current?.stop()
+      sourceRef.current = null
     }
-  }, [url])
+  }, [path, loadDecoded])
 
   async function toggle() {
     if (loading) return
     setError('')
     if (playing) {
-      audioRef.current?.pause()
+      sourceRef.current?.stop()
+      sourceRef.current = null
+      setPlaying(false)
       return
     }
 
     try {
-      let playableUrl = url
-      if (!playableUrl) {
-        setLoading(true)
-        const response = await api.get<Blob>(path, { responseType: 'blob' })
-        const blob = response.data
-        if (!(blob instanceof Blob) || blob.size <= 44 || !blob.type.toLowerCase().startsWith('audio/'))
-          throw new Error('invalid-audio-response')
-        playableUrl = URL.createObjectURL(blob)
-        setUrl(playableUrl)
-      }
+      // resume() must start inside the user's click. If it is postponed until after
+      // the protected file has been downloaded, Chrome/Android may reject the
+      // first play attempt as autoplay and only accept the second click.
+      const context = getAudioContext()
+      const resumePromise = context.state === 'suspended' ? context.resume() : Promise.resolve()
 
-      const audio = audioRef.current ?? new Audio()
-      audioRef.current = audio
-      audio.preload = 'auto'
-      if (audio.src !== playableUrl) audio.src = playableUrl
-      audio.onended = () => setPlaying(false)
-      audio.onpause = () => setPlaying(false)
-      audio.onplay = () => setPlaying(true)
-      audio.onerror = () => {
+      if (!bufferRef.current) setLoading(true)
+      const decoded = await loadDecoded(context)
+      const source = context.createBufferSource()
+      source.buffer = decoded
+      source.connect(context.destination)
+      source.onended = () => {
+        if (sourceRef.current !== source) return
+        sourceRef.current = null
         setPlaying(false)
-        setError('مرورگر نتوانست فایل صوتی را پخش کند.')
       }
-      await audio.play()
+      sourceRef.current = source
+      source.start()
+      setPlaying(true)
+      await resumePromise
     } catch (err) {
+      console.error('Protected audio playback failed.', err)
+      sourceRef.current = null
       setPlaying(false)
       setError(apiError(err, 'پخش فایل صوتی ممکن نشد؛ فایل را دوباره بررسی کنید.'))
     } finally {
@@ -63,6 +110,7 @@ export default function AudioPlayButton({ path, showText = true }: { path: strin
   return (
     <div className="flex flex-col items-start gap-1">
       <button
+        ref={buttonRef}
         type="button"
         onClick={toggle}
         disabled={loading}

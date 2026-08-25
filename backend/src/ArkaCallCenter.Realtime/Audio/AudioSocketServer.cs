@@ -9,15 +9,15 @@ namespace ArkaCallCenter.Realtime.Audio;
 
 /// <summary>
 /// سرور TCP پروتکل AudioSocket. Asterisk (اپلیکیشن AudioSocket در dialplan) به آن
-/// وصل می‌شود و هر اتصال یک تماس است که به OpenAI Realtime پل می‌شود.
+/// وصل می‌شود و هر اتصال با مسیر Whisper → پاک‌سازی → تطبیق سؤال → صوت ثابت پاسخ داده می‌شود.
 /// </summary>
 public class AudioSocketServer : BackgroundService
 {
     private readonly RealtimeOptions _options;
-    private readonly CallHandler _handler;
+    private readonly QaCallHandler _handler;
     private readonly ILogger<AudioSocketServer> _logger;
 
-    public AudioSocketServer(IOptions<RealtimeOptions> options, CallHandler handler, ILogger<AudioSocketServer> logger)
+    public AudioSocketServer(IOptions<RealtimeOptions> options, QaCallHandler handler, ILogger<AudioSocketServer> logger)
     {
         _options = options.Value;
         _handler = handler;

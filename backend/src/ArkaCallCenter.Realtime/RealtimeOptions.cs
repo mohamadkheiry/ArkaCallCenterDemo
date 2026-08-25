@@ -28,4 +28,13 @@ public class RealtimeOptions
 
     /// <summary>فریم‌های ورودی با RMS کمتر از این مقدار، پیش از ارسال به Realtime به سکوت تبدیل می‌شوند.</summary>
     public int InputNoiseGateRms { get; set; } = 140;
+
+    /// <summary>تعداد فریم‌های ۲۰ میلی‌ثانیه‌ای متوالی برای شروع گفتار.</summary>
+    public int SpeechStartFrames { get; set; } = 2;
+
+    /// <summary>مقدار سکوت پس از جمله برای پایان نوبت و ارسال به Whisper.</summary>
+    public int SpeechEndSilenceMs { get; set; } = 800;
+
+    public int MinimumSpeechMs { get; set; } = 180;
+    public int MaximumUtteranceSeconds { get; set; } = 20;
 }

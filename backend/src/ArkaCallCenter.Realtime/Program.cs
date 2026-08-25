@@ -14,7 +14,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.Configure<RealtimeOptions>(builder.Configuration.GetSection("Realtime"));
 builder.Services.AddSingleton<WelcomeAudioCache>();
-builder.Services.AddSingleton<CallHandler>();
+builder.Services.AddSingleton<QaCallHandler>();
 builder.Services.AddHostedService<AudioSocketServer>();
 
 var host = builder.Build();
