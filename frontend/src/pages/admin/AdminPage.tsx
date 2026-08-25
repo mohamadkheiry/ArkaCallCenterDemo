@@ -15,6 +15,7 @@ import CallsAdminTab from './CallsAdminTab'
 const TABS = [
   { key: 'openai', label: 'OpenAI و پاسخ دانشی' },
   { key: 'sms', label: 'SMS.ir' },
+  { key: 'crm', label: 'CRM فروش' },
   { key: 'bale', label: 'کانال بله' },
   { key: 'reception', label: 'پذیرش و انتظار' },
   { key: 'branding', label: 'برندینگ' },
@@ -64,6 +65,14 @@ export default function AdminPage() {
       )}
       {tab === 'sms' && (
         <SettingsTab key="sms" groups={['sms']} title="تنظیمات SMS.ir" desc="کلید API و شماره خط سرویس پیامک." />
+      )}
+      {tab === 'crm' && (
+        <SettingsTab
+          key="crm"
+          groups={['crm']}
+          title="اتصال CRM فروش"
+          desc="ورود عملیاتی با نام کاربری و رمز، سپس ثبت لید با Bearer token. رمز در پاسخ API ماسک می‌شود."
+        />
       )}
       {tab === 'bale' && <BaleTab />}
       {tab === 'reception' && <ReceptionTab />}

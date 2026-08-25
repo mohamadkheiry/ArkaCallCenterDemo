@@ -16,7 +16,7 @@ export const SETTING_FIELDS: {
   hint?: string
   secret?: boolean
   control?: 'percentSlider' // اسلایدر ۰ تا ۱۰۰٪ که مقدار ۰ تا ۱ ذخیره می‌کند
-  group: 'openai' | 'sms' | 'limits' | 'rag' | 'bale'
+  group: 'openai' | 'sms' | 'limits' | 'rag' | 'bale' | 'crm'
 }[] = [
   { key: 'openai.baseUrl', label: 'Base URL', group: 'openai', hint: 'مثلاً https://api.openai.com/v1' },
   { key: 'openai.apiKey', label: 'API Key', group: 'openai', secret: true },
@@ -27,6 +27,12 @@ export const SETTING_FIELDS: {
   { key: 'smsir.apiKey', label: 'API Key سرویس SMS.ir', group: 'sms', secret: true },
   { key: 'smsir.verifyTemplateId', label: 'شناسه قالب کد تأیید (Template ID)', group: 'sms', hint: 'قالب /send/verify با پارامتر CODE — برای ارسال کد ورود' },
   { key: 'smsir.lineNumber', label: 'شماره خط SMS.ir (پیامک رویدادها)', group: 'sms' },
+
+  { key: 'crm.enabled', label: 'فعال بودن ارسال لید به CRM', group: 'crm', hint: 'مقدار true یا false' },
+  { key: 'crm.baseUrl', label: 'Base URL سرویس CRM', group: 'crm', hint: 'پیش‌فرض https://api.arkadp.com' },
+  { key: 'crm.username', label: 'نام کاربری CRM', group: 'crm' },
+  { key: 'crm.password', label: 'رمز عبور CRM', group: 'crm', secret: true },
+  { key: 'crm.emailDomain', label: 'دامنه ایمیل جایگزین لیدها', group: 'crm', hint: 'پیش‌فرض demo.arkadp.com' },
 
   { key: 'limits.defaultCallMinutes', label: 'سقف پیش‌فرض مکالمه (دقیقه)', group: 'limits' },
   { key: 'limits.warningPercent', label: 'درصد هشدار نزدیک شدن به سقف', group: 'limits' },

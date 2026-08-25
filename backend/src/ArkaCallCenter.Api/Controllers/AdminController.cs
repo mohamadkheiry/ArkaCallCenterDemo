@@ -21,6 +21,8 @@ public class AdminController : ControllerBase
     {
         SettingKeys.OpenAiApiKey,
         SettingKeys.SmsIrApiKey,
+        SettingKeys.CrmPassword,
+        SettingKeys.CrmApiKey,
     };
 
     private readonly ArkaDbContext _db;

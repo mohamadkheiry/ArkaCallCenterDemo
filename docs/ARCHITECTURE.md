@@ -42,6 +42,7 @@ flowchart TB
     subgraph ext ["سرویس‌های بیرونی"]
       openai["OpenAI — Chat دانشی · gpt-realtime · TTS"]
       smsir["SMS.ir"]
+      crm["CRM فروش آرکا"]
       isabel["Isabel / Asterisk PBX — SSH + AudioSocket"]
     end
 
@@ -58,6 +59,7 @@ flowchart TB
     realtime <-->|EF Core| db
     api -->|moderation/chat/TTS| openai
     api -->|پیامک| smsir
+    api -->|Login + Bearer + multipart lead| crm
     api -->|SSH: provision + آپلود صوت| isabel
 
     caller -->|SIP| isabel
@@ -206,6 +208,7 @@ erDiagram
 | `SmartPhoneService` | پیش‌نیازها، تخصیص، provision، وویس خوش‌آمد، پیامک |
 | `DemoService` | CRUD دموها (سوپرادمین) |
 | `SmsIrSender` | ارسال پیامک SMS.ir (fallback لاگ در نبود کلید) |
+| `CrmLeadService` | ارسال غیرهمزمان و بدون تکرار سه مرحلهٔ لید؛ Login عملیاتی، Bearer token و ثبت multipart در CRM |
 | `SmsEventDispatcher` | رندر قالب + ارسال به مقصدها (کاربر و/یا لیست ثابت) |
 | `TokenUsageTracker` + `UsageContext` | ثبت مصرف توکن منتسب به کاربر جاری |
 | `AudioConvert` | PCM→WAV۸k · WAV→SLIN۸k · resample |

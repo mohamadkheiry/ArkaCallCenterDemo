@@ -34,6 +34,11 @@ services:
       # سرویسِ تماس صوتی (arka-voice روی Isabel) برای OTP-با-تماس
       VoiceService__Url: ${VOICE_SERVICE_URL:-}
       VoiceService__Secret: ${VOICE_SERVICE_SECRET:-}
+      CRM_ENABLED: ${CRM_ENABLED:-false}
+      CRM_BASE_URL: ${CRM_BASE_URL:-https://api.arkadp.com}
+      CRM_USERNAME: ${CRM_USERNAME:-}
+      CRM_PASSWORD: ${CRM_PASSWORD:-}
+      CRM_EMAIL_DOMAIN: ${CRM_EMAIL_DOMAIN:-demo.arkadp.com}
       # کلیدها/تنظیمات AI و پیامک — در اولین اجرا (DB خالی) از env در تنظیمات seed می‌شوند.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

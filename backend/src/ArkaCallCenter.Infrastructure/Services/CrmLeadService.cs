@@ -1,4 +1,6 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using ArkaCallCenter.Core.Abstractions;
 using ArkaCallCenter.Core.Constants;
@@ -14,17 +16,20 @@ namespace ArkaCallCenter.Infrastructure.Services;
 /// <summary>
 /// ارسالِ لیدِ کاربرانِ دمو به CRM فروش.
 ///
-/// قراردادِ واقعیِ سرویس (از روی Swagger و آزمایشِ عملی استخراج شد):
-///   POST {baseUrl}/api/ExternalEndpoint/InsertContactUs   با هدرِ X-Api-Key
-///   بدنه باید داخلِ «inputModel» بسته‌بندی شود؛ در غیر این صورت سرویس خطای عمومیِ ‎-999 می‌دهد.
-///   فیلدهای الزامی: name، email، phoneNumber.
-///   پاسخ همیشه HTTP 200 است؛ موفقیت را باید از فیلدِ «success» خواند (نه از status code).
+/// قراردادِ عملیاتی سرویس:
+///   POST {baseUrl}/api/User/Login با username/password برای گرفتن Bearer token
+///   POST {baseUrl}/api/ContactUs/InsertContactUsByAdmin با multipart/form-data
+///   فیلدهای الزامی فرم: inputModel.Name، Email، PhoneNumber و FeedbackText.
+///   موفقیت علاوه بر status code از فیلد «success» پاسخ کنترل می‌شود.
 ///
 /// چون سامانه‌ی ما ایمیل نمی‌گیرد ولی CRM آن را الزامی می‌داند، ایمیلِ جایگزین از روی
 /// شماره ساخته می‌شود (مثلاً 09121234567@demo.arkadp.com) تا لید از دست نرود.
 /// </summary>
 public class CrmLeadService : ICrmLeadService
 {
+    internal const string LoginPath = "/api/User/Login";
+    internal const string InsertLeadPath = "/api/ContactUs/InsertContactUsByAdmin";
+
     private readonly IServiceScopeFactory _scopes;
     private readonly IHttpClientFactory _http;
     private readonly ILogger<CrmLeadService> _logger;
@@ -60,10 +65,13 @@ public class CrmLeadService : ICrmLeadService
             return;
 
         var baseUrl = (await settings.GetAsync(SettingKeys.CrmBaseUrl, "https://api.arkadp.com"))?.TrimEnd('/');
-        var apiKey = await settings.GetAsync(SettingKeys.CrmApiKey, null);
-        if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
+        var username = await settings.GetAsync(SettingKeys.CrmUsername, null);
+        var password = await settings.GetAsync(SettingKeys.CrmPassword, null);
+        if (string.IsNullOrWhiteSpace(baseUrl) ||
+            string.IsNullOrWhiteSpace(username) ||
+            string.IsNullOrWhiteSpace(password))
         {
-            _logger.LogWarning("CRM lead skipped: baseUrl/apiKey not configured.");
+            _logger.LogWarning("CRM lead skipped: baseUrl/username/password not configured.");
             return;
         }
         var emailDomain = (await settings.GetAsync(SettingKeys.CrmEmailDomain, "demo.arkadp.com"))?.Trim() ?? "demo.arkadp.com";
@@ -77,38 +85,33 @@ public class CrmLeadService : ICrmLeadService
         // CRM ایمیل را الزامی می‌داند و ما ایمیل نداریم → ایمیلِ جایگزین از روی شماره.
         var email = $"{new string(phone.Where(char.IsDigit).ToArray())}@{emailDomain}";
 
-        var payload = new
-        {
-            inputModel = new
-            {
-                name,
-                email,
-                phoneNumber = phone,
-                feedbackText = feedback,
-                requestedProject = 1,   // 1 = SmartCallCenter
-                requestType = 2,        // 2 = ProjectImplementationRequest
-            },
-        };
-
         var client = _http.CreateClient("crm");
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/ExternalEndpoint/InsertContactUs")
-        {
-            Content = JsonContent.Create(payload),
-        };
-        req.Headers.Add("X-Api-Key", apiKey);
-
         bool ok = false;
         string? message = null;
         try
         {
-            using var res = await client.SendAsync(req);
-            var body = await res.Content.ReadAsStringAsync();
-            // پاسخ همیشه 200 است؛ موفقیت از فیلدِ success خوانده می‌شود.
-            (ok, message) = ParseResult(body);
-            if (!res.IsSuccessStatusCode)
+            var (token, loginError) = await LoginAsync(client, baseUrl, username, password);
+            if (string.IsNullOrWhiteSpace(token))
             {
-                ok = false;
-                message = $"HTTP {(int)res.StatusCode}: {Trunc(body)}";
+                message = loginError ?? "CRM login did not return a token.";
+            }
+            else
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + InsertLeadPath)
+                {
+                    Content = CreateLeadContent(name, email, phone, feedback),
+                };
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                using var res = await client.SendAsync(req);
+                var body = await res.Content.ReadAsStringAsync();
+                (ok, message) = ParseResult(body);
+                if (!res.IsSuccessStatusCode)
+                {
+                    ok = false;
+                    message = $"HTTP {(int)res.StatusCode}: {Trunc(body)}";
+                }
             }
         }
         catch (Exception ex)
@@ -150,15 +153,75 @@ public class CrmLeadService : ICrmLeadService
         }
     }
 
+    private static async Task<(string? token, string? error)> LoginAsync(
+        HttpClient client,
+        string baseUrl,
+        string username,
+        string password)
+    {
+        using var response = await client.PostAsJsonAsync(
+            baseUrl + LoginPath,
+            new { username, password });
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            return (null, $"CRM login HTTP {(int)response.StatusCode}: {Trunc(body)}");
+
+        return TryParseLoginToken(body, out var token)
+            ? (token, null)
+            : (null, "CRM login response had no token.");
+    }
+
+    internal static MultipartFormDataContent CreateLeadContent(
+        string name,
+        string email,
+        string phoneNumber,
+        string feedbackText)
+    {
+        var content = new MultipartFormDataContent();
+        AddText(content, "inputModel.Name", name);
+        AddText(content, "inputModel.Email", email);
+        AddText(content, "inputModel.PhoneNumber", phoneNumber);
+        AddText(content, "inputModel.FeedbackText", feedbackText);
+        AddText(content, "inputModel.RequestType", "2");               // ProjectImplementationRequest
+        AddText(content, "inputModel.RequestSource", "2");             // CallCenter
+        AddText(content, "inputModel.RequestedProject", "1");          // SmartCallCenter
+        AddText(content, "inputModel.FormStatus", "1");                // New
+        return content;
+    }
+
+    private static void AddText(MultipartFormDataContent content, string fieldName, string value)
+        => content.Add(new StringContent(value, Encoding.UTF8), fieldName);
+
+    internal static bool TryParseLoginToken(string body, out string? token)
+    {
+        token = null;
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (!TryGetPropertyIgnoreCase(document.RootElement, "result", out var result) ||
+                result.ValueKind != JsonValueKind.Object ||
+                !TryGetPropertyIgnoreCase(result, "token", out var tokenElement) ||
+                tokenElement.ValueKind != JsonValueKind.String)
+                return false;
+
+            token = tokenElement.GetString()?.Trim();
+            return !string.IsNullOrWhiteSpace(token);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>خواندنِ {"success":bool,"message":string} از پاسخ.</summary>
-    private static (bool ok, string? message) ParseResult(string body)
+    internal static (bool ok, string? message) ParseResult(string body)
     {
         try
         {
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
-            var ok = root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
-            var msg = root.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String
+            var ok = TryGetPropertyIgnoreCase(root, "success", out var s) && s.ValueKind == JsonValueKind.True;
+            var msg = TryGetPropertyIgnoreCase(root, "message", out var m) && m.ValueKind == JsonValueKind.String
                 ? m.GetString() : null;
             return (ok, msg);
         }
@@ -166,6 +229,22 @@ public class CrmLeadService : ICrmLeadService
         {
             return (false, Trunc(body));
         }
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        JsonElement element,
+        string propertyName,
+        out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase)) continue;
+            value = property.Value;
+            return true;
+        }
+
+        value = default;
+        return false;
     }
 
     private static string BuildName(User? user, string phone)

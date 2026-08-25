@@ -3,7 +3,7 @@
 ## ۱. پیش‌نیازها
 - Docker + Docker Compose روی ماشین در همان شبکه‌ی مرکز تلفن (LAN).
 - دسترسی SSH به سرور ایزابل برای نصب dialplan و آپلود صداها.
-- کلید OpenAI و توکن SMS.ir.
+- کلید OpenAI، توکن SMS.ir و اطلاعات ورود CRM.
 
 ## ۲. استقرار استک
 ```bash
@@ -47,6 +47,7 @@ DEFAULT_VOICE=marin
 در فایل `.env` / `appsettings.Local.json`:
 - `OPENAI_API_KEY`
 - توکن و قالب‌های SMS.ir
+- نام کاربری و رمز CRM عملیاتی (`CRM_USERNAME` / `CRM_PASSWORD` یا تنظیمات ماسک‌شدهٔ پنل)
 - رمزِ root ایزابل (فقط برای provisioning)
 
 ## ۴. پیکربندی ایزابل / Asterisk

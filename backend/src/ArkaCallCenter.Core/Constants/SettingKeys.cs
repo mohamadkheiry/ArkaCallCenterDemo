@@ -16,10 +16,12 @@ public static class SettingKeys
     public const string SmsIrLineNumber = "smsir.lineNumber";           // برای پیامک‌های bulk رویدادها
     public const string SmsIrVerifyTemplateId = "smsir.verifyTemplateId"; // قالب ارسال کد تأیید (/send/verify)
 
-    // CRM فروش (ExternalEndpoint/InsertContactUs) — ثبتِ لیدِ کاربرانِ دمو
+    // CRM فروش (ContactUs/InsertContactUsByAdmin) — ثبتِ لیدِ کاربرانِ دمو
     public const string CrmEnabled = "crm.enabled";                     // "true"/"false"
     public const string CrmBaseUrl = "crm.baseUrl";                     // مثلاً https://api.arkadp.com
-    public const string CrmApiKey = "crm.apiKey";                       // secret (هدر X-Api-Key)
+    public const string CrmUsername = "crm.username";
+    public const string CrmPassword = "crm.password";                   // secret (برای گرفتن Bearer token)
+    public const string CrmApiKey = "crm.apiKey";                       // legacy secret؛ فقط برای rollback
     public const string CrmEmailDomain = "crm.emailDomain";             // دامنه‌ی ایمیلِ ساختگی از روی شماره
 
     // کانال بله (Bale) — اطلاع‌رسانیِ کاربرانِ جدیدِ دمو در کانال
