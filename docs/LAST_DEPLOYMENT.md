@@ -7,9 +7,9 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ استقرار | ۲۰۲۶-۰۸-۲۴ |
+| تاریخ استقرار | ۲۰۲۶-۰۸-۲۵ |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit برنامه | `2ff2517` |
+| commit برنامه | `edfc0bb` |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
 | اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
@@ -26,6 +26,23 @@
 سرویس مستقل OTP یعنی `CodeSenderWithPhone` همچنان روی
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
+
+## مهاجرت اتصال CRM به API عملیاتی — ۲۰۲۶-۰۸-۲۵
+
+- فایل‌های مرجع عملیاتی بررسی شدند. دامنه همچنان `https://api.arkadp.com` است؛ تغییر واقعی در endpoint و احراز هویت بود: Login در `/api/User/Login` و ثبت لید در `/api/ContactUs/InsertContactUsByAdmin`.
+- قرارداد قدیمی `X-Api-Key` و JSON کنار گذاشته شد. API اکنون با username/password یک Bearer token کوتاه‌عمر می‌گیرد و فیلدهای `inputModel.*` را با `multipart/form-data` ارسال می‌کند. token فقط در حافظهٔ همان ارسال است و در DB یا لاگ ذخیره نمی‌شود.
+- مقادیر `RequestType=2`، `RequestSource=2`، `RequestedProject=1` و `FormStatus=1` مطابق معنای «درخواست اجرای SmartCallCenter از کال‌سنتر، وضعیت جدید» ارسال می‌شوند. جلوگیری از تکرار موفق هر شماره/مرحله در `CrmLeadSubmissions` حفظ شده است.
+- تب «CRM فروش» به پنل سوپرادمین اضافه شد. Base URL، username، password، فعال/غیرفعال‌بودن و دامنهٔ ایمیل جایگزین قابل مدیریت‌اند؛ password با `IsSecret` در پاسخ API ماسک می‌شود و هیچ credential واقعی در Git ثبت نشده است.
+- Login عملیاتی از کلاینت توسعه و خود سرور Issabel با HTTP `200` و token معتبر آزمایش شد. یک لید مشخص با عنوان «تست فنی اتصال کال‌سنتر — قابل حذف» از طریق endpoint جدید ثبت شد و پاسخ `success=true` گرفت.
+- build محلی Backend بدون warning/error، همهٔ `348` تست، build production فرانت‌اند و lint موفق بودند؛ lint فقط دو warning قدیمی خارج از فایل‌های این تغییر دارد. build کانتینر warning شناخته‌شدهٔ `NU1903` برای `SSH.NET 2024.2.0` را همچنان گزارش می‌کند.
+- تصاویر منتشرشده: API برابر `sha256:481bc19432d485b18f1cb78e5453d34c6da9c201630d2d270a4e837ca02e6953` و Web برابر `sha256:ff51f876320e11ea4757e8f9e8197f8362fb2c86961d5f7c9cc600619ceb4aeb`. هر دو `running` با policy برابر `unless-stopped` هستند؛ health وب/API موفق و `arka-call-center.service` برابر `enabled/active` است.
+- داده‌های اصلی قبل و بعد ثابت ماند: ۱۷ کاربر، ۱۲ تلفن هوشمند، ۱۲ پایگاه دانش، ۶۷ تماس، ۴۳۲ رکورد مصرف و ۳۰ سابقهٔ ارسال CRM. فقط تنظیمات جدید CRM به `AppSettings` افزوده/به‌روزرسانی شدند.
+
+بکاپ دیتابیس، سورس، environment، شمار داده‌ها و مشخصات تصاویر قبلی در مسیر root-only زیر نگه‌داری می‌شود:
+
+```text
+/var/backups/arka-call-center/20260825-crm-operational-before-edfc0bb
+```
 
 ## انتشار حافظهٔ مکالمه در همان تماس — ۲۰۲۶-۰۸-۲۴
 
