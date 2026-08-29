@@ -52,17 +52,13 @@ public class CrmLeadService : ICrmLeadService
         });
     }
 
-    private async Task SubmitAsync(LeadStage stage, string phone)
+    internal async Task SubmitAsync(LeadStage stage, string phone)
     {
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
         var settings = scope.ServiceProvider.GetRequiredService<ISettingsService>();
 
         if ((await settings.GetAsync(SettingKeys.CrmEnabled, "false")) != "true") return;
-
-        // این مرحله قبلاً با موفقیت ارسال شده؟ → دوباره نفرست.
-        if (await db.CrmLeadSubmissions.AnyAsync(x => x.PhoneNumber == phone && x.Stage == stage && x.Success))
-            return;
 
         var baseUrl = (await settings.GetAsync(SettingKeys.CrmBaseUrl, "https://api.arkadp.com"))?.TrimEnd('/');
         var username = await settings.GetAsync(SettingKeys.CrmUsername, null);
@@ -124,7 +120,8 @@ public class CrmLeadService : ICrmLeadService
         else
             _logger.LogWarning("CRM lead rejected (stage {Stage}, phone {Phone}): {Msg}", stage, phone, message);
 
-        // نتیجه را ثبت کن تا مرحله‌ی موفق دوباره ارسال نشود (و ناموفق‌ها قابل عیب‌یابی باشند).
+        // آخرین نتیجه‌ی هر شماره/مرحله را برای عیب‌یابی نگه دار. این رکورد فقط snapshot است و
+        // عمداً جلوی ارسال‌های بعدی را نمی‌گیرد؛ هر رخداد، حتی برای شماره‌ی تکراری، به CRM می‌رود.
         try
         {
             var existing = await db.CrmLeadSubmissions.FirstOrDefaultAsync(x => x.PhoneNumber == phone && x.Stage == stage);

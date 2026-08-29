@@ -4,8 +4,8 @@ using ArkaCallCenter.Core.Enums;
 namespace ArkaCallCenter.Core.Entities;
 
 /// <summary>
-/// ثبتِ اینکه کدام «مرحله»ی لید برای یک شماره به CRM فروش ارسال شده است.
-/// هدف: هر مرحله برای هر شماره فقط یک‌بار ارسال شود (جلوگیری از لیدِ تکراری).
+/// snapshot آخرین نتیجهٔ ارسال هر «مرحله» از لید یک شماره به CRM فروش.
+/// این رکورد برای عیب‌یابی است و مانع ارسال دوبارهٔ همان شماره/مرحله نمی‌شود.
 /// </summary>
 public class CrmLeadSubmission : BaseEntity
 {
@@ -14,7 +14,7 @@ public class CrmLeadSubmission : BaseEntity
 
     public LeadStage Stage { get; set; }
 
-    /// <summary>آیا CRM پاسخِ موفق داد (success=true)؟ فقط ارسالِ موفق «انجام‌شده» تلقی می‌شود.</summary>
+    /// <summary>آیا CRM در آخرین تلاش پاسخ موفق (success=true) داد؟</summary>
     public bool Success { get; set; }
 
     /// <summary>پیام/کدِ بازگشتی از CRM برای عیب‌یابی.</summary>

@@ -41,7 +41,7 @@ public class AuthService : IAuthService
             return new OtpRequestResult(false, "شماره موبایل نامعتبر است.");
 
         // مرحله‌ی ۱ لید برای تیم فروش: به‌محضِ واردکردنِ شماره (حتی اگر کد را تأیید نکند).
-        // پیش از throttle قرار دارد تا درخواستِ تکراری هم لید را از دست ندهد؛ خودِ سرویس تکراری نمی‌فرستد.
+        // پیش از throttle قرار دارد تا هر درخواست شماره، حتی برای کاربر تکراری، به CRM ارسال شود.
         _crm.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
         _bale.Enqueue(Core.Enums.LeadStage.PhoneEntered, phoneNumber);
 

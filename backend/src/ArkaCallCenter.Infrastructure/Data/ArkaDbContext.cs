@@ -86,7 +86,7 @@ public class ArkaDbContext : DbContext
 
         b.Entity<CrmLeadSubmission>(e =>
         {
-            // هر مرحله برای هر شماره فقط یک‌بار → یکتاییِ (شماره، مرحله) در سطحِ دیتابیس تضمین می‌شود.
+            // یک snapshot از آخرین نتیجهٔ هر شماره/مرحله؛ یکتایی این رکورد مانع ارسال مجدد به CRM نیست.
             e.HasIndex(x => new { x.PhoneNumber, x.Stage }).IsUnique();
             e.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
             e.Property(x => x.ResponseMessage).HasMaxLength(500);
