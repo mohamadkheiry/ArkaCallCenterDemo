@@ -7,9 +7,9 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ استقرار | ۲۰۲۶-۰۸-۲۶ |
+| تاریخ استقرار | ۲۰۲۶-۰۸-۲۹ |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit برنامه | `12c7fbe2bd07e21084d6f17983e91dd99b1c6300` |
+| نسخهٔ Production | baseline بازگردانی‌شدهٔ `edfc0bb` به‌همراه hotfix ارسال تکراری CRM از `4f64cb0` |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
 | اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
@@ -28,6 +28,21 @@
 سرویس مستقل OTP یعنی `CodeSenderWithPhone` همچنان روی
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
+
+## ارسال لید بدون حذف موارد تکراری — ۲۰۲۶-۰۸-۲۹
+
+- بررسی موفقیت قبلی شماره/مرحله از `CrmLeadService` حذف شد. از این پس هر رخداد `PhoneEntered`، `ProfileCompleted` یا `SmartPhoneCreated` حتی برای شماره و مرحلهٔ تکراری، دوباره به CRM عملیاتی ارسال می‌شود.
+- جدول `CrmLeadSubmissions` و ایندکس یکتای آن حذف یا بازسازی نشدند؛ رکورد موجود فقط snapshot آخرین نتیجه، پیام و زمان تلاش همان شماره/مرحله است و دیگر نقش deduplication ندارد.
+- hotfix روی همان baseline بازگردانی‌شدهٔ Production اعمال شد و قابلیت‌های نسخهٔ جدیدتر به سرور تحمیل نشدند. فقط image سرویس `api` بازسازی و جایگزین شد؛ دیتابیس، volume آپلودها، وب، Realtime و تنظیمات تلفن تغییر نکردند.
+- همهٔ ۳۶۹ تست Backend شاخهٔ توسعه، شامل تست رگرسیون ارسال دوباره روی سابقهٔ موفق، پاس شدند. ساخت image عملیاتی نیز موفق بود.
+- تست انتهابه‌انتهای یک شمارهٔ تکراری از مسیر واقعی `request-otp` انجام شد: API پاسخ HTTP `200` داد، زمان snapshot قدیمی به زمان تست به‌روزرسانی شد و CRM مجدداً `success=true` برگرداند.
+- image فعال API برابر `sha256:2456441b6282fa47333d42ca2f0113b878ae40c7b3054c00a49c7642d428c24d` است. سلامت مستقیم API، وب داخلی و دامنهٔ عمومی HTTP `200` است؛ کانتینر `running` با policy برابر `unless-stopped` و واحد systemd برابر `enabled/active` است.
+
+بکاپ سورس و image قبلی برای rollback در مسیر root-only زیر نگه‌داری می‌شود:
+
+```text
+/var/backups/arka-call-center/20260829-crm-duplicates-before-4f64cb0
+```
 
 ## انتشار مسیر سؤال‌وجواب صوتی قطعی — ۲۰۲۶-۰۸-۲۶
 
