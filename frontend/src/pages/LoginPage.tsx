@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -14,7 +14,7 @@ import {
   Smartphone,
   Sparkles,
 } from 'lucide-react'
-import { api, apiError } from '../lib/api'
+import { api, apiError, apiRetryAfter } from '../lib/api'
 import { toEn, toFa } from '../lib/format'
 import { useAuth } from '../context/AuthContext'
 import { Button, Logo, cn } from '../components/ui'
@@ -32,8 +32,8 @@ const FEATURES = [
   },
   {
     icon: Database,
-    title: 'پایگاه دانش اختصاصی (RAG)',
-    desc: 'پاسخ‌ها دقیقاً بر اساس اسناد و دانش کسب‌وکار شما',
+    title: 'پایگاه دانش یکپارچه و هوشمند',
+    desc: 'هوش مصنوعی کل اسناد و دانش کسب‌وکار شما را مستقیم بررسی می‌کند',
   },
   {
     icon: PhoneCall,
@@ -50,18 +50,31 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [callLoading, setCallLoading] = useState(false)
   const [callMsg, setCallMsg] = useState('')
+  const [deliveryMethod, setDeliveryMethod] = useState<'sms' | 'call'>('sms')
   const [otpFocused, setOtpFocused] = useState(false)
+  const [retryAfter, setRetryAfter] = useState(0)
   const { setToken } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    if (retryAfter <= 0) return
+    const timer = window.setTimeout(() => setRetryAfter((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [retryAfter])
+
   async function requestOtpByCall() {
+    if (retryAfter > 0) return
     setError('')
     setCallMsg('')
     setCallLoading(true)
     try {
-      await api.post('/api/auth/request-otp-call', { phoneNumber: toEn(phone) })
+      const { data } = await api.post('/api/auth/request-otp-call', { phoneNumber: toEn(phone) })
+      setRetryAfter(Math.max(0, Number(data.retryAfterSeconds) || 0))
+      setDeliveryMethod('call')
+      setStep('otp')
       setCallMsg('در حال تماس با شما… کد به‌صورت صوتی و رقم‌به‌رقم خوانده می‌شود.')
     } catch (err) {
+      setRetryAfter(apiRetryAfter(err))
       setError(apiError(err))
     } finally {
       setCallLoading(false)
@@ -73,9 +86,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await api.post('/api/auth/request-otp', { phoneNumber: toEn(phone) })
+      const { data } = await api.post('/api/auth/request-otp', { phoneNumber: toEn(phone) })
+      setRetryAfter(Math.max(0, Number(data.retryAfterSeconds) || 0))
+      setDeliveryMethod('sms')
       setStep('otp')
     } catch (err) {
+      setRetryAfter(apiRetryAfter(err))
       setError(apiError(err))
     } finally {
       setLoading(false)
@@ -257,7 +273,7 @@ export default function LoginPage() {
                     ورود به داشبورد
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    شماره موبایل خود را وارد کنید تا کد ورود طی تماس تلفنی برایتان خوانده شود.
+                    شماره موبایل خود را وارد کنید تا کد ورود از طریق پیامک برایتان ارسال شود.
                   </p>
                 </div>
 
@@ -296,8 +312,28 @@ export default function LoginPage() {
                   )}
 
                   <Button type="submit" loading={loading} className="w-full">
-                    دریافت کد با تماس تلفنی
+                    دریافت کد با پیامک
                     <ArrowLeft size={17} />
+                  </Button>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-200" />
+                    یا
+                    <span className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200" />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={callLoading}
+                    onClick={requestOtpByCall}
+                    disabled={loading || retryAfter > 0}
+                    className="w-full"
+                  >
+                    <PhoneCall size={16} className="text-brand-600" />
+                    {retryAfter > 0
+                      ? `دریافت کد با تماس تا ${toFa(retryAfter)} ثانیه دیگر`
+                      : 'دریافت کد با تماس تلفنی'}
                   </Button>
 
                   <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-slate-400">
@@ -316,7 +352,8 @@ export default function LoginPage() {
                     کد تأیید
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-slate-500">
-                    کد ۶ رقمی خوانده‌شده در تماس با شماره{' '}
+                    کد ۶ رقمی{' '}
+                    {deliveryMethod === 'call' ? 'خوانده‌شده در تماس با' : 'ارسال‌شده با پیامک به'} شماره{' '}
                     <span dir="ltr" className="mx-0.5 inline-block font-bold tracking-wider text-slate-700">
                       {toFa(phone)}
                     </span>{' '}
@@ -390,7 +427,7 @@ export default function LoginPage() {
 
                   <div className="flex items-center gap-3 py-0.5 text-xs text-slate-400">
                     <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-200" />
-                    تماس را دریافت نکردید؟
+                    {deliveryMethod === 'call' ? 'تماس را دریافت نکردید؟' : 'پیامک را دریافت نکردید؟'}
                     <span className="h-px flex-1 bg-gradient-to-r from-transparent to-slate-200" />
                   </div>
 
@@ -399,10 +436,13 @@ export default function LoginPage() {
                     variant="outline"
                     loading={callLoading}
                     onClick={requestOtpByCall}
+                    disabled={retryAfter > 0}
                     className="w-full"
                   >
                     <PhoneCall size={16} className="text-brand-600" />
-                    تماس مجدد برای دریافت کد
+                    {retryAfter > 0
+                      ? `تماس مجدد تا ${toFa(retryAfter)} ثانیه دیگر`
+                      : 'تماس مجدد برای دریافت کد'}
                   </Button>
 
                   {callMsg && (

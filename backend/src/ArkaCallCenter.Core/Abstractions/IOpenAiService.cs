@@ -11,6 +11,8 @@ public interface IOpenAiService
 
     /// <summary>یک درخواست chat ساده؛ متن پاسخ را برمی‌گرداند.</summary>
     Task<string> ChatAsync(string systemPrompt, string userPrompt, bool jsonMode = false, CancellationToken ct = default);
+    Task<string> ChatAsync(string systemPrompt, string userPrompt, bool jsonMode,
+        int maxCompletionTokens, CancellationToken ct = default);
 
     /// <summary>تبدیل متن به گفتار. format می‌تواند mp3 یا pcm (خام ۲۴kHz mono) باشد.</summary>
     Task<byte[]> TextToSpeechAsync(string text, string voice, string format = "mp3", CancellationToken ct = default);

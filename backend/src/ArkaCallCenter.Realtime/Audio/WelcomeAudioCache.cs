@@ -16,10 +16,21 @@ public sealed class WelcomeAudioCache
 
     public WelcomeAudioCache(ILogger<WelcomeAudioCache> logger) => _logger = logger;
 
-    public bool TryGet(int extension, out byte[] audio)
+    public bool TryGet(int extension, string? expectedPath, out byte[] audio)
     {
         audio = Array.Empty<byte>();
-        if (!_entries.TryGetValue(extension, out var entry)) return false;
+        if (string.IsNullOrWhiteSpace(expectedPath))
+        {
+            _entries.TryRemove(extension, out _);
+            return false;
+        }
+
+        if (!_entries.TryGetValue(extension, out var entry) ||
+            !string.Equals(entry.Path, expectedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TrySet(extension, expectedPath) || !_entries.TryGetValue(extension, out entry))
+                return false;
+        }
 
         try
         {

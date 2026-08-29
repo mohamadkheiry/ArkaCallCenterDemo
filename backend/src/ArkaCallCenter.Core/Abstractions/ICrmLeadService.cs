@@ -3,7 +3,7 @@ using ArkaCallCenter.Core.Enums;
 namespace ArkaCallCenter.Core.Abstractions;
 
 /// <summary>
-/// ارسالِ لیدِ کاربرانِ دمو به CRM فروش (ExternalEndpoint/InsertContactUs) تا تیمِ فروش
+/// ارسالِ لیدِ کاربرانِ دمو به CRM فروش (ContactUs/InsertContactUsByAdmin) تا تیمِ فروش
 /// بتواند بعداً از این داده‌ها استفاده کند.
 /// </summary>
 public interface ICrmLeadService

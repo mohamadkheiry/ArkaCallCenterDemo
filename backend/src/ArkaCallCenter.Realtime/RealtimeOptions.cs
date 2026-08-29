@@ -21,6 +21,20 @@ public class RealtimeOptions
     public string TranscriptionLanguage { get; set; } = "fa";
 
     /// <summary>Domain vocabulary hint supplied to the transcription model.</summary>
-    public string TranscriptionPrompt { get; set; }
-        = "گفت‌وگوی تلفنی فارسی درباره خدمات شرکت، بیمه، خودرو و پرسش‌های مشتری";
+    public string TranscriptionPrompt { get; set; } = "";
+
+    /// <summary>حساسیت تشخیص گفتار OpenAI؛ مقدار بالاتر، نویز خط را کمتر گفتار تلقی می‌کند.</summary>
+    public double VadThreshold { get; set; } = 0.62;
+
+    /// <summary>فریم‌های ورودی با RMS کمتر از این مقدار، پیش از ارسال به Realtime به سکوت تبدیل می‌شوند.</summary>
+    public int InputNoiseGateRms { get; set; } = 140;
+
+    /// <summary>تعداد فریم‌های ۲۰ میلی‌ثانیه‌ای متوالی برای شروع گفتار.</summary>
+    public int SpeechStartFrames { get; set; } = 2;
+
+    /// <summary>مقدار سکوت پس از جمله برای پایان نوبت و ارسال به Whisper.</summary>
+    public int SpeechEndSilenceMs { get; set; } = 800;
+
+    public int MinimumSpeechMs { get; set; } = 180;
+    public int MaximumUtteranceSeconds { get; set; } = 20;
 }

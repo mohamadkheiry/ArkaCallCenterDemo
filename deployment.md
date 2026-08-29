@@ -130,16 +130,18 @@ systemctl is-active arka-call-center.service
 | `SUPERADMIN_PHONE` | شماره‌ای که در seed اولیه سوپرادمین می‌شود (مثلاً `09015909044`) |
 | `API_PORT` / `WEB_PORT` / `AUDIOSOCKET_PORT` | پورت‌های میزبان (پیش‌فرض 8080/8081/9092) |
 | `CALL_IDLE_TIMEOUT_SECONDS` | قطع خودکار تماس پس از سکوت کامل کاربر و دستیار؛ پیش‌فرض `60`، مقدار `0` یعنی غیرفعال |
-| `OPENAI_REALTIME_MODEL` | مدل مکالمه؛ مقدار پیشنهادی فعلی `gpt-realtime-2.1` |
-| `OPENAI_TRANSCRIPTION_MODEL` | مدل تبدیل گفتار تماس‌گیرنده؛ برای فارسی `gpt-4o-transcribe` |
-| `TRANSCRIPTION_LANGUAGE` | راهنمای زبان تبدیل گفتار؛ برای فارسی `fa` |
+| `GAPGPT_BASE_URL` / `GAPGPT_API_KEY` | مسیر و کلید GapGPT برای cleaner، matcher و TTS |
+| `GAPGPT_CLEANER_MODEL` | مدل بازسازی رونوشت و داوری معنایی؛ پیش‌فرض `gemini-3.6-flash` |
+| `GAPGPT_TTS_MODEL` / `GAPGPT_TTS_VOICE` | مدل/صدا برای WAV ثابت پاسخ‌ها؛ پیش‌فرض `gemini-2.5-pro-preview-tts` و `Kore` |
+| `WHISPER_BASE_URL` / `WHISPER_MODEL` / `WHISPER_LANGUAGE` | سرویس OpenAI-compatible تبدیل صوت تماس؛ پیش‌فرض مدل `whisper-1` و زبان `fa` |
+| `SPEECH_START_FRAMES` / `SPEECH_END_SILENCE_MS` | تنظیم شروع و پایان نوبت VAD محلی؛ پیش‌فرض ۲ فریم و ۸۰۰ms سکوت |
 | `DEFAULT_VOICE` | گوینده پیش‌فرض؛ برای کیفیت عمومی بهتر `marin` (گزینه جایگزین `cedar`) |
 | `FRONTEND_ORIGIN` | origin وب برای CORS (مثلاً `http://SERVER_IP:8081`) |
 | `ASPNETCORE_ENVIRONMENT` | `Development` (Swagger/Scalar روشن) یا `Production` |
 | `ASTERISK_HOST` / `ASTERISK_SSH_USER` / `ASTERISK_SSH_PASSWORD` | برای provisioning خودکار داخلی و آپلود پیام پذیرش روی ایزابل (اختیاری) |
 
-> کلیدهای حساس (OpenAI و SMS.ir) را **از پنل سوپرادمین** وارد کنید تا در دیتابیس امن (ماسک‌شده)
-> ذخیره شوند؛ نیازی به گذاشتن آن‌ها در `.env` نیست. `.env` هرگز در گیت قرار نمی‌گیرد.
+> کلیدهای حساس (GapGPT، OpenAI و SMS.ir) را **از پنل سوپرادمین** وارد کنید تا در پاسخ API ماسک شوند؛
+> نیازی به گذاشتن آن‌ها در `.env` نیست. `.env` هرگز در گیت قرار نمی‌گیرد.
 
 ---
 
@@ -148,7 +150,7 @@ systemctl is-active arka-call-center.service
 1. با `SUPERADMIN_PHONE` وارد داشبورد شوید.
    - در حالت توسعه، کد ورود در لاگ چاپ می‌شود: `docker compose logs api | grep SMS`
    - اگر SMS.ir تنظیم شده باشد، کد واقعی پیامک می‌شود.
-2. **پنل سوپرادمین → OpenAI و RAG:** `Base URL` و `API Key` اوپن‌ای‌آی را وارد کنید (برای پاسخ AI، تولید صوت پیام‌ها و نمونه‌صدا).
+2. **پنل سوپرادمین → OpenAI و پاسخ دانشی:** تنظیمات GapGPT و Whisper را وارد کنید. با افزودن یک سؤال آزمایشی، تولید و پخش WAV پاسخ را پیش از فعال‌کردن داخلی بررسی کنید.
 3. **پنل سوپرادمین → SMS.ir:** `API Key`، `شناسه قالب کد تأیید (Template ID)` و در صورت نیاز `شماره خط` را وارد کنید.
 4. **پنل سوپرادمین → پیام پیش‌فرض / پذیرش و انتظار / گوینده‌ها:** متن‌ها و صوت‌ها را تنظیم و تولید کنید.
 
@@ -196,9 +198,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-audiosocket.p
 | `db is unhealthy` | لاگ db را ببینید؛ مطمئن شوید `command` نامعتبری در compose نیست و volume سالم است. |
 | Swagger/Scalar باز نمی‌شود | `ASPNETCORE_ENVIRONMENT=Development` باشد. |
 | از دستگاه دیگر LAN باز نمی‌شود | فایروال سرور پورت‌های ۸۰۸۰/۸۰۸۱/۹۰۹۲ را باز کند. |
-| پاسخ AI کار نمی‌کند | کلید OpenAI در پنل ثبت شده؟ لاگ `realtime` و `api` را ببینید. |
+| پاسخ سؤال‌وجواب کار نمی‌کند | سلامت `WHISPER_BASE_URL/health`، کلید GapGPT، آماده‌بودن صوت پاسخ و لاگ‌های `realtime`/`api` را بررسی کنید. |
 | ابتدای تماس سکوت طولانی دارد | پیام خوش‌آمد را یک بار ذخیره کنید تا WAV ساخته شود؛ سپس اسکریپت AudioSocket بالا و لاگ `First greeting audio` را بررسی کنید. |
-| سؤال نامرتبط جواب یکی از FAQها را می‌گیرد | ایندکس KB را بررسی کنید و مطمئن شوید نسخهٔ جدید `realtime` منتشر شده است؛ این نسخه پیش از هر پاسخ RAG را اجرا و در نبود نتیجه fallback پخش می‌کند. |
+| سؤال نامرتبط جواب یکی از FAQها را می‌گیرد | صورت سؤال‌های تکراری را حذف و لاگ `matchedQuestion/matchScore` تماس را بررسی کنید؛ matcher فقط ID گزینه‌های همان درخواست را می‌پذیرد و در نبود تطبیق باید fallback پخش شود. |
 | داخلی تک‌رقمی از IVR قطع می‌شود | در context `arka-ai` الگوی `_X!` لازم است؛ `_X.` داخلی تک‌رقمی را match نمی‌کند. سپس `dialplan reload` اجرا شود. |
 | پیامک ارسال نمی‌شود | کلید/قالب SMS.ir در پنل درست است؟ لاگ `api` پاسخ SMS.ir را نشان می‌دهد. |
 

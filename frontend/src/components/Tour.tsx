@@ -15,8 +15,6 @@ import {
 } from 'lucide-react'
 import { Button, cn } from './ui'
 
-export const TOUR_DONE_KEY = 'arka_tour_done'
-
 const CARD_W = 340
 
 interface Step {
@@ -142,7 +140,6 @@ export default function Tour({
   if (!open || !step) return null
 
   function finish(goWizard = false) {
-    localStorage.setItem(TOUR_DONE_KEY, '1')
     if (window.innerWidth < 1024) onSidebarChange?.(false)
     onClose()
     if (goWizard) navigate('/setup')

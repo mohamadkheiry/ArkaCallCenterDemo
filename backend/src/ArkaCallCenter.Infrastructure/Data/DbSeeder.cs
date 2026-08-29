@@ -31,18 +31,33 @@ public static class DbSeeder
             (SettingKeys.OpenAiBaseUrl, config["OPENAI_BASE_URL"], "https://api.openai.com/v1", false),
             (SettingKeys.OpenAiApiKey, config["OPENAI_API_KEY"], null, true),
             (SettingKeys.OpenAiChatModel, config["OPENAI_CHAT_MODEL"], "gpt-4o-mini", false),
-            (SettingKeys.OpenAiEmbeddingModel, config["OPENAI_EMBEDDING_MODEL"], "text-embedding-3-small", false),
+            (SettingKeys.OpenAiEmbeddingModel, config["OPENAI_EMBEDDING_MODEL"], "text-embedding-3-large", false),
             (SettingKeys.OpenAiRealtimeModel, config["OPENAI_REALTIME_MODEL"], "gpt-realtime-2.1", false),
             (SettingKeys.OpenAiTtsModel, config["OPENAI_TTS_MODEL"], "gpt-4o-mini-tts", false),
+            (SettingKeys.GapGptBaseUrl, config["GAPGPT_BASE_URL"], "https://api.gapgpt.app/v1", false),
+            (SettingKeys.GapGptApiKey, config["GAPGPT_API_KEY"], null, true),
+            (SettingKeys.GapGptCleanerModel, config["GAPGPT_CLEANER_MODEL"], "gemini-3.6-flash", false),
+            (SettingKeys.GapGptTtsModel, config["GAPGPT_TTS_MODEL"], "gemini-2.5-pro-preview-tts", false),
+            (SettingKeys.GapGptTtsVoice, config["GAPGPT_TTS_VOICE"], "Kore", false),
+            (SettingKeys.GapGptFallbackTtsModel, config["GAPGPT_FALLBACK_TTS_MODEL"], "gpt-4o-mini-tts", false),
+            (SettingKeys.GapGptFallbackTtsVoice, config["GAPGPT_FALLBACK_TTS_VOICE"], "alloy", false),
+            (SettingKeys.WhisperBaseUrl, config["WHISPER_BASE_URL"], "http://192.168.20.189:8101", false),
+            (SettingKeys.WhisperModel, config["WHISPER_MODEL"], "whisper-1", false),
+            (SettingKeys.WhisperLanguage, config["WHISPER_LANGUAGE"], "fa", false),
             (SettingKeys.SmsIrApiKey, config["SMSIR_API_KEY"], null, true),
             (SettingKeys.SmsIrVerifyTemplateId, config["SMSIR_VERIFY_TEMPLATE_ID"], null, false),
             (SettingKeys.SmsIrLineNumber, config["SMSIR_LINE_NUMBER"], null, false),
+            (SettingKeys.CrmEnabled, config["CRM_ENABLED"], "false", false),
+            (SettingKeys.CrmBaseUrl, config["CRM_BASE_URL"], "https://api.arkadp.com", false),
+            (SettingKeys.CrmUsername, config["CRM_USERNAME"], null, false),
+            (SettingKeys.CrmPassword, config["CRM_PASSWORD"], null, true),
+            (SettingKeys.CrmEmailDomain, config["CRM_EMAIL_DOMAIN"], "demo.arkadp.com", false),
             (SettingKeys.DefaultVoiceName, config["DEFAULT_VOICE"], "alloy", false),
             (SettingKeys.DefaultCallMinuteLimit, config["DEFAULT_CALL_MINUTES"], "30", false),
             (SettingKeys.CallLimitWarningPercent, null, "80", false),
             (SettingKeys.RagSimilarityThreshold, config["RAG_SIMILARITY_THRESHOLD"], "0.35", false),
             (SettingKeys.RagTopK, config["RAG_TOP_K"], "4", false),
-            (SettingKeys.FallbackMessageText, null, "پاسخ این سوال در پایگاه دانش من موجود نیست.", false),
+            (SettingKeys.FallbackMessageText, null, ConversationMessages.UnknownKnowledge, false),
             (SettingKeys.FallbackMessageVoice, null, "alloy", false),
         };
 
@@ -54,6 +69,16 @@ public static class DbSeeder
             // کلیدهای سِری فقط وقتی از env آمده باشند ساخته می‌شوند (رکورد خالی نسازیم).
             if (secret && string.IsNullOrWhiteSpace(value)) continue;
             db.AppSettings.Add(new AppSetting { Key = key, Value = value, IsSecret = secret });
+        }
+
+        // فقط متن پیش‌فرض نسخه‌های قبلی را ارتقا بده؛ متن سفارشی مدیر دست‌نخورده می‌ماند.
+        var fallbackSetting = await db.AppSettings
+            .FirstOrDefaultAsync(x => x.Key == SettingKeys.FallbackMessageText, ct);
+        if (fallbackSetting is not null && ConversationMessages.LegacyUnknownKnowledgeMessages
+            .Contains(fallbackSetting.Value, StringComparer.Ordinal))
+        {
+            fallbackSetting.Value = ConversationMessages.UnknownKnowledge;
+            fallbackSetting.UpdatedAt = DateTime.UtcNow;
         }
     }
 

@@ -27,5 +27,11 @@ public class KnowledgeBase : BaseEntity
     /// <summary>دلیل رد شدن در صورت مغایرت با قوانین.</summary>
     public string? ModerationReason { get; set; }
 
+    /// <summary>پیامی که فقط هنگام پیدا نشدن سؤال پخش می‌شود.</summary>
+    public string? FallbackText { get; set; }
+    public string? FallbackAudioPath { get; set; }
+    public string? FallbackAudioHash { get; set; }
+
     public ICollection<KnowledgeChunk> Chunks { get; set; } = new List<KnowledgeChunk>();
+    public ICollection<KnowledgeAnswer> Answers { get; set; } = new List<KnowledgeAnswer>();
 }

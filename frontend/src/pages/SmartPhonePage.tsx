@@ -61,7 +61,7 @@ export default function SmartPhonePage() {
     setMsg(null)
     try {
       await api.put('/api/smartphone/welcome', { text: welcome })
-      setMsg({ type: 'ok', text: 'پیام خوش‌آمد ذخیره و صوت آن تولید شد.' })
+      setMsg({ type: 'ok', text: 'پیام خوش‌آمد ذخیره و فایل صوتی ثابت آن با هوش مصنوعی تولید شد.' })
       await load()
     } catch (e) {
       setMsg({ type: 'err', text: apiError(e) })
@@ -99,7 +99,7 @@ export default function SmartPhonePage() {
   }
 
   const isActive = sp?.status === 'Active' && sp.extension != null
-  const hasWelcome = !!sp?.welcomeMessageText
+  const hasWelcome = !!sp?.welcomeMessageText && sp.hasWelcomeAudio
   const canCreate = hasKb && hasWelcome && !isActive
 
   if (loading) {
@@ -140,7 +140,8 @@ export default function SmartPhonePage() {
       <Card className="animate-in">
         <h3 className="font-bold text-slate-800">پیام خوش‌آمد</h3>
         <p className="mt-1 text-sm text-slate-500">
-          این پیام هنگام تماس، ابتدا برای تماس‌گیرنده پخش می‌شود.
+          پس از ذخیره، هوش مصنوعی یک‌بار فایل صوتی ثابت این پیام را تولید می‌کند. در هر تماس ابتدا
+          همین فایل، پیش از فعال‌شدن شنود هوشمند، کامل پخش می‌شود.
         </p>
         <textarea
           rows={3}
@@ -151,7 +152,7 @@ export default function SmartPhonePage() {
         />
         <div className="mt-3">
           <Button onClick={saveWelcome} loading={busy} variant="outline">
-            ذخیره پیام خوش‌آمد
+            ذخیره و تولید فایل صوتی
           </Button>
         </div>
       </Card>

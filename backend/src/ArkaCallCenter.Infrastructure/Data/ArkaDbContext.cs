@@ -11,6 +11,7 @@ public class ArkaDbContext : DbContext
     public DbSet<SmartPhone> SmartPhones => Set<SmartPhone>();
     public DbSet<KnowledgeBase> KnowledgeBases => Set<KnowledgeBase>();
     public DbSet<KnowledgeChunk> KnowledgeChunks => Set<KnowledgeChunk>();
+    public DbSet<KnowledgeAnswer> KnowledgeAnswers => Set<KnowledgeAnswer>();
     public DbSet<OtpCode> OtpCodes => Set<OtpCode>();
     public DbSet<CallSession> CallSessions => Set<CallSession>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
@@ -53,6 +54,23 @@ public class ArkaDbContext : DbContext
             e.Property(x => x.FileName).HasMaxLength(300);
             e.Property(x => x.FilePath).HasMaxLength(500);
             e.Property(x => x.ModerationReason).HasColumnType("text");
+            e.Property(x => x.FallbackText).HasColumnType("text");
+            e.Property(x => x.FallbackAudioPath).HasMaxLength(500);
+            e.Property(x => x.FallbackAudioHash).HasMaxLength(64);
+        });
+
+        b.Entity<KnowledgeAnswer>(e =>
+        {
+            e.Property(x => x.Question).HasMaxLength(500);
+            e.Property(x => x.NormalizedQuestion).HasMaxLength(500);
+            e.Property(x => x.Answer).HasMaxLength(4_000);
+            e.Property(x => x.AudioPath).HasMaxLength(500);
+            e.Property(x => x.AudioHash).HasMaxLength(64);
+            e.Property(x => x.AudioError).HasColumnType("text");
+            e.HasIndex(x => new { x.KnowledgeBaseId, x.SortOrder });
+            e.HasIndex(x => new { x.KnowledgeBaseId, x.NormalizedQuestion }).IsUnique();
+            e.HasOne(x => x.KnowledgeBase).WithMany(x => x.Answers)
+                .HasForeignKey(x => x.KnowledgeBaseId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<KnowledgeChunk>(e =>
@@ -86,7 +104,7 @@ public class ArkaDbContext : DbContext
 
         b.Entity<CrmLeadSubmission>(e =>
         {
-            // هر مرحله برای هر شماره فقط یک‌بار → یکتاییِ (شماره، مرحله) در سطحِ دیتابیس تضمین می‌شود.
+            // یک snapshot از آخرین نتیجهٔ هر شماره/مرحله؛ یکتایی این رکورد مانع ارسال مجدد به CRM نیست.
             e.HasIndex(x => new { x.PhoneNumber, x.Stage }).IsUnique();
             e.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
             e.Property(x => x.ResponseMessage).HasMaxLength(500);

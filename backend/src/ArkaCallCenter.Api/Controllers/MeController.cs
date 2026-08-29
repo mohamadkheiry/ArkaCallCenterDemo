@@ -19,13 +19,20 @@ public class MeController : ControllerBase
     private readonly ArkaDbContext _db;
     private readonly IAuthService _auth;
     private readonly ISettingsService _settings;
+    private readonly ISmartPhoneService _smartPhones;
     private readonly string _uploadsPath;
 
-    public MeController(ArkaDbContext db, IAuthService auth, ISettingsService settings, IConfiguration config)
+    public MeController(
+        ArkaDbContext db,
+        IAuthService auth,
+        ISettingsService settings,
+        ISmartPhoneService smartPhones,
+        IConfiguration config)
     {
         _db = db;
         _auth = auth;
         _settings = settings;
+        _smartPhones = smartPhones;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
         Directory.CreateDirectory(_uploadsPath);
     }
@@ -53,6 +60,7 @@ public class MeController : ControllerBase
             user.BrandName,
             role = user.Role.ToString(),
             user.ProfileCompleted,
+            user.HasCompletedTour,
             user.VoiceName,
             user.CallMinuteLimit,
             user.UsedMinutes,
@@ -69,6 +77,21 @@ public class MeController : ControllerBase
         });
     }
 
+    /// <summary>ثبت دائمی پایان تور اولین ورود برای کاربر جاری.</summary>
+    [HttpPost("tour/complete")]
+    public async Task<IActionResult> CompleteTour(CancellationToken ct)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
+        if (user is null) return NotFound();
+        if (!user.HasCompletedTour)
+        {
+            user.HasCompletedTour = true;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+        return Ok(new { user.HasCompletedTour });
+    }
+
     public record SetVoiceRequest(string VoiceName);
 
     /// <summary>انتخاب گوینده‌ی صدای کاربر (باید از گوینده‌های فعال باشد).</summary>
@@ -78,12 +101,42 @@ public class MeController : ControllerBase
         var exists = await _db.VoiceOptions.AnyAsync(v => v.Enabled && v.Name == req.VoiceName, ct);
         if (!exists) return BadRequest(new { error = "گوینده‌ی انتخابی معتبر نیست." });
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
+        var user = await _db.Users
+            .Include(u => u.SmartPhone)
+            .FirstOrDefaultAsync(u => u.Id == User.GetUserId(), ct);
         if (user is null) return NotFound();
+        var previousVoice = user.VoiceName;
         user.VoiceName = req.VoiceName;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
-        return Ok(new { user.VoiceName });
+
+        // اگر پیام خوش‌آمد قبلاً تنظیم شده، تغییر گوینده باید همان فایل ثابت را
+        // یک‌بار با صدای جدید بازتولید کند؛ تماس‌ها هرگز TTS زنده اجرا نمی‌کنند.
+        if (!string.IsNullOrWhiteSpace(user.SmartPhone?.WelcomeMessageText))
+        {
+            var regenerated = await _smartPhones.SetWelcomeAsync(
+                user.Id,
+                user.SmartPhone.WelcomeMessageText,
+                ct);
+            if (!regenerated.Ok)
+            {
+                // صدای مکالمه و خوش‌آمد باید همیشه هماهنگ بمانند؛ اگر TTS شکست خورد
+                // انتخاب گوینده نیز به مقدار سالم قبلی برمی‌گردد.
+                user.VoiceName = previousVoice;
+                user.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                return StatusCode(StatusCodes.Status502BadGateway, new
+                {
+                    error = "بازتولید پیام خوش‌آمد با صدای جدید انجام نشد؛ گوینده قبلی حفظ شد.",
+                });
+            }
+        }
+
+        return Ok(new
+        {
+            user.VoiceName,
+            welcomeAudioRegenerated = !string.IsNullOrWhiteSpace(user.SmartPhone?.WelcomeMessageText),
+        });
     }
 
     // ---------------- Phone change (with OTP to the new number) ----------------

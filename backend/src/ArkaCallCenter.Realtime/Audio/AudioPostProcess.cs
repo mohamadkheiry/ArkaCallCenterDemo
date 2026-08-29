@@ -79,8 +79,10 @@ public static class AudioPostProcess
         }
     }
 
-    private static bool IsSilentFrame(ReadOnlySpan<byte> pcm, int rmsThreshold)
+    /// <summary>تشخیص فریم سکوت/نویز کم‌دامنه بدون حذف بخش‌های واقعی گفتار.</summary>
+    public static bool IsSilentFrame(ReadOnlySpan<byte> pcm, int rmsThreshold)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rmsThreshold);
         var sampleCount = pcm.Length / 2;
         if (sampleCount == 0) return true;
 

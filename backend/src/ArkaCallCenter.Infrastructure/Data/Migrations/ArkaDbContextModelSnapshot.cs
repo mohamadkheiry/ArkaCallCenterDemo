@@ -188,6 +188,65 @@ namespace ArkaCallCenter.Infrastructure.Data.Migrations
                     b.ToTable("CrmLeadSubmissions");
                 });
 
+            modelBuilder.Entity("ArkaCallCenter.Core.Entities.KnowledgeAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<string>("AudioError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AudioHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("AudioPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("AudioStatus")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("KnowledgeBaseId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NormalizedQuestion")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KnowledgeBaseId", "NormalizedQuestion")
+                        .IsUnique();
+
+                    b.HasIndex("KnowledgeBaseId", "SortOrder");
+
+                    b.ToTable("KnowledgeAnswers");
+                });
+
             modelBuilder.Entity("ArkaCallCenter.Core.Entities.KnowledgeBase", b =>
                 {
                     b.Property<int>("Id")
@@ -201,6 +260,17 @@ namespace ArkaCallCenter.Infrastructure.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("FallbackAudioHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("FallbackAudioPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("FallbackText")
+                        .HasColumnType("text");
 
                     b.Property<string>("FileName")
                         .HasMaxLength(300)
@@ -508,6 +578,9 @@ namespace ArkaCallCenter.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<bool>("HasCompletedTour")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
 
@@ -607,6 +680,17 @@ namespace ArkaCallCenter.Infrastructure.Data.Migrations
                     b.Navigation("SmartPhone");
                 });
 
+            modelBuilder.Entity("ArkaCallCenter.Core.Entities.KnowledgeAnswer", b =>
+                {
+                    b.HasOne("ArkaCallCenter.Core.Entities.KnowledgeBase", "KnowledgeBase")
+                        .WithMany("Answers")
+                        .HasForeignKey("KnowledgeBaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("KnowledgeBase");
+                });
+
             modelBuilder.Entity("ArkaCallCenter.Core.Entities.KnowledgeBase", b =>
                 {
                     b.HasOne("ArkaCallCenter.Core.Entities.User", "User")
@@ -642,6 +726,8 @@ namespace ArkaCallCenter.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("ArkaCallCenter.Core.Entities.KnowledgeBase", b =>
                 {
+                    b.Navigation("Answers");
+
                     b.Navigation("Chunks");
                 });
 

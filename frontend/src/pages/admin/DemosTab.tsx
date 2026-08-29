@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { FlaskConical, PlayCircle, Trash2, Video } from 'lucide-react'
+import { ChevronDown, FlaskConical, Plus, PlayCircle, RefreshCw, Save, Trash2, Video } from 'lucide-react'
 import { api, apiError } from '../../lib/api'
 import { Button, Card, Skeleton, TextInput, cn } from '../../components/ui'
 import { toFa } from '../../lib/format'
+import AudioPlayButton from '../../components/AudioPlayButton'
 
 interface Demo {
   id: number
@@ -19,6 +20,138 @@ interface Demo {
 interface Voice {
   name: string
   displayName: string
+}
+
+interface KnowledgeAnswer {
+  id: number
+  question: string
+  answer: string
+  audioStatus: 'Pending' | 'Ready' | 'Failed'
+  audioError?: string | null
+  updatedAt: string
+}
+
+function DemoKnowledgeEditor({ demoId }: { demoId: number }) {
+  const [open, setOpen] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [items, setItems] = useState<KnowledgeAnswer[]>([])
+  const [total, setTotal] = useState(0)
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [fallback, setFallback] = useState('')
+  const [fallbackReady, setFallbackReady] = useState(false)
+  const [fallbackUpdatedAt, setFallbackUpdatedAt] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  async function load(reset = true) {
+    const skip = reset ? 0 : items.length
+    const [answers, fallbackResponse] = await Promise.all([
+      api.get<{ total: number; items: KnowledgeAnswer[] }>(`/api/admin/demos/${demoId}/knowledge-answers`, { params: { skip, take: 100 } }),
+      api.get<{ text?: string | null; audioReady: boolean; updatedAt?: string | null }>(`/api/admin/demos/${demoId}/knowledge-fallback`),
+    ])
+    setItems((current) => reset ? answers.data.items : [...current, ...answers.data.items])
+    setTotal(answers.data.total)
+    setFallback(fallbackResponse.data.text ?? '')
+    setFallbackReady(fallbackResponse.data.audioReady)
+    setFallbackUpdatedAt(fallbackResponse.data.updatedAt ?? null)
+    setLoaded(true)
+  }
+
+  async function toggle() {
+    setOpen((value) => !value)
+    if (!loaded) {
+      setBusy(true)
+      try { await load() } finally { setBusy(false) }
+    }
+  }
+
+  async function add() {
+    if (!question.trim() || !answer.trim()) return setMsg('سؤال و پاسخ را کامل کنید.')
+    setBusy(true); setMsg('')
+    try {
+      await api.post(`/api/admin/demos/${demoId}/knowledge-answers`, { question, answer })
+      setQuestion(''); setAnswer(''); setMsg('سؤال و صوت پاسخ ذخیره شد.'); await load(true)
+    } catch (e) { setMsg(apiError(e)) } finally { setBusy(false) }
+  }
+
+  async function update(item: KnowledgeAnswer) {
+    setBusy(true); setMsg('')
+    try {
+      await api.put(`/api/admin/demos/${demoId}/knowledge-answers/${item.id}`, { question: item.question, answer: item.answer })
+      setMsg('تغییرات و صوت جدید ذخیره شدند.'); await load()
+    } catch (e) { setMsg(apiError(e)) } finally { setBusy(false) }
+  }
+
+  async function remove(id: number) {
+    if (!confirm('این سؤال و پاسخ حذف شود؟')) return
+    setBusy(true)
+    try { await api.delete(`/api/admin/demos/${demoId}/knowledge-answers/${id}`); await load() }
+    catch (e) { setMsg(apiError(e)) } finally { setBusy(false) }
+  }
+
+  async function regenerate(id: number) {
+    setBusy(true); setMsg('')
+    try {
+      await api.post(`/api/admin/demos/${demoId}/knowledge-answers/${id}/regenerate-audio`)
+      setMsg('صوت پاسخ دوباره تولید شد.'); await load()
+    } catch (e) { setMsg(apiError(e)) } finally { setBusy(false) }
+  }
+
+  async function saveFallback() {
+    if (!fallback.trim()) return setMsg('پیام جایگزین نمی‌تواند خالی باشد.')
+    setBusy(true); setMsg('')
+    try {
+      const { data } = await api.put<{ audioReady: boolean; updatedAt?: string | null }>(`/api/admin/demos/${demoId}/knowledge-fallback`, { text: fallback })
+      setFallbackReady(data.audioReady)
+      setFallbackUpdatedAt(data.updatedAt ?? new Date().toISOString())
+      setMsg('پیام جایگزین و صوت آن ذخیره شدند.')
+    } catch (e) { setMsg(apiError(e)) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <button type="button" onClick={toggle} className="flex w-full items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700">
+        پایگاه دانش سؤال و جواب <span className="text-xs font-normal text-slate-400">({toFa(total)} مورد)</span>
+        <ChevronDown size={16} className={cn('mr-auto transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-2 rounded-xl border border-brand-100 bg-brand-50/30 p-3 sm:grid-cols-2">
+            <textarea rows={3} maxLength={500} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="سؤال" className="rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400" />
+            <textarea rows={3} maxLength={4000} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="پاسخ قابل پخش" className="rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400" />
+            <Button className="h-10 sm:col-span-2" onClick={add} loading={busy}><Plus size={15} /> افزودن و تولید صوت</Button>
+          </div>
+          {items.map((item, index) => (
+            <div key={item.id} className="rounded-xl border border-slate-200 p-3">
+              <div className="mb-2 text-xs font-bold text-slate-400">سؤال {toFa(index + 1)}</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <textarea rows={3} value={item.question} onChange={(e) => setItems((all) => all.map((x) => x.id === item.id ? { ...x, question: e.target.value } : x))} className="rounded-xl border border-slate-200 p-3 text-sm" />
+                <textarea rows={3} value={item.answer} onChange={(e) => setItems((all) => all.map((x) => x.id === item.id ? { ...x, answer: e.target.value } : x))} className="rounded-xl border border-slate-200 p-3 text-sm" />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {item.audioStatus === 'Ready' && <AudioPlayButton path={`/api/admin/demos/${demoId}/knowledge-answers/${item.id}/audio?v=${encodeURIComponent(item.updatedAt)}`} />}
+                <Button className="h-9 px-3 text-xs" variant="outline" onClick={() => update(item)} loading={busy}><Save size={14} /> ذخیره</Button>
+                <Button className="h-9 px-3 text-xs" variant="outline" onClick={() => regenerate(item.id)} loading={busy}><RefreshCw size={14} /> بازتولید صوت</Button>
+                <Button className="h-9 px-3 text-xs" variant="danger" onClick={() => remove(item.id)} loading={busy}><Trash2 size={14} /> حذف</Button>
+                {item.audioStatus !== 'Ready' && <span className="text-xs text-rose-600">{item.audioError || 'صوت آماده نیست'}</span>}
+              </div>
+            </div>
+          ))}
+          {total > items.length && <div className="flex justify-center"><Button className="h-9 px-4 text-xs" variant="outline" onClick={() => load(false)} loading={busy}>نمایش موارد بیشتر</Button></div>}
+          <div className="rounded-xl border border-slate-200 p-3">
+            <div className="mb-1.5 text-xs font-bold text-slate-600">پیام سؤال بی‌پاسخ</div>
+            <textarea rows={2} maxLength={1500} value={fallback} onChange={(e) => setFallback(e.target.value)} className="w-full rounded-xl border border-slate-200 p-3 text-sm" />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {fallbackReady && <AudioPlayButton path={`/api/admin/demos/${demoId}/knowledge-fallback/audio?v=${encodeURIComponent(fallbackUpdatedAt ?? 'current')}`} />}
+              <Button className="h-9 px-3 text-xs" variant="outline" onClick={saveFallback} loading={busy}>ذخیره و تولید صوت</Button>
+            </div>
+          </div>
+          {msg && <p className={cn('rounded-xl px-3 py-2 text-xs', msg.includes('ذخیره') ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700')}>{msg}</p>}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function VoiceSelect({ value, onChange, voices }: { value: string; onChange: (v: string) => void; voices: Voice[] }) {
@@ -110,15 +243,7 @@ function DemoRow({ demo, voices, onChanged }: { demo: Demo; voices: Voice[]; onC
             className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400"
           />
         </div>
-        <div className="sm:col-span-2">
-          <span className="mb-1.5 block text-sm font-medium text-slate-700">پایگاه دانش</span>
-          <textarea
-            rows={3}
-            value={d.kbText ?? ''}
-            onChange={(e) => setD({ ...d, kbText: e.target.value })}
-            className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400"
-          />
-        </div>
+        {d.kbText && <div className="sm:col-span-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">پایگاه دانش متنی قبلی حفظ شده است. تماس جدید فقط از سؤال‌وجواب‌های پایین این کارت استفاده می‌کند.</div>}
       </div>
 
       <div className="mt-3 flex gap-3">
@@ -129,6 +254,7 @@ function DemoRow({ demo, voices, onChanged }: { demo: Demo; voices: Voice[]; onC
           حذف
         </Button>
       </div>
+      <DemoKnowledgeEditor demoId={demo.id} />
     </div>
   )
 }
@@ -304,15 +430,7 @@ export default function DemosTab() {
               className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400"
             />
           </div>
-          <div className="sm:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-slate-700">پایگاه دانش</span>
-            <textarea
-              rows={3}
-              value={form.kbText}
-              onChange={(e) => setForm({ ...form, kbText: e.target.value })}
-              className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-brand-400"
-            />
-          </div>
+          <div className="sm:col-span-2 rounded-xl border border-brand-100 bg-brand-50/40 px-4 py-3 text-sm leading-7 text-brand-800">پس از ساخت دمو، سؤال‌وجواب‌های نامحدود و پیام سؤال بی‌پاسخ را از بخش «پایگاه دانش سؤال و جواب» همان دمو اضافه کنید.</div>
         </div>
         <div className="mt-4 flex items-center gap-4">
           <Button onClick={create} loading={creating}>

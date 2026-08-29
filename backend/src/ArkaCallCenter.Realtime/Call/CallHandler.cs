@@ -28,6 +28,8 @@ public class CallHandler
     private readonly string _transcriptionModel;
     private readonly string _transcriptionLanguage;
     private readonly string _transcriptionPrompt;
+    private readonly double _vadThreshold;
+    private readonly int _inputNoiseGateRms;
 
     /// <summary>یک نوبت گفتگو در رونوشت.</summary>
     private record TranscriptTurn(string Role, string Text);
@@ -44,6 +46,8 @@ public class CallHandler
         _transcriptionModel = realtimeOptions.Value.TranscriptionModel;
         _transcriptionLanguage = realtimeOptions.Value.TranscriptionLanguage;
         _transcriptionPrompt = realtimeOptions.Value.TranscriptionPrompt;
+        _vadThreshold = realtimeOptions.Value.VadThreshold;
+        _inputNoiseGateRms = Math.Clamp(realtimeOptions.Value.InputNoiseGateRms, 20, 2000);
         Directory.CreateDirectory(_uploadsPath);
     }
 
@@ -70,7 +74,7 @@ public class CallHandler
 
         using var scope = _scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ArkaDbContext>();
-        var rag = scope.ServiceProvider.GetRequiredService<IRagService>();
+        var knowledge = scope.ServiceProvider.GetRequiredService<IDirectKnowledgeAnswerService>();
 
         var sp = await db.SmartPhones
             .Include(s => s.User)
@@ -87,11 +91,27 @@ public class CallHandler
             return;
         }
 
+        // Chat usage for direct knowledge answering must be attributed to this caller.
+        // The knowledge answer service and usage tracker share this request scope.
+        var usageContext = scope.ServiceProvider.GetRequiredService<IUsageContext>();
+        usageContext.UserId = sp.User.Id;
+        usageContext.PhoneNumber = callerId;
+
         var recorder = new CallRecordingBuffer();
-        using var earlyWelcomeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var welcomePlayedEarly = _welcomeCache.TryGet(extension.Value, out var earlyWelcome);
-        var earlyWelcomeTask = welcomePlayedEarly
-            ? PlayCachedWelcomeAsync(stream, earlyWelcome, extension.Value, callStartedTicks, recorder, earlyWelcomeCts.Token)
+        using var welcomePlaybackCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var hasStaticWelcome = _welcomeCache.TryGet(extension.Value, sp.WelcomeAudioPath, out var staticWelcome);
+
+        // فایل ثابت خوش‌آمد پیش از اتصال به OpenAI پخش می‌شود. در این بازه صدای ورودی
+        // تماس‌گیرنده خوانده و دور ریخته می‌شود؛ بنابراین نه به VAD می‌رسد و نه می‌تواند
+        // پیام خوش‌آمد را قطع یا به‌عنوان نوبت مکالمه ثبت کند.
+        var welcomePlaybackTask = hasStaticWelcome
+            ? PlayStaticWelcomeWithoutVadAsync(
+                stream,
+                staticWelcome,
+                extension.Value,
+                callStartedTicks,
+                recorder,
+                welcomePlaybackCts.Token)
             : Task.CompletedTask;
 
         // A single settings query avoids several sequential database round trips before
@@ -119,15 +139,10 @@ public class CallHandler
         int GetIntSetting(string key, int fallback)
             => int.TryParse(GetSetting(key), out var value) ? value : fallback;
 
-        const string defaultFallback = "پاسخ این سوال در پایگاه دانش من موجود نیست.";
-        var fallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
-        var welcome = sp.WelcomeMessageText ?? "سلام، بفرمایید.";
+        const string defaultFallback = ConversationMessages.UnknownKnowledge;
+        var configuredFallback = GetSetting(SettingKeys.FallbackMessageText, defaultFallback) ?? defaultFallback;
+        var fallback = ConversationMessages.EnsureOperatorEscalation(configuredFallback);
         var voice = sp.User.VoiceName ?? GetSetting(SettingKeys.DefaultVoiceName, "alloy") ?? "alloy";
-        byte[]? cachedWelcome = welcomePlayedEarly ? earlyWelcome : null;
-        if (cachedWelcome is null && _welcomeCache.TrySet(extension.Value, sp.WelcomeAudioPath))
-        {
-            _welcomeCache.TryGet(extension.Value, out cachedWelcome);
-        }
         // درصدِ دقت/پایبندی به پایگاه دانش (۱۰..۱۰۰). چون Realtime GA دیگر temperature ندارد،
         // این پارامتر از طریقِ instructions (پرامپت) به مدل منتقل می‌شود؛ درصدِ بالاتر = پایبندیِ سخت‌گیرانه‌تر.
         var accuracy = Math.Clamp(sp.AnswerAccuracyPercent <= 0 ? 70 : sp.AnswerAccuracyPercent, 10, 100);
@@ -141,8 +156,8 @@ public class CallHandler
         {
             _logger.LogInformation("Ext {Ext}: minute limit already reached ({Used}/{Limit}); rejecting call.",
                 extension, alreadyUsedMinutes, limitMinutes);
-            earlyWelcomeCts.Cancel();
-            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
+            welcomePlaybackCts.Cancel();
+            try { await welcomePlaybackTask; } catch (OperationCanceledException) { }
             return;
         }
 
@@ -161,29 +176,32 @@ public class CallHandler
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("OpenAI API key not configured; cannot handle realtime call.");
-            earlyWelcomeCts.Cancel();
-            try { await earlyWelcomeTask; } catch (OperationCanceledException) { }
+            welcomePlaybackCts.Cancel();
+            try { await welcomePlaybackTask; } catch (OperationCanceledException) { }
             return;
         }
 
         var recordingEnabled = GetSetting(SettingKeys.CallRecordingEnabled, "true") != "false";
 
-        var instructions = BuildInstructions(sp.User.BrandName, fallback, accuracy);
+        var instructions = BuildInstructions(sp.User.BrandName, accuracy);
         var turns = new List<TranscriptTurn>();
         var turnsLock = new object();   // turns از رشته‌ی حلقه‌ی دریافت پر می‌شود و در پایان از رشته‌ی اصلی خوانده می‌شود.
+        var conversationMemory = new List<DirectKnowledgeConversationTurn>();
+        var conversationMemoryLock = new object(); // حافظهٔ کوتاه و مجزای همین تماس برای سؤال‌های پیرو.
         var asstBuf = new StringBuilder();
         var unanswered = new List<string>();   // سوالاتی که پاسخشان در KB نبود (fallback پخش شد).
-        var answeredFromKb = true;
+        var answeredFromKb = false;
+        long inputFrames = 0, noiseGatedFrames = 0;
         long usagePrompt = 0, usageCompletion = 0, usageTotal = 0;
         var userSpeaking = 0;
         var lastSpeechTicks = Stopwatch.GetTimestamp();
         CancellationTokenSource? pendingTurnCts = null;
         var pendingTurnLock = new object();
         var pendingTurns = new List<Task>();
-        using var ragGate = new SemaphoreSlim(1, 1);
+        using var knowledgeGate = new SemaphoreSlim(1, 1);
 
         await using var realtime = new OpenAiRealtimeClient(apiKey!, baseUrl, model,
-            _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _logger);
+            _transcriptionModel, _transcriptionLanguage, _transcriptionPrompt, _vadThreshold, _logger);
 
         realtime.OnUsage += (p, c, t) =>
         {
@@ -205,7 +223,7 @@ public class CallHandler
         var outHead = 0;                            // آفست خواندن در اولین قطعه‌ی صف
         var thinking = 0;                           // ۱ = کاربر حرفش تمام شده، منتظر پاسخ AI
         var holdPos = 0;                            // موقعیت پخش موسیقی انتظار (لوپ)
-        var firstAudioLogged = welcomePlayedEarly ? 1 : 0;
+        var firstAudioLogged = hasStaticWelcome ? 1 : 0;
 
         void EnqueueOut(byte[] slin) { lock (outLock) outChunks.AddLast(slin); }
 
@@ -321,6 +339,13 @@ public class CallHandler
         realtime.OnAssistantText += text => { asstBuf.Append(text); return Task.CompletedTask; };
         realtime.OnUserTranscript += text =>
         {
+            if (!ConversationTurnClassifier.HasMeaningfulInput(text))
+            {
+                Volatile.Write(ref thinking, 0);
+                _logger.LogInformation("Ignoring empty/non-lexical transcript on ext {Ext}.", extension);
+                return Task.CompletedTask;
+            }
+
             if (!string.IsNullOrWhiteSpace(text))
             {
                 var question = text.Trim();
@@ -343,56 +368,172 @@ public class CallHandler
                     turnCts = pendingTurnCts;
                 }
 
-                var task = AnswerGroundedAsync(question, turnCts.Token);
+                var task = AnswerFromKnowledgeAsync(question, turnCts.Token);
                 lock (pendingTurnLock) pendingTurns.Add(task);
             }
             return Task.CompletedTask;
         };
 
-        async Task AnswerGroundedAsync(string question, CancellationToken turnCt)
+        async Task AnswerFromKnowledgeAsync(string question, CancellationToken turnCt)
         {
-            var unansweredRecorded = false;
             try
             {
-                await ragGate.WaitAsync(turnCt);
-                RagAnswer result;
-                try { result = await rag.RetrieveAsync(sp.User.Id, question, turnCt); }
-                finally { ragGate.Release(); }
-                if (!result.Found)
+                if (ConversationTurnClassifier.TryCreateBusinessIdentityResponse(
+                        question,
+                        sp.User.BrandName,
+                        out var identityResponse))
                 {
-                    answeredFromKb = false;
-                    lock (turnsLock) unanswered.Add(question);
-                    unansweredRecorded = true;
+                    _logger.LogInformation(
+                        "Answering business identity question for ext {Ext}: {Question}",
+                        extension,
+                        question);
+                    await realtime.CreateConversationalResponseAsync(identityResponse, turnCt);
+                    RememberConversationTurn(question, identityResponse);
+                    return;
                 }
-                await realtime.CreateGroundedResponseAsync(question, result.Found ? result.Context : null, fallback, turnCt);
+
+                if (ConversationTurnClassifier.TryCreateResponse(question, out var conversationalResponse))
+                {
+                    _logger.LogInformation(
+                        "Handling conversational turn without knowledge AI for ext {Ext}: {Question}",
+                        extension,
+                        question);
+                    await realtime.CreateConversationalResponseAsync(conversationalResponse, turnCt);
+                    RememberConversationTurn(question, conversationalResponse);
+                    return;
+                }
+
+                await knowledgeGate.WaitAsync(turnCt);
+                DirectKnowledgeAnswer result;
+                IReadOnlyList<DirectKnowledgeConversationTurn> historySnapshot;
+                lock (conversationMemoryLock)
+                    historySnapshot = conversationMemory.ToArray();
+                try
+                {
+                    result = await knowledge.AnswerAsync(
+                        sp.User.Id,
+                        question,
+                        accuracy,
+                        historySnapshot,
+                        turnCt);
+                }
+                finally { knowledgeGate.Release(); }
+
+                switch (result.Outcome)
+                {
+                    case DirectKnowledgeOutcome.Answered:
+                        if (string.IsNullOrWhiteSpace(result.AnswerText))
+                            throw new InvalidOperationException("Direct knowledge answer was empty.");
+                        answeredFromKb = true;
+                        _logger.LogInformation(
+                            "Answering from the complete knowledge base for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(result.AnswerText, turnCt);
+                        RememberConversationTurn(question, result.AnswerText);
+                        return;
+
+                    case DirectKnowledgeOutcome.NeedsClarification:
+                        _logger.LogInformation(
+                            "Asking for clarification on a contextual follow-up for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.FollowUpClarification,
+                            turnCt);
+                        RememberConversationTurn(question, ConversationMessages.FollowUpClarification);
+                        return;
+
+                    case DirectKnowledgeOutcome.OutOfDomain:
+                        var scopeResponse = ConversationMessages.CreateOutOfDomain(
+                            sp.User.BrandName,
+                            result.ScopeDescription);
+                        _logger.LogInformation(
+                            "Answering out-of-domain question without knowledge fallback for ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(scopeResponse, turnCt);
+                        RememberConversationTurn(question, scopeResponse);
+                        return;
+
+                    case DirectKnowledgeOutcome.InDomainUnknown:
+                    case DirectKnowledgeOutcome.KnowledgeBaseEmpty:
+                        lock (turnsLock) unanswered.Add(question);
+                        _logger.LogInformation(
+                            "No grounded answer for in-domain question on ext {Ext}: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(fallback, turnCt);
+                        RememberConversationTurn(question, fallback);
+                        return;
+
+                    case DirectKnowledgeOutcome.KnowledgeBaseTooLarge:
+                        _logger.LogWarning(
+                            "Complete knowledge base exceeds the safe direct-context limit for ext {Ext}; not recording as unanswered: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.RetrievalUnavailable,
+                            turnCt);
+                        return;
+
+                    case DirectKnowledgeOutcome.ServiceUnavailable:
+                        _logger.LogWarning(
+                            "Direct knowledge answering unavailable for ext {Ext}; not recording as unanswered: {Question}",
+                            extension,
+                            question);
+                        await realtime.CreateConversationalResponseAsync(
+                            ConversationMessages.RetrievalUnavailable,
+                            turnCt);
+                        return;
+
+                    default:
+                        throw new InvalidOperationException($"Unsupported direct knowledge outcome: {result.Outcome}");
+                }
             }
             catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
             catch (Exception ex)
             {
-                answeredFromKb = false;
-                if (!unansweredRecorded)
-                    lock (turnsLock) unanswered.Add(question);
-                _logger.LogWarning(ex, "RAG retrieval failed for ext {Ext}; using fallback.", extension);
-                try { await realtime.CreateGroundedResponseAsync(question, null, fallback, turnCt); }
+                _logger.LogWarning(ex,
+                    "Direct knowledge answering failed for ext {Ext}; reporting a temporary problem without marking the question unanswered.",
+                    extension);
+                try
+                {
+                    await realtime.CreateConversationalResponseAsync(
+                        ConversationMessages.RetrievalUnavailable,
+                        turnCt);
+                }
                 catch (OperationCanceledException) when (turnCt.IsCancellationRequested) { }
             }
         }
 
-        // پمپ را از همان ابتدا (پیش از اتصال به OpenAI) شروع کن تا سکوت بلافاصله به
-        // Asterisk جاری شود و در طول هندشیک WebSocket هم اتصال زنده بماند.
-        if (!welcomePlayedEarly && cachedWelcome is { Length: > 0 })
-            EnqueueOut(cachedWelcome);
+        void RememberConversationTurn(string userText, string assistantText)
+        {
+            lock (conversationMemoryLock)
+            {
+                conversationMemory.Add(new DirectKnowledgeConversationTurn("user", userText));
+                conversationMemory.Add(new DirectKnowledgeConversationTurn("assistant", assistantText));
+                // سرویس دانش نیز تاریخچه را محدود می‌کند؛ این برش زودهنگام مانع رشد حافظهٔ تماس می‌شود.
+                if (conversationMemory.Count > 6)
+                    conversationMemory.RemoveRange(0, conversationMemory.Count - 6);
+            }
+        }
+
         Task pumpTask = Task.CompletedTask;
         var sw = Stopwatch.StartNew();
         var startedAt = DateTime.UtcNow;
         try
         {
-            var connectTask = realtime.ConnectAsync(instructions, voice, ct);
-            await earlyWelcomeTask;
+            // VAD فقط پس از پایان کامل فایل ثابت خوش‌آمد فعال می‌شود.
+            await welcomePlaybackTask;
+            if (hasStaticWelcome)
+                _logger.LogInformation(
+                    "Static welcome playback completed before Realtime/VAD connection for ext {Ext}.",
+                    extension);
             pumpTask = PumpAsync();
-            await connectTask;
-            if (cachedWelcome is not { Length: > 0 })
-                await realtime.GreetAsync(welcome, ct);
+            if (!hasStaticWelcome)
+                _logger.LogWarning("Ext {Ext} has no valid static welcome WAV; continuing without greeting.", extension);
+            await realtime.ConnectAsync(instructions, voice, ct);
 
             while (!ct.IsCancellationRequested)
             {
@@ -418,7 +559,12 @@ public class CallHandler
                 {
                     // ضبط روی clock پخش انجام می‌شود تا صدای caller و AI روی یک timeline باشند.
                     recorder.EnqueueInbound(frame.Value.Payload);
-                    var pcm24k = AudioResampler.Upsample8kTo24k(frame.Value.Payload);
+                    Interlocked.Increment(ref inputFrames);
+                    var isLowLevelNoise = AudioPostProcess.IsSilentFrame(frame.Value.Payload, _inputNoiseGateRms);
+                    if (isLowLevelNoise) Interlocked.Increment(ref noiseGatedFrames);
+                    var pcm24k = isLowLevelNoise
+                        ? new byte[frame.Value.Payload.Length * 3]
+                        : AudioResampler.Upsample8kTo24k(frame.Value.Payload);
                     await realtime.AppendAudioAsync(pcm24k, ct);
                 }
             }
@@ -442,7 +588,7 @@ public class CallHandler
             lock (pendingTurnLock) pendingSnapshot = pendingTurns.ToArray();
             try { await Task.WhenAll(pendingSnapshot); }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { _logger.LogWarning(ex, "Pending RAG response failed during call shutdown."); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Pending knowledge response failed during call shutdown."); }
         }
 
         // ذخیره‌ی فایل ضبط‌شده (WAV ۸kHz)
@@ -475,6 +621,12 @@ public class CallHandler
             ? System.Text.Json.JsonSerializer.Serialize(unansweredSnapshot)
             : null;
         var durationSeconds = (int)sw.Elapsed.TotalSeconds;
+        _logger.LogInformation(
+            "Input noise gate on ext {Ext}: gated {GatedFrames} of {InputFrames} frames (RMS threshold {Threshold}).",
+            extension,
+            Interlocked.Read(ref noiseGatedFrames),
+            Interlocked.Read(ref inputFrames),
+            _inputNoiseGateRms);
         await LogCallAsync(sp.Id, callerId, startedAt, durationSeconds, answeredFromKb, transcriptJson, unansweredJson, recordingPath);
 
         // افزودن دقایق مصرف‌شده به کاربر (هر تماس به بالاترین دقیقه گرد می‌شود؛ مثل صورتحساب مخابراتی).
@@ -486,6 +638,41 @@ public class CallHandler
         {
             await RecordUsageAsync(sp.User.Id, sp.User.PhoneNumber, model, apiKey!,
                 (int)usagePrompt, (int)usageCompletion, (int)usageTotal);
+        }
+    }
+
+    private async Task PlayStaticWelcomeWithoutVadAsync(
+        NetworkStream stream,
+        byte[] slin8k,
+        int extension,
+        long startedTicks,
+        CallRecordingBuffer recorder,
+        CancellationToken ct)
+    {
+        using var discardCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var discardTask = DiscardInboundDuringWelcomeAsync(stream, discardCts.Token);
+        try
+        {
+            await PlayCachedWelcomeAsync(stream, slin8k, extension, startedTicks, recorder, ct);
+        }
+        finally
+        {
+            discardCts.Cancel();
+            try { await discardTask; }
+            catch (OperationCanceledException) { }
+            catch (IOException) when (discardCts.IsCancellationRequested) { }
+            catch (System.Net.Sockets.SocketException) when (discardCts.IsCancellationRequested) { }
+        }
+    }
+
+    private static async Task DiscardInboundDuringWelcomeAsync(NetworkStream stream, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var frame = await AudioSocketProtocol.ReadFrameAsync(stream, ct);
+            if (frame is null || frame.Value.Kind == AudioSocketProtocol.KindHangup)
+                return;
+            // Audio frames during the fixed welcome are intentionally discarded.
         }
     }
 
@@ -547,22 +734,20 @@ public class CallHandler
         }
     }
 
-    private static string BuildInstructions(string? brand, string fallback, int accuracyPercent)
+    private static string BuildInstructions(string? brand, int accuracyPercent)
     {
-        // «دقتِ پاسخ‌ها» (۱۰..۱۰۰) via پرامپت اعمال می‌شود چون Realtime GA دیگر temperature ندارد.
-        var faithfulness = accuracyPercent switch
+        var readingStyle = accuracyPercent switch
         {
-            >= 80 => "پایبندیِ تو باید بسیار سخت‌گیرانه باشد: فقط از پایگاه دانش استفاده کن، هیچ حدس، برداشت یا افزوده‌ی شخصی نزن، و در کوچک‌ترین تردید همان جمله‌ی بالا را بگو.",
-            >= 40 => "عمدتاً بر اساس پایگاه دانش پاسخ بده؛ اگر موضوع خیلی نزدیک بود می‌توانی مختصر توضیح دهی، اما از اطلاعاتِ نامطمئن و حدس پرهیز کن.",
-            _ => "اولویت با پایگاه دانش است، اما برای روان‌تر شدنِ گفتگو می‌توانی کمی از دانشِ عمومی و خلاقیت هم کمک بگیری؛ با این حال هرگز چیزی خلافِ پایگاه دانش نگو.",
+            >= 80 => "متن تأییدشده را دقیق، شمرده و بدون افزودن توضیح دیگر بخوان.",
+            >= 40 => "متن تأییدشده را روان و طبیعی، بدون تغییر معنا بخوان.",
+            _ => "متن تأییدشده را کاملاً محاوره‌ای اما بدون افزودن اطلاعات جدید بخوان.",
         };
         return $"""
         تو دستیار صوتی هوشمند برند «{brand}» هستی و به فارسی، مؤدب و کوتاه پاسخ می‌دهی.
         با فارسی معیار ایران، کاملاً روان و طبیعی و بدون لهجه انگلیسی صحبت کن؛ از مکث‌های غیرضروری پرهیز کن.
-        برای هر نوبت، قطعه مرتبط پایگاه دانش جداگانه در دستور همان پاسخ در اختیارت قرار می‌گیرد.
-        فقط بر اساس همان قطعه پاسخ بده. اگر قطعه‌ای ارائه نشد یا پاسخ روشن در آن نبود، دقیقاً و بدون تغییر
-        این جمله را بگو: «{fallback}» و چیز دیگری اضافه نکن.
-        میزانِ پایبندی به پایگاه دانش: {faithfulness}
+        سامانه پیش از هر پاسخ، کل پایگاه دانش را جداگانه بررسی و پاسخ نهایی را تأیید می‌کند.
+        هرگاه متن تأییدشده در دستور پاسخ ارائه شد، فقط همان متن را بخوان و هیچ اطلاعاتی از حافظه یا دانش عمومی اضافه نکن.
+        سبک خواندن: {readingStyle}
         """;
     }
 

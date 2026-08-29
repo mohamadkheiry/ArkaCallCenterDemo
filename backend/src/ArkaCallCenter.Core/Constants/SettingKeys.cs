@@ -11,15 +11,29 @@ public static class SettingKeys
     public const string OpenAiTtsModel = "openai.ttsModel";
     public const string OpenAiChatModel = "openai.chatModel";           // برای moderation و ابزارهای متنی
 
+    // GapGPT + Whisper — مسیر غیر Realtime برای دموهای سؤال‌وجواب
+    public const string GapGptBaseUrl = "gapgpt.baseUrl";
+    public const string GapGptApiKey = "gapgpt.apiKey";                 // secret
+    public const string GapGptCleanerModel = "gapgpt.cleanerModel";
+    public const string GapGptTtsModel = "gapgpt.ttsModel";
+    public const string GapGptTtsVoice = "gapgpt.ttsVoice";
+    public const string GapGptFallbackTtsModel = "gapgpt.fallbackTtsModel";
+    public const string GapGptFallbackTtsVoice = "gapgpt.fallbackTtsVoice";
+    public const string WhisperBaseUrl = "whisper.baseUrl";
+    public const string WhisperModel = "whisper.model";
+    public const string WhisperLanguage = "whisper.language";
+
     // SMS.ir
     public const string SmsIrApiKey = "smsir.apiKey";                   // secret
     public const string SmsIrLineNumber = "smsir.lineNumber";           // برای پیامک‌های bulk رویدادها
     public const string SmsIrVerifyTemplateId = "smsir.verifyTemplateId"; // قالب ارسال کد تأیید (/send/verify)
 
-    // CRM فروش (ExternalEndpoint/InsertContactUs) — ثبتِ لیدِ کاربرانِ دمو
+    // CRM فروش (ContactUs/InsertContactUsByAdmin) — ثبتِ لیدِ کاربرانِ دمو
     public const string CrmEnabled = "crm.enabled";                     // "true"/"false"
     public const string CrmBaseUrl = "crm.baseUrl";                     // مثلاً https://api.arkadp.com
-    public const string CrmApiKey = "crm.apiKey";                       // secret (هدر X-Api-Key)
+    public const string CrmUsername = "crm.username";
+    public const string CrmPassword = "crm.password";                   // secret (برای گرفتن Bearer token)
+    public const string CrmApiKey = "crm.apiKey";                       // legacy secret؛ فقط برای rollback
     public const string CrmEmailDomain = "crm.emailDomain";             // دامنه‌ی ایمیلِ ساختگی از روی شماره
 
     // کانال بله (Bale) — اطلاع‌رسانیِ کاربرانِ جدیدِ دمو در کانال

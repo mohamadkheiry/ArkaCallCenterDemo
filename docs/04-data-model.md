@@ -9,7 +9,7 @@ erDiagram
     User ||--o{ OtpCode : "درخواست می‌کند"
     User ||--o{ TokenUsage : "مصرف دارد"
     SmartPhone ||--o{ CallSession : "میزبانِ تماس"
-    KnowledgeBase ||--o{ KnowledgeChunk : "تکه‌های نمایه"
+    KnowledgeBase ||--o{ KnowledgeChunk : "legacy rollback؛ خارج از مسیر تماس"
 
     User {
         int Id PK
@@ -51,8 +51,8 @@ erDiagram
     KnowledgeChunk {
         int Id PK
         int KnowledgeBaseId FK
-        string Content
-        string EmbeddingJson
+        string Content "legacy rollback"
+        string EmbeddingJson "legacy rollback"
     }
 
     CallSession {
@@ -91,6 +91,8 @@ erDiagram
         string Value
     }
 ```
+
+> `KnowledgeChunk` برای سازگاری و rollback نسخه‌های قدیمی حفظ شده است. مسیر فعلی تماس مستقیماً `KnowledgeBase.RawText` تأییدشده را به segmentهای request-local تبدیل می‌کند و این جدول را نمی‌خواند.
 
 ## نکات کلیدی
 

@@ -84,6 +84,12 @@ public class AsteriskProvisioningService : IAsteriskProvisioningService
 
     public Task<string?> UploadSoundAsync(byte[] wavBytes, string soundName, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(soundName) ||
+            soundName.Any(ch => !(char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_')))
+        {
+            _logger.LogWarning("Rejected unsafe Asterisk sound name.");
+            return Task.FromResult<string?>(null);
+        }
         var creds = Creds();
         if (creds is null)
         {
@@ -100,12 +106,12 @@ public class AsteriskProvisioningService : IAsteriskProvisioningService
                 ssh.RunCommand($"mkdir -p {SoundsDir} && chown -R asterisk:asterisk {SoundsDir} 2>/dev/null || true");
                 ssh.Disconnect();
             }
-            using (var scp = new ScpClient(host, user, pass))
+            using (var sftp = new SftpClient(host, user, pass))
             {
-                scp.Connect();
+                sftp.Connect();
                 using var ms = new MemoryStream(wavBytes);
-                scp.Upload(ms, remotePath);
-                scp.Disconnect();
+                sftp.UploadFile(ms, remotePath, canOverride: true);
+                sftp.Disconnect();
             }
             // نام sound برای dialplan (بدون پسوند)
             return Task.FromResult<string?>($"arka/{soundName}");

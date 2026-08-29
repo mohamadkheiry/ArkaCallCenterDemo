@@ -15,19 +15,17 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     private readonly ArkaDbContext _db;
     private readonly IFileTextExtractor _extractor;
     private readonly IModerationService _moderation;
-    private readonly IRagService _rag;
     private readonly ISmsEventDispatcher _sms;
     private readonly ILogger<KnowledgeBaseService> _logger;
     private readonly string _uploadsPath;
 
     public KnowledgeBaseService(
         ArkaDbContext db, IFileTextExtractor extractor, IModerationService moderation,
-        IRagService rag, ISmsEventDispatcher sms, IConfiguration config, ILogger<KnowledgeBaseService> logger)
+        ISmsEventDispatcher sms, IConfiguration config, ILogger<KnowledgeBaseService> logger)
     {
         _db = db;
         _extractor = extractor;
         _moderation = moderation;
-        _rag = rag;
         _sms = sms;
         _logger = logger;
         _uploadsPath = config["Storage:UploadsPath"] ?? Path.Combine(AppContext.BaseDirectory, "uploads");
@@ -66,9 +64,9 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         kb.ModerationStatus = ModerationStatus.Approved;
         kb.ModerationReason = null;
         kb.UpdatedAt = DateTime.UtcNow;
+        await RemoveLegacyChunksAsync(kb.Id, ct);
         await _db.SaveChangesAsync(ct);
 
-        await _rag.IndexAsync(kb, ct);
         await NotifyUpdatedAsync(userId, ct);
         return new KbResult(true, null, kb);
     }
@@ -106,6 +104,14 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             return new KbResult(false, "متنی از فایل استخراج نشد.", null);
         }
 
+        if (extracted.Length > KbLimits.MaxDirectKnowledgeChars)
+        {
+            TryDelete(storedPath);
+            return new KbResult(false,
+                $"متن استخراج‌شده از فایل باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
+        }
+
         var mod = await _moderation.CheckAsync(extracted, ct);
         if (!mod.Allowed)
         {
@@ -118,6 +124,14 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         // پس از تأیید: اعدادِ داخلِ متن به حروفِ فارسیِ اعراب‌دار تبدیل می‌شوند تا AI درست تلفظشان کند.
         extracted = PersianNumberWords.Convert(extracted);
 
+        if (extracted.Length > KbLimits.MaxDirectKnowledgeChars)
+        {
+            TryDelete(storedPath);
+            return new KbResult(false,
+                $"متن نهایی پایگاه دانش باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
+        }
+
         var kb = await UpsertAsync(userId, ct);
         DeleteFileIfAny(kb);
         kb.SourceType = KbSourceType.File;
@@ -129,9 +143,9 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         kb.ModerationStatus = ModerationStatus.Approved;
         kb.ModerationReason = null;
         kb.UpdatedAt = DateTime.UtcNow;
+        await RemoveLegacyChunksAsync(kb.Id, ct);
         await _db.SaveChangesAsync(ct);
 
-        await _rag.IndexAsync(kb, ct);
         await NotifyUpdatedAsync(userId, ct);
         return new KbResult(true, null, kb);
     }
@@ -155,9 +169,19 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         {
             kb = new KnowledgeBase { UserId = userId };
             _db.KnowledgeBases.Add(kb);
-            await _db.SaveChangesAsync(ct); // نیاز به Id برای indexing
+            await _db.SaveChangesAsync(ct); // The persisted Id is needed by callers and related records.
         }
         return kb;
+    }
+
+    private async Task RemoveLegacyChunksAsync(int knowledgeBaseId, CancellationToken ct)
+    {
+        if (knowledgeBaseId <= 0) return;
+        var staleChunks = await _db.KnowledgeChunks
+            .Where(chunk => chunk.KnowledgeBaseId == knowledgeBaseId)
+            .ToListAsync(ct);
+        if (staleChunks.Count > 0)
+            _db.KnowledgeChunks.RemoveRange(staleChunks);
     }
 
     private void DeleteFileIfAny(KnowledgeBase kb)

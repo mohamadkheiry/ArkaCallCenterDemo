@@ -19,18 +19,16 @@ public class DemoService : IDemoService
 
     private readonly ArkaDbContext _db;
     private readonly IAsteriskProvisioningService _asterisk;
-    private readonly IRagService _rag;
     private readonly IOpenAiService _openai;
     private readonly ISettingsService _settings;
     private readonly ILogger<DemoService> _logger;
     private readonly string _uploadsPath;
 
     public DemoService(ArkaDbContext db, IAsteriskProvisioningService asterisk,
-        IRagService rag, IOpenAiService openai, ISettingsService settings, IConfiguration config, ILogger<DemoService> logger)
+        IOpenAiService openai, ISettingsService settings, IConfiguration config, ILogger<DemoService> logger)
     {
         _db = db;
         _asterisk = asterisk;
-        _rag = rag;
         _openai = openai;
         _settings = settings;
         _logger = logger;
@@ -54,6 +52,11 @@ public class DemoService : IDemoService
     {
         if (string.IsNullOrWhiteSpace(label))
             return new DemoResult(false, "نام دمو الزامی است.", null);
+
+        if ((kbText ?? "").Trim().Length > KbLimits.MaxDirectKnowledgeChars)
+            return new DemoResult(false,
+                $"پایگاه دانش دمو باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
 
         if (extension is < DemoExtensionMin or > DemoExtensionMax)
             return new DemoResult(false, "شماره داخلی دمو باید بین ۱ تا ۹۹۹ باشد.", null);
@@ -110,8 +113,6 @@ public class DemoService : IDemoService
             return new DemoResult(false, $"داخلی {extension} آزاد نیست؛ یک شمارهٔ دیگر انتخاب کنید.", null);
         }
 
-        await TryIndexAsync(kb, ct);
-
         await TryWelcomeAudioAsync(user, sp, ct);
 
         var provision = await _asterisk.ProvisionExtensionAsync(extension, secret, ct);
@@ -128,7 +129,15 @@ public class DemoService : IDemoService
             .FirstOrDefaultAsync(u => u.Id == id && u.IsDemo, ct);
         if (user is null) return new DemoResult(false, "دمو یافت نشد.", null);
 
+        if (kbText is not null && kbText.Trim().Length > KbLimits.MaxDirectKnowledgeChars)
+            return new DemoResult(false,
+                $"پایگاه دانش دمو باید حداکثر {KbLimits.MaxDirectKnowledgeChars:N0} کاراکتر باشد.",
+                null);
+
         if (label is not null) { user.DemoLabel = label.Trim(); user.BrandName = label.Trim(); }
+        var previousVoice = user.VoiceName;
+        var previousWelcome = user.SmartPhone?.WelcomeMessageText;
+        var voiceChanged = voice is not null && !string.Equals(user.VoiceName, voice, StringComparison.Ordinal);
         if (voice is not null) user.VoiceName = voice;
         if (minuteLimit.HasValue) user.CallMinuteLimit = minuteLimit;
         if (isActive.HasValue)
@@ -141,7 +150,22 @@ public class DemoService : IDemoService
         if (welcomeText is not null && user.SmartPhone is not null)
         {
             user.SmartPhone.WelcomeMessageText = welcomeText.Trim();
-            await TryWelcomeAudioAsync(user, user.SmartPhone, ct);
+            if (!await TryWelcomeAudioAsync(user, user.SmartPhone, ct))
+            {
+                user.VoiceName = previousVoice;
+                user.SmartPhone.WelcomeMessageText = previousWelcome;
+                return new DemoResult(false, "تولید پیام خوش‌آمد با تنظیمات جدید انجام نشد؛ مقادیر قبلی حفظ شدند.", null);
+            }
+        }
+        else if (voiceChanged && user.SmartPhone is not null &&
+                 !string.IsNullOrWhiteSpace(user.SmartPhone.WelcomeMessageText))
+        {
+            // ویرایش صرفِ گوینده نیز باید پیام خوش‌آمد موجود را با صدای جدید بازتولید کند.
+            if (!await TryWelcomeAudioAsync(user, user.SmartPhone, ct))
+            {
+                user.VoiceName = previousVoice;
+                return new DemoResult(false, "تولید پیام خوش‌آمد با گوینده جدید انجام نشد؛ گوینده قبلی حفظ شد.", null);
+            }
         }
 
         if (kbText is not null)
@@ -151,8 +175,15 @@ public class DemoService : IDemoService
             user.KnowledgeBase.RawText = kbText.Trim();
             user.KnowledgeBase.CharCount = kbText.Trim().Length;
             user.KnowledgeBase.ModerationStatus = ModerationStatus.Approved;
+            if (user.KnowledgeBase.Id > 0)
+            {
+                var staleChunks = await _db.KnowledgeChunks
+                    .Where(chunk => chunk.KnowledgeBaseId == user.KnowledgeBase.Id)
+                    .ToListAsync(ct);
+                if (staleChunks.Count > 0)
+                    _db.KnowledgeChunks.RemoveRange(staleChunks);
+            }
             await _db.SaveChangesAsync(ct);
-            await TryIndexAsync(user.KnowledgeBase, ct);
         }
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -191,25 +222,56 @@ public class DemoService : IDemoService
         u.SmartPhone?.WelcomeMessageText, u.KnowledgeBase?.RawText,
         u.VoiceName, u.CallMinuteLimit, u.UsedMinutes, u.IsActive);
 
-    private async Task TryIndexAsync(KnowledgeBase kb, CancellationToken ct)
+    private async Task<bool> TryWelcomeAudioAsync(User user, SmartPhone sp, CancellationToken ct)
     {
-        try { if (!string.IsNullOrWhiteSpace(kb.RawText)) await _rag.IndexAsync(kb, ct); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Demo KB indexing failed (OpenAI key?)"); }
-    }
-
-    private async Task TryWelcomeAudioAsync(User user, SmartPhone sp, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(sp.WelcomeMessageText)) return;
+        if (string.IsNullOrWhiteSpace(sp.WelcomeMessageText)) return true;
         try
         {
             var voice = user.VoiceName ?? await _settings.GetAsync(SettingKeys.DefaultVoiceName, "alloy", ct) ?? "alloy";
             // WAV avoids MP3 decoding and lets the realtime worker play the greeting immediately.
             var audio = await _openai.TextToSpeechAsync(sp.WelcomeMessageText, voice, "wav", ct);
-            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}.wav");
-            await File.WriteAllBytesAsync(path, audio, ct);
+            var path = Path.Combine(_uploadsPath, $"welcome_demo_{user.Id}_{Guid.NewGuid():N}.wav");
+            var oldPath = sp.WelcomeAudioPath;
+            await WriteAtomicallyAsync(path, audio, ct);
             sp.WelcomeAudioPath = path;
+            await _db.SaveChangesAsync(ct);
+            TryDeleteWelcomeFile(oldPath);
+            return true;
         }
-        catch (Exception ex) { _logger.LogWarning(ex, "Demo welcome TTS failed."); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Demo welcome TTS failed.");
+            return false;
+        }
+    }
+
+    private static async Task WriteAtomicallyAsync(string path, byte[] audio, CancellationToken ct)
+    {
+        var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, audio, ct);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+        }
+    }
+
+    private void TryDeleteWelcomeFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var uploadsRoot = Path.GetFullPath(_uploadsPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(fullPath))
+                File.Delete(fullPath);
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not remove superseded demo welcome {Path}.", path); }
     }
 
     private static string GenerateSecret()
