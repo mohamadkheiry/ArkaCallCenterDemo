@@ -52,14 +52,18 @@ export default function VoicePage() {
       <div>
         <h1 className="text-2xl font-extrabold text-slate-800">صدای گوینده</h1>
         <p className="mt-1 text-sm text-slate-500">
-          گوینده‌ای که هوش مصنوعی با آن به تماس‌گیرندگان پاسخ می‌دهد را انتخاب کنید.
+          گوینده‌ای که هوش مصنوعی با آن به تماس‌گیرندگان پاسخ می‌دهد را انتخاب
+          کنید.
         </p>
       </div>
 
       <div className="stagger grid gap-3 sm:grid-cols-2">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 p-4 shadow-soft">
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/85 p-4 shadow-soft"
+              >
                 <Skeleton className="h-10 w-10 rounded-xl" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-3.5 w-24" />
@@ -68,48 +72,66 @@ export default function VoicePage() {
               </div>
             ))
           : voices.map((v) => (
-          <button
-            key={v.name}
-            onClick={() => setSelected(v.name)}
-            className={cn(
-              'flex items-center justify-between rounded-2xl border p-4 text-right shadow-soft transition-all duration-200 hover:-translate-y-0.5',
-              selected === v.name
-                ? 'border-brand-400 bg-brand-50 ring-4 ring-brand-100'
-                : 'border-slate-200 bg-white hover:border-slate-300',
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-soft">
-                <Mic size={18} />
-              </span>
-              <div>
-                <div className="text-sm font-semibold text-slate-800">{v.displayName}</div>
-                <div className="text-xs text-slate-400" dir="ltr">
-                  {v.name}
-                  {v.name === defaultVoice ? ' · پیش‌فرض' : ''}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <VoiceSampleButton voiceName={v.name} hasSample={v.hasSample} />
-              <span
+              <div
+                key={v.name}
                 className={cn(
-                  'grid h-6 w-6 place-items-center rounded-full border',
-                  selected === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
+                  'voice-choice',
+                  selected === v.name && 'is-selected',
                 )}
               >
-                <Check size={13} />
-              </span>
-            </div>
-          </button>
-        ))}
+                <button
+                  type="button"
+                  onClick={() => setSelected(v.name)}
+                  aria-pressed={selected === v.name}
+                  aria-label={`انتخاب گوینده ${v.displayName}`}
+                >
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-soft">
+                    <Mic size={18} />
+                  </span>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {v.displayName}
+                    </div>
+                    <div className="text-xs text-slate-400" dir="ltr">
+                      {v.name}
+                      {v.name === defaultVoice ? ' · پیش‌فرض' : ''}
+                    </div>
+                  </div>
+                </button>
+                <div className="flex items-center gap-2">
+                  <VoiceSampleButton
+                    voiceName={v.name}
+                    hasSample={v.hasSample}
+                  />
+                  <span
+                    className={cn(
+                      'grid h-6 w-6 place-items-center rounded-full border',
+                      selected === v.name
+                        ? 'border-brand-500 bg-brand-600 text-white'
+                        : 'border-slate-300 text-transparent',
+                    )}
+                  >
+                    <Check size={13} />
+                  </span>
+                </div>
+              </div>
+            ))}
       </div>
 
       <div className="flex items-center gap-4">
         <Button onClick={save} loading={busy}>
           ذخیره گوینده
         </Button>
-        {flash && <span className={cn('text-sm', flash.ok ? 'text-emerald-600' : 'text-rose-600')}>{flash.text}</span>}
+        {flash && (
+          <span
+            className={cn(
+              'text-sm',
+              flash.ok ? 'text-emerald-600' : 'text-rose-600',
+            )}
+          >
+            {flash.text}
+          </span>
+        )}
       </div>
     </div>
   )

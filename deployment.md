@@ -2,6 +2,21 @@
 
 راهنمای کامل بالا آوردن کل سامانه (دیتابیس + API + worker تلفنی + داشبورد) با Docker.
 
+برای انتشار صرفاً ظاهری داشبورد، بعد از backup کد `frontend` و tag کردن image فعال وب،
+فقط سرویس `web` را build و با `--no-deps` جایگزین کنید:
+
+```sh
+docker compose build web
+docker compose up -d --no-deps --force-recreate web
+curl -fsS http://127.0.0.1:8081/health
+```
+
+در این مسیر migration، restart API/Realtime یا حذف volume لازم نیست. قبل و بعد، Image ID
+و StartedAt سرویس‌های `api`، `realtime` و `db` را مقایسه کنید. برای rollback، image قبلی
+وب را به نام `arkacallcenterdemo-web:latest` tag کنید و همان دستور up مخصوص web را اجرا
+کنید؛ سورس frontend را نیز از backup همان انتشار برگردانید. هیچ `docker compose down -v`
+اجرا نکنید. نسخه جاری و محل backup در [آخرین استقرار](docs/LAST_DEPLOYMENT.md) ثبت می‌شوند.
+
 > **چندسکویی:** همه‌ی ایمیج‌ها Linux-based هستند (dotnet، node، nginx، mysql)، پس این استک
 > عیناً روی **Ubuntu / هر لینوکسی** و همچنین **ویندوز** (Docker Desktop) اجرا می‌شود. هیچ وابستگی
 > به ویندوز وجود ندارد.

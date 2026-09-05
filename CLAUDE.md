@@ -68,7 +68,7 @@
 5. **پاسخ‌گویی تماس:** پلی «وویس خوش‌آمد» → انتظار برای سؤال → پاسخ اجتماعی/هویتی یا بررسی مستقیم کل KB با Chat همراه حداکثر شش نوبت اخیر همان تماس → اعتبارسنجی ۱ تا ۴ شناسهٔ `evidenceIds` دقیق و متعلق به snapshot فعلی → خواندن متن عینی قطعه‌های منبع با Realtime. تاریخچه فقط برای فهم سؤال پیرو و ترجیح صریح است و با پایان تماس حذف می‌شود. انتخاب شخصی بدون معیار به سؤال تکمیلی می‌رود؛ پاسخ ناموجود به اپراتور ارجاع و ثبت می‌شود؛ سؤال خارج حوزه فقط محدودهٔ خدمات را معرفی می‌کند.
 6. **محدودیت مکالمه:** بر حسب دقیقه. مقدار پیش‌فرض سراسری در `AppSettings`؛ سوپرادمین می‌تواند per-user override کند (`User.CallMinuteLimit`). نزدیک/رسیدن به سقف → رویدادهای مربوطه.
 7. **گوینده:** کاربر گوینده‌ی خود را از `VoiceOption`های فعال انتخاب می‌کند؛ پیش‌فرض از تنظیمات سوپرادمین.
-8. **CRM فروش:** رویدادهای `PhoneEntered`، `ProfileCompleted` و `SmartPhoneCreated` هرکدام حداکثر یک‌بار پس از موفقیت ارسال می‌شوند. قرارداد عملیاتی: Login در `/api/User/Login`، دریافت Bearer token و ثبت multipart در `/api/ContactUs/InsertContactUsByAdmin`. رمز فقط در secret setting/environment است و هرگز در Git یا لاگ قرار نمی‌گیرد.
+8. **CRM فروش:** هر رخداد `PhoneEntered`، `ProfileCompleted` و `SmartPhoneCreated` حتی پس از موفقیت قبلی دوباره ارسال می‌شود. جدول ارسال‌ها snapshot آخرین نتیجه است و درخواست تکراری را مسدود نمی‌کند. قرارداد عملیاتی: Login در `/api/User/Login`، دریافت Bearer token و ثبت multipart در `/api/ContactUs/InsertContactUsByAdmin`. رمز فقط در secret setting/environment است و هرگز در Git یا لاگ قرار نمی‌گیرد.
 
 ---
 
@@ -143,6 +143,8 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 ---
 
 ## ۹. وضعیت فازها  ← **بعد از هر گام به‌روز کن**
+
+- [x] **بازطراحی داشبورد — ۲۰۲۶-۰۹-۰۵:** سورس پایدار `edfc0bb` همراه اصلاح ارسال تکراری CRM مبنا است. پوسته RTL، نمای کلی داده‌محور، وزیر محلی، اجزای فرم/دکمه/جدول، منوی موبایل، راهنمای اولیه و پنل مدیریتی یکپارچه شدند. تب مدیریتی در query string حفظ می‌شود؛ جست‌وجوی شماره فارسی و فیلتر نوع پاسخ در تماس‌ها اضافه شد. ساخت production، lint (بدون error، یک warning قدیمی `cn`) و ۳۷ بررسی مرورگر در عرض‌های ۱۵۳۶، ۷۶۸، ۳۹۳ و ۳۶۰ موفق بودند. جزئیات قرارداد و کنترل بصری در `docs/DASHBOARD_DESIGN.md` است. این تغییر مسیر تماس یا مدل پایگاه دانش را تغییر نمی‌دهد.
 
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).

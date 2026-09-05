@@ -59,7 +59,10 @@ export default function SetupWizard() {
 
   // بارگذاری فقط یک‌بار در mount؛ نباید با تغییرِ me دوباره اجرا شود و ورودی‌های در حالِ ویرایشِ کاربر را بازنویسی کند.
   useEffect(() => {
-    api.get('/api/tutorial-video/info').then(({ data }) => setVideoAvailable(!!data.available)).catch(() => {})
+    api
+      .get('/api/tutorial-video/info')
+      .then(({ data }) => setVideoAvailable(!!data.available))
+      .catch(() => {})
     api.get('/api/knowledge-base').then(({ data }) => {
       if (data) {
         setKbSaved(data.moderationStatus === 'Approved')
@@ -71,12 +74,15 @@ export default function SetupWizard() {
         setWelcome(data.welcomeMessageText)
         setWelcomeSaved(!!data.hasWelcomeAudio)
       }
-      if (data?.extension && data?.status === 'Active') setExtension(data.extension)
+      if (data?.extension && data?.status === 'Active')
+        setExtension(data.extension)
     })
-    api.get<{ voices: Voice[]; defaultVoice: string }>('/api/voices').then(({ data }) => {
-      setVoices(data.voices)
-      setDefaultVoice(data.defaultVoice)
-    })
+    api
+      .get<{ voices: Voice[]; defaultVoice: string }>('/api/voices')
+      .then(({ data }) => {
+        setVoices(data.voices)
+        setDefaultVoice(data.defaultVoice)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -96,7 +102,8 @@ export default function SetupWizard() {
 
   async function saveKbText() {
     if (!kbText.trim()) return setError('متن پایگاه دانش را وارد کنید.')
-    if (kbText.length > MAX_CHARS) return setError(`حداکثر ${toFa(MAX_CHARS)} کاراکتر مجاز است.`)
+    if (kbText.length > MAX_CHARS)
+      return setError(`حداکثر ${toFa(MAX_CHARS)} کاراکتر مجاز است.`)
     setBusy(true)
     setError('')
     try {
@@ -112,14 +119,18 @@ export default function SetupWizard() {
 
   async function saveKbFile(file: File) {
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
-    if (!['.txt', '.docx'].includes(ext)) return setError('فقط فایل txt و Word (docx) مجاز است.')
-    if (file.size > MAX_FILE) return setError('حجم فایل باید حداکثر ۱۰۰ کیلوبایت باشد.')
+    if (!['.txt', '.docx'].includes(ext))
+      return setError('فقط فایل txt و Word (docx) مجاز است.')
+    if (file.size > MAX_FILE)
+      return setError('حجم فایل باید حداکثر ۱۰۰ کیلوبایت باشد.')
     setBusy(true)
     setError('')
     try {
       const form = new FormData()
       form.append('file', file)
-      await api.post('/api/knowledge-base/file', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      await api.post('/api/knowledge-base/file', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       setKbSaved(true)
       next()
     } catch (e) {
@@ -175,8 +186,12 @@ export default function SetupWizard() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-800">راه‌اندازی سریع</h1>
-        <p className="mt-1 text-sm text-slate-500">در چند قدم ساده تلفن هوشمند خود را بسازید.</p>
+        <h1 className="text-2xl font-extrabold text-slate-800">
+          راه‌اندازی سریع
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          در چند قدم ساده تلفن هوشمند خود را بسازید.
+        </p>
       </div>
 
       {/* استپر */}
@@ -186,7 +201,10 @@ export default function SetupWizard() {
           const done = i < step || (i === STEPS.length - 1 && extension != null)
           const active = i === step
           return (
-            <div key={s.key} className="flex flex-1 items-center last:flex-none">
+            <div
+              key={s.key}
+              className="flex flex-1 items-center last:flex-none"
+            >
               <button
                 onClick={() => i < step && setStep(i)}
                 className="flex flex-col items-center gap-1.5"
@@ -204,12 +222,26 @@ export default function SetupWizard() {
                 >
                   {done ? <Check size={20} /> : <Icon size={20} />}
                 </span>
-                <span className={cn('text-[11px] font-medium', active ? 'text-brand-700' : done ? 'text-emerald-600' : 'text-slate-400')}>
+                <span
+                  className={cn(
+                    'text-[11px] font-medium',
+                    active
+                      ? 'text-brand-700'
+                      : done
+                        ? 'text-emerald-600'
+                        : 'text-slate-400',
+                  )}
+                >
                   {s.title}
                 </span>
               </button>
               {i < STEPS.length - 1 && (
-                <div className={cn('mx-2 mb-5 h-0.5 flex-1 rounded-full', i < step ? 'bg-emerald-400' : 'bg-slate-200')} />
+                <div
+                  className={cn(
+                    'mx-2 mb-5 h-0.5 flex-1 rounded-full',
+                    i < step ? 'bg-emerald-400' : 'bg-slate-200',
+                  )}
+                />
               )}
             </div>
           )
@@ -220,10 +252,13 @@ export default function SetupWizard() {
         {/* گام ۰: شروع + ویدیو آموزشی */}
         {step === 0 && (
           <div className="space-y-4">
-            <h3 className="text-lg font-bold text-slate-800">به سامانه تلفن هوشمند آرکا خوش آمدید</h3>
+            <h3 className="text-lg font-bold text-slate-800">
+              به سامانه تلفن هوشمند آرکا خوش آمدید
+            </h3>
             <p className="text-sm leading-7 text-slate-500">
-              در این ویزارد: پایگاه دانش کسب‌وکارتان را وارد می‌کنید، گوینده و پیام خوش‌آمد را انتخاب می‌کنید،
-              و در پایان تلفن هوشمند شما با یک داخلی اختصاصی ساخته می‌شود.
+              در این ویزارد: پایگاه دانش کسب‌وکارتان را وارد می‌کنید، گوینده و
+              پیام خوش‌آمد را انتخاب می‌کنید، و در پایان تلفن هوشمند شما با یک
+              داخلی اختصاصی ساخته می‌شود.
             </p>
             {videoAvailable && (
               <div className="overflow-hidden rounded-2xl border border-slate-200">
@@ -231,7 +266,12 @@ export default function SetupWizard() {
                   <PlayCircle size={17} className="text-brand-600" />
                   ویدیوی آموزشی
                 </div>
-                <video src="/api/tutorial-video" controls className="w-full" preload="metadata" />
+                <video
+                  src="/api/tutorial-video"
+                  controls
+                  className="w-full"
+                  preload="metadata"
+                />
               </div>
             )}
             <div className="flex justify-end">
@@ -255,7 +295,8 @@ export default function SetupWizard() {
               )}
             </div>
             <p className="text-sm text-slate-500">
-              اطلاعات کسب‌وکار، خدمات، ساعات کاری و سوالات پرتکرار. حداکثر {toFa(MAX_CHARS)} کاراکتر متن یا فایل {toFa(100)} کیلوبایتی.
+              اطلاعات کسب‌وکار، خدمات، ساعات کاری و سوالات پرتکرار. حداکثر{' '}
+              {toFa(MAX_CHARS)} کاراکتر متن یا فایل {toFa(100)} کیلوبایتی.
             </p>
             <div className="inline-flex rounded-xl bg-slate-100 p-1">
               {(['text', 'file'] as const).map((m) => (
@@ -264,10 +305,16 @@ export default function SetupWizard() {
                   onClick={() => setKbMode(m)}
                   className={cn(
                     'flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
-                    kbMode === m ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500',
+                    kbMode === m
+                      ? 'bg-white text-brand-700 shadow-sm'
+                      : 'text-slate-500',
                   )}
                 >
-                  {m === 'text' ? <FileText size={15} /> : <CloudUpload size={15} />}
+                  {m === 'text' ? (
+                    <FileText size={15} />
+                  ) : (
+                    <CloudUpload size={15} />
+                  )}
                   {m === 'text' ? 'ورود متن' : 'بارگذاری فایل'}
                 </button>
               ))}
@@ -292,7 +339,9 @@ export default function SetupWizard() {
                       <ArrowRight size={16} /> قبلی
                     </Button>
                     {kbSaved && !kbText.trim() ? (
-                      <Button variant="outline" onClick={next}>رد شدن (ثبت‌شده)</Button>
+                      <Button variant="outline" onClick={next}>
+                        رد شدن (ثبت‌شده)
+                      </Button>
                     ) : (
                       <Button onClick={saveKbText} loading={busy}>
                         ذخیره و ادامه <ArrowLeft size={16} />
@@ -307,26 +356,37 @@ export default function SetupWizard() {
                   className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-10 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40"
                   onDrop={(e) => {
                     e.preventDefault()
-                    if (e.dataTransfer.files[0]) saveKbFile(e.dataTransfer.files[0])
+                    if (e.dataTransfer.files[0])
+                      saveKbFile(e.dataTransfer.files[0])
                   }}
                   onDragOver={(e) => e.preventDefault()}
                 >
                   <CloudUpload size={32} className="text-brand-500" />
-                  <span className="text-sm font-medium text-slate-700">فایل را اینجا رها کنید یا کلیک کنید</span>
-                  <span className="text-xs text-slate-400">txt یا Word (docx) · حداکثر ۱۰۰ کیلوبایت</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    فایل را اینجا رها کنید یا کلیک کنید
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    txt یا Word (docx) · حداکثر ۱۰۰ کیلوبایت
+                  </span>
                   <input
                     ref={fileRef}
                     type="file"
                     accept=".txt,.docx"
                     className="hidden"
-                    onChange={(e) => e.target.files?.[0] && saveKbFile(e.target.files[0])}
+                    onChange={(e) =>
+                      e.target.files?.[0] && saveKbFile(e.target.files[0])
+                    }
                   />
                 </label>
                 <div className="flex justify-between">
                   <Button variant="ghost" onClick={back}>
                     <ArrowRight size={16} /> قبلی
                   </Button>
-                  {kbSaved && <Button variant="outline" onClick={next}>ادامه (ثبت‌شده)</Button>}
+                  {kbSaved && (
+                    <Button variant="outline" onClick={next}>
+                      ادامه (ثبت‌شده)
+                    </Button>
+                  )}
                 </div>
               </>
             )}
@@ -345,7 +405,8 @@ export default function SetupWizard() {
               )}
             </div>
             <p className="text-sm text-slate-500">
-              پس از ذخیره، یک فایل صوتی ثابت با گوینده انتخابی تولید و پیش از فعال‌شدن شنود پخش می‌شود.
+              پس از ذخیره، یک فایل صوتی ثابت با گوینده انتخابی تولید و پیش از
+              فعال‌شدن شنود پخش می‌شود.
             </p>
             <textarea
               value={welcome}
@@ -369,40 +430,53 @@ export default function SetupWizard() {
         {step === 2 && (
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-800">صدای گوینده</h3>
-            <p className="text-sm text-slate-500">هوش مصنوعی با این صدا به تماس‌گیرندگان پاسخ می‌دهد.</p>
+            <p className="text-sm text-slate-500">
+              هوش مصنوعی با این صدا به تماس‌گیرندگان پاسخ می‌دهد.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {voices.map((v) => (
-                <button
+                <div
                   key={v.name}
-                  onClick={() => setVoice(v.name)}
                   className={cn(
-                    'flex items-center justify-between rounded-2xl border p-4 text-right transition-all',
-                    voice === v.name
-                      ? 'border-brand-400 bg-brand-50 ring-4 ring-brand-100'
-                      : 'border-slate-200 bg-white hover:border-slate-300',
+                    'voice-choice',
+                    voice === v.name && 'is-selected',
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setVoice(v.name)}
+                    aria-pressed={voice === v.name}
+                    aria-label={`انتخاب گوینده ${v.displayName}`}
+                  >
                     <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-brand-600 shadow-sm">
                       <Mic size={18} />
                     </span>
                     <div>
-                      <div className="text-sm font-semibold text-slate-800">{v.displayName}</div>
-                      <div className="text-xs text-slate-400" dir="ltr">{v.name}</div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {v.displayName}
+                      </div>
+                      <div className="text-xs text-slate-400" dir="ltr">
+                        {v.name}
+                      </div>
                     </div>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-2">
-                    <VoiceSampleButton voiceName={v.name} hasSample={v.hasSample} />
+                    <VoiceSampleButton
+                      voiceName={v.name}
+                      hasSample={v.hasSample}
+                    />
                     <span
                       className={cn(
                         'grid h-6 w-6 place-items-center rounded-full border',
-                        voice === v.name ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-300 text-transparent',
+                        voice === v.name
+                          ? 'border-brand-500 bg-brand-600 text-white'
+                          : 'border-slate-300 text-transparent',
                       )}
                     >
                       <Check size={13} />
                     </span>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
             <div className="flex justify-between">
@@ -421,10 +495,12 @@ export default function SetupWizard() {
           <div className="space-y-5">
             {extension == null ? (
               <>
-                <h3 className="text-lg font-bold text-slate-800">ساخت تلفن هوشمند</h3>
+                <h3 className="text-lg font-bold text-slate-800">
+                  ساخت تلفن هوشمند
+                </h3>
                 <p className="text-sm leading-7 text-slate-500">
-                  همه‌چیز آماده است! با کلیک روی دکمه‌ی زیر، یک داخلی اختصاصی برای شما ساخته می‌شود و
-                  تلفن هوشمندتان روی آن فعال می‌گردد.
+                  همه‌چیز آماده است! با کلیک روی دکمه‌ی زیر، یک داخلی اختصاصی
+                  برای شما ساخته می‌شود و تلفن هوشمندتان روی آن فعال می‌گردد.
                 </p>
                 <div className="space-y-2.5">
                   {[
@@ -432,16 +508,25 @@ export default function SetupWizard() {
                     { ok: welcomeSaved, label: 'پیام خوش‌آمد ثبت‌شده' },
                     { ok: !!voice, label: 'گوینده انتخاب‌شده' },
                   ].map((c) => (
-                    <div key={c.label} className="flex items-center gap-2.5 text-sm">
+                    <div
+                      key={c.label}
+                      className="flex items-center gap-2.5 text-sm"
+                    >
                       <span
                         className={cn(
                           'grid h-6 w-6 place-items-center rounded-full',
-                          c.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400',
+                          c.ok
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-400',
                         )}
                       >
                         <Check size={13} />
                       </span>
-                      <span className={c.ok ? 'text-slate-700' : 'text-slate-400'}>{c.label}</span>
+                      <span
+                        className={c.ok ? 'text-slate-700' : 'text-slate-400'}
+                      >
+                        {c.label}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -449,7 +534,11 @@ export default function SetupWizard() {
                   <Button variant="ghost" onClick={back}>
                     <ArrowRight size={16} /> قبلی
                   </Button>
-                  <Button onClick={create} loading={busy} disabled={!kbSaved || !welcomeSaved}>
+                  <Button
+                    onClick={create}
+                    loading={busy}
+                    disabled={!kbSaved || !welcomeSaved}
+                  >
                     <Rocket size={17} />
                     ایجاد تلفن هوشمند
                   </Button>
@@ -460,17 +549,30 @@ export default function SetupWizard() {
                 <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-emerald-100 text-emerald-600">
                   <PhoneCall size={30} />
                 </div>
-                <h3 className="mt-4 text-xl font-extrabold text-slate-800">تلفن هوشمند شما آماده است 🎉</h3>
-                <p className="mt-1 text-sm text-slate-500">شماره داخلی اختصاصی شما:</p>
-                <div className="mt-3 text-4xl font-extrabold tracking-widest text-emerald-600">{toFa(extension)}</div>
+                <h3 className="mt-4 text-xl font-extrabold text-slate-800">
+                  تلفن هوشمند شما آماده است 🎉
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  شماره داخلی اختصاصی شما:
+                </p>
+                <div className="mt-3 text-4xl font-extrabold tracking-widest text-emerald-600">
+                  {toFa(extension)}
+                </div>
 
                 <div className="mx-auto mt-6 max-w-md rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 text-right">
-                  <p className="font-bold text-slate-800">چطور با تلفن هوشمند خود تماس بگیرید؟</p>
+                  <p className="font-bold text-slate-800">
+                    چطور با تلفن هوشمند خود تماس بگیرید؟
+                  </p>
                   <p className="mt-1 text-sm leading-7 text-slate-600">
                     ابتدا با شماره‌ی{' '}
-                    <span dir="ltr" className="font-bold text-emerald-700">{toFa(me?.receptionNumber ?? '02191008288')}</span>{' '}
-                    تماس بگیرید، سپس پس از پخش پیام پذیرش، شماره داخلی اختصاصی خود{' '}
-                    <span dir="ltr" className="font-bold text-emerald-700">{toFa(extension)}</span>{' '}
+                    <span dir="ltr" className="font-bold text-emerald-700">
+                      {toFa(me?.receptionNumber ?? '02191008288')}
+                    </span>{' '}
+                    تماس بگیرید، سپس پس از پخش پیام پذیرش، شماره داخلی اختصاصی
+                    خود{' '}
+                    <span dir="ltr" className="font-bold text-emerald-700">
+                      {toFa(extension)}
+                    </span>{' '}
                     را شماره‌گیری کنید.
                   </p>
                 </div>
@@ -488,7 +590,11 @@ export default function SetupWizard() {
           </div>
         )}
 
-        {error && <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
+        {error && (
+          <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </p>
+        )}
       </Card>
     </div>
   )

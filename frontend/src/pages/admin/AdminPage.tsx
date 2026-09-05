@@ -1,5 +1,19 @@
-import { useState } from 'react'
-import { cn } from '../../components/ui'
+import { useSearchParams } from 'react-router-dom'
+import {
+  AudioLines,
+  Blocks,
+  Bot,
+  Building2,
+  ChartNoAxesCombined,
+  FileText,
+  History,
+  MessageCircle,
+  MessageSquare,
+  PhoneCall,
+  PlayCircle,
+  Settings2,
+  Users,
+} from 'lucide-react'
 import SettingsTab from './SettingsTab'
 import BaleTab from './BaleTab'
 import TemplatesTab from './TemplatesTab'
@@ -13,77 +27,91 @@ import BrandingTab from './BrandingTab'
 import CallsAdminTab from './CallsAdminTab'
 
 const TABS = [
-  { key: 'openai', label: 'OpenAI و پاسخ دانشی' },
-  { key: 'sms', label: 'SMS.ir' },
-  { key: 'crm', label: 'CRM فروش' },
-  { key: 'bale', label: 'کانال بله' },
-  { key: 'reception', label: 'پذیرش و انتظار' },
-  { key: 'branding', label: 'برندینگ' },
-  { key: 'templates', label: 'پیامک‌ها و رویدادها' },
-  { key: 'voices', label: 'گوینده‌ها' },
-  { key: 'fallback', label: 'پیام پیش‌فرض' },
-  { key: 'demos', label: 'دموها' },
-  { key: 'calls', label: 'مکالمه‌ها' },
-  { key: 'usage', label: 'مصرف توکن' },
-  { key: 'users', label: 'کاربران' },
+  { key: 'demos', label: 'دموها', icon: PlayCircle },
+  { key: 'users', label: 'کاربران', icon: Users },
+  { key: 'calls', label: 'مکالمه‌ها', icon: History },
+  { key: 'usage', label: 'مصرف توکن', icon: ChartNoAxesCombined },
+  { key: 'voices', label: 'گوینده‌ها', icon: AudioLines },
+  { key: 'reception', label: 'پذیرش و انتظار', icon: PhoneCall },
+  { key: 'fallback', label: 'پیام پیش‌فرض', icon: MessageCircle },
+  { key: 'branding', label: 'برندینگ', icon: Building2 },
+  { key: 'openai', label: 'OpenAI و پاسخ دانشی', icon: Bot },
+  { key: 'sms', label: 'SMS.ir', icon: MessageSquare },
+  { key: 'crm', label: 'CRM فروش', icon: Blocks },
+  { key: 'bale', label: 'کانال بله', icon: Settings2 },
+  { key: 'templates', label: 'پیامک‌ها و رویدادها', icon: FileText },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<TabKey>('openai')
+  const [params, setParams] = useSearchParams()
+  const selected = params.get('tab')
+  const tab: TabKey = TABS.some((t) => t.key === selected)
+    ? (selected as TabKey)
+    : 'demos'
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="admin-page space-y-6">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-800">پنل سوپرادمین</h1>
-        <p className="mt-1 text-sm text-slate-500">تنظیمات سراسری سامانه.</p>
+        <h1 className="text-2xl font-extrabold text-slate-800">
+          پنل سوپرادمین
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          دموها، کاربران و تنظیمات مرکز تماس را مدیریت کنید.
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition-colors',
-              tab === t.key ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25' : 'bg-white text-slate-600 hover:bg-slate-50',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="admin-workspace">
+        <nav className="admin-navigation" aria-label="بخش‌های مدیریت">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setParams({ tab: t.key })}
+              aria-current={tab === t.key ? 'true' : undefined}
+            >
+              <t.icon size={16} strokeWidth={1.75} />
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="admin-content" key={tab}>
+          {tab === 'openai' && (
+            <SettingsTab
+              key="openai"
+              groups={['openai', 'limits']}
+              title="OpenAI، پاسخ مستقیم دانشی و محدودیت‌ها"
+              desc="آدرس و کلید API، مدلی که کل پایگاه دانش را مستقیم بررسی می‌کند، مدل Realtime و سقف پیش‌فرض مکالمه."
+            />
+          )}
+          {tab === 'sms' && (
+            <SettingsTab
+              key="sms"
+              groups={['sms']}
+              title="تنظیمات SMS.ir"
+              desc="کلید API و شماره خط سرویس پیامک."
+            />
+          )}
+          {tab === 'crm' && (
+            <SettingsTab
+              key="crm"
+              groups={['crm']}
+              title="اتصال CRM فروش"
+              desc="ورود عملیاتی با نام کاربری و رمز، سپس ثبت لید با Bearer token. رمز در پاسخ API ماسک می‌شود."
+            />
+          )}
+          {tab === 'bale' && <BaleTab />}
+          {tab === 'reception' && <ReceptionTab />}
+          {tab === 'branding' && <BrandingTab />}
+          {tab === 'templates' && <TemplatesTab />}
+          {tab === 'voices' && <VoicesTab />}
+          {tab === 'fallback' && <FallbackTab />}
+          {tab === 'demos' && <DemosTab />}
+          {tab === 'calls' && <CallsAdminTab />}
+          {tab === 'usage' && <UsageTab />}
+          {tab === 'users' && <UsersTab />}
+        </div>
       </div>
-
-      {tab === 'openai' && (
-        <SettingsTab
-          key="openai"
-          groups={['openai', 'limits']}
-          title="OpenAI، پاسخ مستقیم دانشی و محدودیت‌ها"
-          desc="آدرس و کلید API، مدلی که کل پایگاه دانش را مستقیم بررسی می‌کند، مدل Realtime و سقف پیش‌فرض مکالمه."
-        />
-      )}
-      {tab === 'sms' && (
-        <SettingsTab key="sms" groups={['sms']} title="تنظیمات SMS.ir" desc="کلید API و شماره خط سرویس پیامک." />
-      )}
-      {tab === 'crm' && (
-        <SettingsTab
-          key="crm"
-          groups={['crm']}
-          title="اتصال CRM فروش"
-          desc="ورود عملیاتی با نام کاربری و رمز، سپس ثبت لید با Bearer token. رمز در پاسخ API ماسک می‌شود."
-        />
-      )}
-      {tab === 'bale' && <BaleTab />}
-      {tab === 'reception' && <ReceptionTab />}
-      {tab === 'branding' && <BrandingTab />}
-      {tab === 'templates' && <TemplatesTab />}
-      {tab === 'voices' && <VoicesTab />}
-      {tab === 'fallback' && <FallbackTab />}
-      {tab === 'demos' && <DemosTab />}
-      {tab === 'calls' && <CallsAdminTab />}
-      {tab === 'usage' && <UsageTab />}
-      {tab === 'users' && <UsersTab />}
     </div>
   )
 }

@@ -1,58 +1,120 @@
-import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import {
   LayoutDashboard,
   BookOpenText,
   Phone,
-  Mic,
+  AudioLines,
   History,
   ShieldCheck,
   LogOut,
   Menu,
   CircleHelp,
-  Sparkles,
+  Rocket,
   UserCog,
+  X,
+  ChevronLeft,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { Logo, cn } from './ui'
 import Tour from './Tour'
 
-interface NavItem {
-  to: string
-  label: string
-  icon: React.ComponentType<{ size?: number | string; className?: string }>
-  tour: string
-  end?: boolean
-  adminOnly?: boolean
-}
-
-const NAV: NavItem[] = [
-  { to: '/', label: 'داشبورد', icon: LayoutDashboard, tour: 'dashboard', end: true },
-  { to: '/setup', label: 'راه‌اندازی سریع', icon: Sparkles, tour: 'setup' },
-  { to: '/knowledge-base', label: 'پایگاه دانش', icon: BookOpenText, tour: 'kb' },
+const NAV = [
+  {
+    to: '/',
+    label: 'داشبورد',
+    icon: LayoutDashboard,
+    tour: 'dashboard',
+    end: true,
+  },
+  { to: '/setup', label: 'راه‌اندازی سریع', icon: Rocket, tour: 'setup' },
+  {
+    to: '/knowledge-base',
+    label: 'پایگاه دانش',
+    icon: BookOpenText,
+    tour: 'kb',
+  },
   { to: '/smartphone', label: 'تلفن هوشمند', icon: Phone, tour: 'smartphone' },
-  { to: '/voice', label: 'صدای گوینده', icon: Mic, tour: 'voice' },
+  { to: '/voice', label: 'صدای گوینده', icon: AudioLines, tour: 'voice' },
   { to: '/calls', label: 'تماس‌ها', icon: History, tour: 'calls' },
-  { to: '/admin', label: 'پنل سوپرادمین', icon: ShieldCheck, tour: 'admin', adminOnly: true },
+  {
+    to: '/admin',
+    label: 'پنل سوپرادمین',
+    icon: ShieldCheck,
+    tour: 'admin',
+    adminOnly: true,
+  },
 ]
 
 export default function DashboardLayout() {
   const { me, refresh, logout, impersonating, stopImpersonating } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
+  const menuRef = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
   const isAdmin = me?.role === 'SuperAdmin'
-
   const items = NAV.filter((n) => !n.adminOnly || isAdmin)
+  const title = NAV.find((n) => n.to === pathname)?.label ?? 'پروفایل'
+  const needsTour = !!me && !me.hasCompletedTour
 
-  // فقط اولین ورود هر کاربر: وضعیت پایان تور در دیتابیس نگهداری می‌شود، نه مرورگر.
   useEffect(() => {
-    if (me && !me.hasCompletedTour) {
-      const t = setTimeout(() => setTourOpen(true), 600)
-      return () => clearTimeout(t)
+    if (needsTour) {
+      const timer = setTimeout(() => setTourOpen(true), 600)
+      return () => clearTimeout(timer)
     }
-  }, [me?.id, me?.hasCompletedTour])
+  }, [me?.id, needsTour])
+
+  useEffect(() => {
+    if (!open || tourOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    sidebarRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        menuRef.current?.focus()
+      }
+      if (event.key === 'Tab') {
+        const controls = sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])',
+        )
+        if (!controls?.length) return
+        const first = controls[0],
+          last = controls[controls.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        }
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previous
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open, tourOpen])
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)')
+    const closeOnDesktop = () => {
+      if (media.matches) setOpen(false)
+    }
+    media.addEventListener('change', closeOnDesktop)
+    return () => media.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   async function closeTour() {
     setTourOpen(false)
@@ -61,140 +123,175 @@ export default function DashboardLayout() {
         await api.post('/api/me/tour/complete')
         await refresh()
       } catch {
-        // اگر ثبت سرور شکست بخورد، در ورود بعدی دوباره نمایش داده می‌شود.
+        /* Retry on next login. */
       }
     }
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* سایدبار */}
+    <div className="workspace-shell">
+      <a className="skip-link" href="#workspace-content">
+        رفتن به محتوای صفحه
+      </a>
       <aside
-        className={cn(
-          'fixed inset-y-0 right-0 z-40 w-72 transform border-l border-slate-200 bg-white/90 backdrop-blur-md transition-transform lg:static lg:translate-x-0',
-          open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
-        )}
+        ref={sidebarRef}
+        id="workspace-navigation"
+        aria-label="منوی اصلی"
+        className={cn('workspace-sidebar', open && 'is-open')}
       >
-        <div className="flex h-full flex-col p-5">
-          <div className="px-2 py-2">
-            <Logo />
-          </div>
-          <nav className="mt-6 flex-1 space-y-1">
-            {items.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.end}
-                data-tour={n.tour}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    'group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
-                    isActive
-                      ? 'bg-gradient-to-l from-brand-50 to-brand-100/60 text-brand-700 shadow-soft'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={cn(
-                        'grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors',
-                        isActive ? 'bg-white text-brand-600 shadow-soft' : 'text-slate-400 group-hover:text-brand-600',
-                      )}
-                    >
-                      <n.icon size={18} />
-                    </span>
-                    {n.label}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
+        <div className="sidebar-brand">
+          <Logo size={42} />
           <button
+            className="icon-button sidebar-close"
+            aria-label="بستن منو"
+            onClick={() => {
+              setOpen(false)
+              menuRef.current?.focus()
+            }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <nav className="workspace-nav" aria-label="بخش‌های مرکز تماس">
+          {items.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              data-tour={n.tour}
+              onClick={() => setOpen(false)}
+              className={({ isActive }) =>
+                cn('workspace-nav-link', isActive && 'is-active')
+              }
+            >
+              <n.icon size={20} strokeWidth={1.75} />
+              <span>{n.label}</span>
+              <ChevronLeft className="nav-chevron" size={15} />
+            </NavLink>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <button
+            className="sidebar-help"
+            onClick={() => {
+              setOpen(false)
+              setTourOpen(true)
+            }}
+            data-tour="help"
+          >
+            <CircleHelp size={24} />
+            <span>
+              <strong>راهنمای سامانه</strong>
+              <small>آشنایی گام‌به‌گام با امکانات</small>
+            </span>
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            className="sidebar-logout"
             onClick={() => {
               logout()
               navigate('/login', { replace: true })
             }}
-            className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
           >
-            <LogOut size={19} className="shrink-0" />
-            خروج
+            <LogOut size={19} />
+            خروج از حساب
           </button>
         </div>
       </aside>
-
       {open && (
-        <div className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)} />
+        <button
+          className="sidebar-backdrop"
+          aria-label="بستن منوی اصلی"
+          onClick={() => setOpen(false)}
+        />
       )}
-
-      {/* محتوا */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="workspace-body">
         {impersonating && (
-          <div className="flex items-center justify-between gap-3 bg-amber-500 px-5 py-2 text-sm font-medium text-white">
-            <div className="flex items-center gap-2">
-              <UserCog size={18} className="shrink-0" />
+          <div className="impersonation-banner">
+            <span>
+              <UserCog size={18} />
               شما در حال مشاهده‌ی پنل کاربر «{impersonating}» هستید.
-            </div>
+            </span>
             <button
               onClick={() => {
                 stopImpersonating()
                 navigate('/admin', { replace: true })
               }}
-              className="rounded-lg bg-white/20 px-3 py-1 font-semibold transition-colors hover:bg-white/30"
             >
               بازگشت به پنل سوپرادمین
             </button>
           </div>
         )}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/70 px-5 backdrop-blur-md">
-          <div className="flex items-center gap-3">
+        <header className="workspace-header">
+          <div className="flex min-w-0 items-center gap-3">
             <button
-              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-600 lg:hidden"
+              ref={menuRef}
+              className="icon-button menu-toggle"
+              aria-label="باز کردن منو"
+              aria-expanded={open}
+              aria-controls="workspace-navigation"
               onClick={() => setOpen(true)}
-              aria-label="منو"
             >
-              <Menu size={20} />
+              <Menu size={21} />
             </button>
-            <div className="hidden text-sm text-slate-500 lg:block">
-              خوش آمدید،{' '}
-              <span className="font-semibold text-slate-800">
-                {me?.firstName} {me?.lastName}
-              </span>
+            <div className="workspace-breadcrumb">
+              <span>فضای کار</span>
+              <ChevronLeft size={14} />
+              <strong>{title}</strong>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="header-account">
             <button
+              className="icon-button header-help"
+              aria-label="راهنمای سامانه"
               onClick={() => setTourOpen(true)}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600"
-              title="راهنمای سامانه"
-              data-tour="help"
             >
-              <CircleHelp size={19} />
+              <CircleHelp size={20} />
             </button>
-            <div className="text-left">
-              <div className="text-sm font-semibold text-slate-800">{me?.brandName}</div>
-              <div className="text-xs text-slate-400">{isAdmin ? 'سوپرادمین' : 'کاربر'}</div>
-            </div>
-            <Link to="/profile" title="پروفایل" className="block h-10 w-10 overflow-hidden rounded-full ring-2 ring-transparent transition hover:ring-brand-200">
-              {me?.hasAvatar ? (
-                <img src={`/api/avatars/${me.id}?v=${me.avatarVersion ?? 0}`} alt="پروفایل" className="h-full w-full object-cover" />
-              ) : (
-                <div className="grid h-full w-full place-items-center bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">
-                  {me?.firstName?.[0] ?? '؟'}
-                </div>
-              )}
+            <Link
+              to="/profile"
+              className="account-link"
+              aria-label="مشاهده پروفایل"
+            >
+              <span className="account-copy">
+                <strong>
+                  {me?.brandName ||
+                    `${me?.firstName ?? ''} ${me?.lastName ?? ''}`.trim() ||
+                    'حساب کاربری'}
+                </strong>
+                <small>{isAdmin ? 'سوپرادمین' : 'کاربر سازمانی'}</small>
+              </span>
+              <span className="account-avatar">
+                {me?.hasAvatar ? (
+                  <img
+                    src={`/api/avatars/${me.id}?v=${me.avatarVersion ?? 0}`}
+                    alt=""
+                  />
+                ) : (
+                  (me?.firstName?.[0] ?? 'آ')
+                )}
+              </span>
             </Link>
           </div>
         </header>
-
-        <main className="flex-1 p-5 lg:p-8">
+        <main
+          id="workspace-content"
+          className="workspace-content"
+          tabIndex={-1}
+        >
           <Outlet />
         </main>
+        <footer className="workspace-footer">
+          <span>آرکا · مرکز تماس هوشمند</span>
+          <span>فضای اختصاصی {me?.brandName || 'کسب‌وکار شما'}</span>
+        </footer>
       </div>
-
-      <Tour open={tourOpen} isAdmin={isAdmin} onClose={closeTour} onSidebarChange={setOpen} />
+      <Tour
+        open={tourOpen}
+        isAdmin={isAdmin}
+        onClose={closeTour}
+        onSidebarChange={setOpen}
+      />
     </div>
   )
 }
