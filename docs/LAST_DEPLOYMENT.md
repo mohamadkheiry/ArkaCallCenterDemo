@@ -7,9 +7,9 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `15:44:14 UTC` |
+| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `16:17:35 UTC` |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit رابط وب | `ef088110c810b2e59fe79d6c761857db45925ebf` |
+| commit رابط وب | `30eba38ce632bc1c661bea841cd1135cd56e444f` |
 | مبنای سورس | نسخه پایدار `edfc0bb` همراه اصلاح ارسال تکراری لید؛ بدون شاخه سؤال‌وجواب |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
@@ -29,7 +29,65 @@
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
 
-## انتشار صفحه ورود جدید — ۲۰۲۶-۰۹-۰۵، ساعت ۱۵:۴۴ UTC
+## رفع اولین پخش مکالمه — ۲۰۲۶-۰۹-۰۵، ساعت ۱۶:۱۷ UTC
+
+این انتشار فقط کامپوننت مشترک پخش صوت را در **web** اصلاح می‌کند. ظاهر ورود و
+داشبورد حفظ شده است. علت باگ، اجرای `pause()` در cleanup وابسته به state مربوط به
+Blob URL بود که پخش اول را با `AbortError` قطع می‌کرد؛ فایل دریافتی سالم بود و کلیک
+دوم همان فایل را پخش می‌کرد. توضیحات منابع، cancel و تست رگرسیون در
+[راهنمای فرانت‌اند](../frontend/README.md#نگهداری-پخش-فایلهای-صوتی-محافظتشده) آمده است.
+
+- commit اجرایی: `30eba38ce632bc1c661bea841cd1135cd56e444f`.
+- tag: `arkacallcenterdemo-web:audio-playback-20260905` (همچنین `latest`).
+- Image ID: `sha256:6ccc6c71681e1a790a2fda06242dc3c9d51602cc83542f3e0c421f6385f0d6ae`.
+- StartedAt: `2026-09-05T16:17:35.573493004Z`.
+- JavaScript: `index-BSOAUq-o.js`؛ CSS بدون تغییر: `index-2FK2gZlc.css`.
+- بسته سورس و خروجی تست‌شده:
+  `/opt/arka-call-center/.releases/audio-playback-20260905/frontend.tgz`.
+- SHA-256 بسته: `4bc10a81bbbc9573a7b3b9333c0e2a88f93e1fd12e0ee33f7276d17104e02922`.
+- فایل build همان مسیر: `Dockerfile.audio-playback`؛ خروجی تست‌شده روی runtime قبلی
+  Nginx قرار گرفت. config پراکسی و assetهای قبلی حفظ شدند.
+
+قبل از جایگزینی، `nginx -t` و کانتینر موقت loopback روی `18081` موفق بودند؛ آن
+کانتینر پس از انتشار متوقف و حذف شد. فقط web با `--no-deps --force-recreate` جایگزین
+شد. health و assetها روی HTTPS عمومی `200` و درخواست صوت بدون token برابر `401` بود.
+هر ۱۷ بررسی پخش در Chrome/Playwright ابتدا محلی و سپس روی assetهای عمومی موفق بود؛
+صفحه کاربر، ادمین، سؤال بی‌پاسخ، تأخیر دریافت، توقف/ادامه، پایان/تکرار، خروج از صفحه،
+خطا/تلاش مجدد و عرض‌های ۱۴۴۰ و ۳۹۳ بررسی شدند. APIها در این تست شبیه‌سازی و WAV
+مصنوعی بود؛ محتوای خصوصی تماس واقعی شنیده یا به سرویس خارجی فرستاده نشد. خطای اولیه
+پیش از اصلاح نیز در مرورگر بازتولید شد.
+
+Image ID و StartedAt سرویس‌های api/realtime/db با جدول انتشار داشبورد در پایین این
+فایل دقیقاً یکسان ماندند. هیچ migration، تغییر فایل ضبط‌شده، volume، Asterisk،
+reverse proxy مرکزی یا نرم‌افزار تلفن انجام نشد. `arka-call-center.service` برابر
+`enabled/active`، Docker برابر `enabled` و policy وب `unless-stopped` است؛ reboot
+انجام نشد. هشدار قدیمی Compose درباره مالکیت volumeهای موجود، تغییری در آن‌ها نداد.
+
+### پشتیبان و بازگشت اصلاح پخش
+
+پوشه root-only: `/var/backups/arka-call-center/20260905-audio-playback-before-fix`.
+شامل frontend، image وب، اطلاعات کانتینرها و مستندات قبل از انتشار است؛ dump تازه DB نیست.
+
+| فایل | SHA-256 |
+| --- | --- |
+| `frontend.tgz` | `e857c67627f1330e28f9a35e1408ab66a813362e8bc26d1fa8e6d9fb17ecff10` |
+| `web-image.tar.gz` | `98f747e7e69df1727f8c0c121e1ca197d825009129cb6ade7e547a485540043f` |
+
+بازگشت فقط این اصلاح (طراحی جدید ورود و داشبورد باقی می‌ماند، اما باگ پخش برمی‌گردد):
+
+```sh
+cd /opt/arka-call-center
+# اگر tag قبلی موجود نیست:
+# gzip -dc /var/backups/arka-call-center/20260905-audio-playback-before-fix/web-image.tar.gz | docker load
+docker tag arkacallcenterdemo-web:before-audio-playback-20260905 arkacallcenterdemo-web:latest
+docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web
+curl -fsS http://127.0.0.1:8081/health
+```
+
+سورس frontend را نیز تنها پس از نگه‌داشتن تغییرات جدید احتمالی با backup همگام کنید؛
+برای این بازگشت نیازی به DB restore، حذف volume یا restart تلفن نیست.
+
+## انتشار قبلی: صفحه ورود جدید — ۲۰۲۶-۰۹-۰۵، ساعت ۱۵:۴۴ UTC
 
 صفحه `/login` با طراحی سفید/نیمه‌شب، تصویر اختصاصی تلفن، فونت وزیر، فرم شماره و OTP،
 نسخه موبایل و حالت‌های loading/error/cooldown منتشر شد. داشبورد بازطراحی‌شده قبلی
