@@ -7,16 +7,18 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ استقرار | ۲۰۲۶-۰۸-۲۴ |
+| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `14:43:40 UTC` |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit برنامه | `2ff2517` |
+| commit رابط وب | `0f738ba1d1e59f0b88dc1551dec01ce53a56b99b` |
+| مبنای سورس | نسخه پایدار `edfc0bb` همراه اصلاح ارسال تکراری لید؛ بدون شاخه سؤال‌وجواب |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
 | اجرای خودکار | واحد `arka-call-center.service` و Docker هر دو `enabled`؛ policy کانتینرها `unless-stopped` |
 
 ## آدرس‌ها
 
-- داشبورد: <http://192.168.10.101:8081/>
+- داشبورد عمومی: <https://callcenterai.ir/>
+- داشبورد شبکه داخلی: <http://192.168.10.101:8081/>
 - سلامت برنامه از مسیر وب: <http://192.168.10.101:8081/health>
 - سلامت مستقیم API: <http://192.168.10.101:8080/health>
 - Swagger: <http://192.168.10.101:8080/swagger/index.html>
@@ -26,6 +28,83 @@
 سرویس مستقل OTP یعنی `CodeSenderWithPhone` همچنان روی
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
+
+## انتشار بازطراحی داشبورد — ۲۰۲۶-۰۹-۰۵
+
+این انتشار **فقط web** بود. پوسته راست‌چین، نمای کلی، فرم‌ها، جداول، انتخاب گوینده،
+صفحه دانش، گزارش تماس، پنل کاربران و منوی مدیریت یکپارچه شدند. فونت Vazirmatn محلی
+است و لوگوی بارگذاری‌شده قبلی از همان API خوانده می‌شود. جزئیات توسعه و پذیرش در
+[سیستم طراحی داشبورد](DASHBOARD_DESIGN.md) قرار دارد.
+
+### بسته و ایمیج منتشرشده
+
+- برچسب ایمیج: `arkacallcenterdemo-web:dashboard-20260905`؛ برچسب جاری Compose:
+  `arkacallcenterdemo-web:latest`.
+- Image ID: `sha256:2c5dccba8d3d692f5117b32e3a5e2b83a07366a195b6ab66af3dd7679cf30c76`.
+- فایل اجرایی: `index-CNMr_KD_.js`؛ استایل: `index-DzQxxwGX.css`.
+- بسته سورس frontend و خروجی تست‌شده در
+  `/opt/arka-call-center/.releases/dashboard-20260905/frontend.tgz` نگه‌داری می‌شود.
+  SHA-256: `9e465f5a800c715ca4e0021f3008803de41169d917eaf8c635d0b775d8544910`.
+- برای جلوگیری از اختلاف build، همان `dist` که محلی تست شد داخل ایمیج قبلی Nginx قرار
+  گرفت. پیکربندی Nginx تغییر نکرد و فایل‌های hash‌شده قبلی برای مرورگرهای باز حفظ شدند.
+  `Dockerfile.dashboard` در همان مسیر release است؛ build عادی بعدی همچنان از
+  `frontend/Dockerfile` و سورس همگام‌شده انجام می‌شود.
+
+### نتیجه کنترل انتشار
+
+- پیش از جایگزینی، ایمیج در کانتینر موقت و پورت loopback `18081` تست شد؛ سپس کانتینر
+  آزمایشی متوقف و حذف شد. پورت تازه‌ای برای دسترسی عمومی باز نشده است.
+- دستور انتشار: `docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web`.
+- صفحه اصلی، health، JavaScript و CSS روی پورت `8081` پاسخ `200` دادند؛ صفحه اصلی،
+  health و JavaScript روی HTTPS عمومی نیز `200` و دارای hash جدید بودند.
+- ۳۷ بررسی رابط روی فایل‌های منتشرشده و عرض‌های ۱۵۳۶، ۷۶۸، ۳۹۳ و ۳۶۰ موفق بود؛
+  بدون خطای JavaScript و overflow سند. APIهای این تست مرورگر mock بودند و هیچ دادهٔ
+  مشتری را تغییر ندادند. ورود عمومی و دریافت لوگوی واقعی نیز جداگانه، بدون mock و
+  بدون ارسال OTP، با موفقیت بررسی شدند.
+- سرویس systemd برابر `enabled/active`، Docker برابر `enabled` و restart policy وب
+  `unless-stopped` است. خود سرور برای این انتشار reboot نشد.
+- هیچ migration، تغییر volume، تغییر Asterisk، تغییر reverse proxy مرکزی یا انتشار
+  اپلیکیشن Android/Windows/PWA در این کار انجام نشد. این کنترل UI، آزمون تازه تماس نیست.
+
+Image ID و `StartedAt` سه سرویس زیر قبل و بعد انتشار **دقیقاً یکسان** ماندند:
+
+| سرویس | Image ID | StartedAt (UTC) |
+| --- | --- | --- |
+| api | `2456441b6282fa47333d42ca2f0113b878ae40c7b3054c00a49c7642d428c24d` | `2026-09-02T11:29:55.939201284Z` |
+| realtime | `474d381c2fc55c1f89fa2872279b342a11d243b8f003978e3b50bf48db881a86` | `2026-09-02T11:29:51.189017233Z` |
+| db | `78c993fee8d828d00b080eb45a44bb43e56befb0caa67a1c2d1da57d2fc0fa95` | `2026-09-02T11:29:51.17147593Z` |
+
+### پشتیبان و بازگشت همین انتشار
+
+پوشه root-only:
+
+```text
+/var/backups/arka-call-center/20260905-dashboard-before-redesign
+```
+
+| فایل | SHA-256 |
+| --- | --- |
+| `frontend.tgz` | `3a817ed84ce74f0b0680f2a372e0ab6a75a75b5861f8598c531486e0f8ed2b1f` |
+| `web-image.tar.gz` | `d14de92cc3adc351a148f631105ec5cb860155d8a3ab367e68e7228bc695d4a5` |
+
+`containers-before.txt` شناسه‌ها و زمان شروع قبلی را ثبت می‌کند. این backup مختص وب است؛
+dump تازه دیتابیس نیست، زیرا دیتابیس در این انتشار دست‌کاری نشد.
+
+برای rollback فوری فقط وب، بدون build یا restart سایر سرویس‌ها:
+
+```sh
+cd /opt/arka-call-center
+# اگر tag قدیمی دیگر محلی نبود، ابتدا ایمیج را بازیابی کنید:
+# gzip -dc /var/backups/arka-call-center/20260905-dashboard-before-redesign/web-image.tar.gz | docker load
+docker tag arkacallcenterdemo-web:before-dashboard-20260905 arkacallcenterdemo-web:latest
+docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web
+curl -fsS http://127.0.0.1:8081/health
+```
+
+پس از rollback، سورس frontend را نیز با آرشیو همان انتشار همگام کنید؛ ابتدا از تغییرات
+جدید احتمالی کپی بگیرید. `down -v`، حذف volume یا بازگردانی دیتابیس برای بازگشت ظاهر لازم نیست.
+
+بخش‌های زیر سوابق تاریخی‌اند؛ تاریخ و Image ID آن‌ها وضعیت انتشار وب فعلی نیستند.
 
 ## انتشار حافظهٔ مکالمه در همان تماس — ۲۰۲۶-۰۸-۲۴
 

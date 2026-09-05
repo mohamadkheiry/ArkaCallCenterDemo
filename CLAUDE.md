@@ -25,7 +25,7 @@
   - `ArkaCallCenter.Api` — Controllerها، Auth/JWT، DI، Middleware، Swagger.
   - `ArkaCallCenter.Realtime` — Worker مستقل برای پل صوتی تلفن ⇄ OpenAI Realtime (فاز ۶).
 - **DB:** MySQL 8 via EF Core 9 + `Pomelo.EntityFrameworkCore.MySql`. Migrations در Infrastructure.
-- **Frontend:** React 18 + Vite + TypeScript + Tailwind + Vazirmatn، کاملاً RTL و ریسپانسیو. State: React Query + Context. روتینگ: react-router.
+- **Frontend:** React 19 + Vite + TypeScript + Tailwind + Vazirmatn، کاملاً RTL و ریسپانسیو. State: React Query + Context. روتینگ: react-router.
 - **AI:** OpenAI Chat برای بررسی مستقیم کل پایگاه دانش، `gpt-realtime` برای مکالمهٔ تلفنی، TTS برای پیام‌های از پیش‌ساخته (fallback / welcome).
 - **SMS:** SMS.ir (REST v1).
 - **Telephony:** Isabel = توزیع مبتنی بر Asterisk. ادغام از طریق **ARI + externalMedia/AudioSocket**.
@@ -145,6 +145,7 @@ GET/PUT /api/admin/users/{id}/limit                                          [su
 ## ۹. وضعیت فازها  ← **بعد از هر گام به‌روز کن**
 
 - [x] **بازطراحی داشبورد — ۲۰۲۶-۰۹-۰۵:** سورس پایدار `edfc0bb` همراه اصلاح ارسال تکراری CRM مبنا است. پوسته RTL، نمای کلی داده‌محور، وزیر محلی، اجزای فرم/دکمه/جدول، منوی موبایل، راهنمای اولیه و پنل مدیریتی یکپارچه شدند. تب مدیریتی در query string حفظ می‌شود؛ جست‌وجوی شماره فارسی و فیلتر نوع پاسخ در تماس‌ها اضافه شد. ساخت production، lint (بدون error، یک warning قدیمی `cn`) و ۳۷ بررسی مرورگر در عرض‌های ۱۵۳۶، ۷۶۸، ۳۹۳ و ۳۶۰ موفق بودند. جزئیات قرارداد و کنترل بصری در `docs/DASHBOARD_DESIGN.md` است. این تغییر مسیر تماس یا مدل پایگاه دانش را تغییر نمی‌دهد.
+- [x] **انتشار فقط وب — ۲۰۲۶-۰۹-۰۵:** رابط commit `0f738ba` در `https://callcenterai.ir/` منتشر و بررسی UI روی assetهای عمومی تکرار شد. APIهای آزمون UI mock بودند؛ ورود و لوگوی عمومی جداگانه بدون mock بررسی شدند. Image ID و StartedAt بک‌اند، Realtime و DB ثابت ماند. backup قابل بازگشت و وضعیت راه‌اندازی خودکار در `docs/LAST_DEPLOYMENT.md` ثبت‌اند.
 
 - [x] **فاز ۰ — پایه:** ساختار ریپو، مستندات، `.gitignore`، `CLAUDE.md`، `.env.example`.
 - [x] **فاز ۱ — بک‌اند پایه:** solution سه‌لایه، Core entities + enums، Infrastructure DbContext/MySQL + migration اولیه + Seeder، Api skeleton (JWT + Swagger + CORS)، Auth OTP (`/api/auth/*`, `/api/me`). ⚠️ migration هنوز روی DB زنده اعمال نشده (نیاز به connection string واقعی MySQL).
