@@ -24,7 +24,9 @@ API توسعه در `http://localhost:5080` است. مسیرهای `/api` و `/h
 | `components/DashboardLayout.tsx` | هدر، منو، پروفایل، فوکوس/اسکرول موبایل و راهنما |
 | `components/ui.tsx` | دکمه، ورودی، سطح، لوگو، بارگذاری و اسلایدر مشترک |
 | `workspace.css` | پالت، تایپوگرافی، پوسته، فرم، جدول و breakpointهای داشبورد |
-| `index.css` | Tailwind، فونت‌های محلی و طراحی صفحه ورود |
+| `index.css` | Tailwind، فونت‌های محلی و انیمیشن‌های مشترک |
+| `login.css` و `pages/LoginPage.tsx` | طراحی مستقل ورود، پنل برند و فرم SMS/Call |
+| `pages/login/` | hook جریان ورود و ورودی قابل‌دسترس کد تأیید |
 | `pages/DashboardHome.tsx` | وضعیت واقعی تلفن، مصرف سهمیه و دسترسی‌های سریع |
 | `pages/KnowledgeBasePage.tsx` | دانش متنی/فایلی و پیام نتیجه |
 | `pages/CallsPage.tsx` | جست‌وجو، فیلتر، ضبط تماس و سوالات بی‌پاسخ |
@@ -38,5 +40,7 @@ API توسعه در `http://localhost:5080` است. مسیرهای `/api` و `/h
 
 جزئیات طراحی، تفاوت‌های عمدی با مرجع و ماتریس تست:
 [DASHBOARD_DESIGN.md](../docs/DASHBOARD_DESIGN.md).
+طراحی، assetها و قراردادهای صفحه ورود:
+[LOGIN_DESIGN.md](../docs/LOGIN_DESIGN.md).
 برای انتشار فقط وب و rollback:
 [deployment.md](../deployment.md).
