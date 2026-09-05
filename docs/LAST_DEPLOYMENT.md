@@ -7,9 +7,9 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `14:43:40 UTC` |
+| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `15:44:14 UTC` |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit رابط وب | `0f738ba1d1e59f0b88dc1551dec01ce53a56b99b` |
+| commit رابط وب | `ef088110c810b2e59fe79d6c761857db45925ebf` |
 | مبنای سورس | نسخه پایدار `edfc0bb` همراه اصلاح ارسال تکراری لید؛ بدون شاخه سؤال‌وجواب |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
@@ -29,7 +29,60 @@
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
 
-## انتشار بازطراحی داشبورد — ۲۰۲۶-۰۹-۰۵
+## انتشار صفحه ورود جدید — ۲۰۲۶-۰۹-۰۵، ساعت ۱۵:۴۴ UTC
+
+صفحه `/login` با طراحی سفید/نیمه‌شب، تصویر اختصاصی تلفن، فونت وزیر، فرم شماره و OTP،
+نسخه موبایل و حالت‌های loading/error/cooldown منتشر شد. داشبورد بازطراحی‌شده قبلی
+حفظ شده است. این انتشار **فقط web** بود و سه سرویس api، realtime و db با همان Image ID
+و StartedAt ثبت‌شده در انتشار قبلی باقی ماندند؛ سرویس پیامک، تماس، CRM، Asterisk و
+reverse proxy مرکزی تغییر نکردند.
+
+- صفحه ورود عمومی: <https://callcenterai.ir/login>
+- commit اجرایی: `ef088110c810b2e59fe79d6c761857db45925ebf`.
+- tag: `arkacallcenterdemo-web:login-20260905`؛ Compose از tag جاری `latest` استفاده می‌کند.
+- Image ID: `sha256:45a81ed512e7b345039ce2a0055e5d996fa2c320df36f10f45095437070c83bb`.
+- JavaScript: `index-l6V48Lr3.js`؛ CSS: `index-2FK2gZlc.css`.
+- سورس frontend و `dist` تست‌شده:
+  `/opt/arka-call-center/.releases/login-20260905/frontend.tgz`.
+- SHA-256 بسته: `596a4962973afe94053b128bb4da288e050dba5b280aa92a50170c3040bdf31f`.
+- `Dockerfile.login` همان مسیر، خروجی تست‌شده را روی runtime قبلی Nginx قرار می‌دهد.
+  config پراکسی عوض نشده و assetهای hash‌شده قدیمی برای تب‌های باز باقی می‌مانند.
+
+ابتدا `nginx -t` و اجرای کانتینر موقت loopback روی `18081` موفق بود. سپس تنها کانتینر
+web با `--no-deps --force-recreate` جایگزین شد و کانتینر آزمایشی حذف شد. صفحه اصلی،
+ورود، health و هر دو تصویر روی HTTPS عمومی پاسخ `200` دادند. هر ۲۶ بررسی UI با API
+شبیه‌سازی‌شده روی **assetهای عمومی منتشرشده** نیز موفق شد. صفحه ورود و لوگوی واقعی
+جداگانه بدون mock در دسکتاپ/موبایل بررسی شدند؛ بدون خطای مرورگر و بدون هیچ درخواست
+واقعی OTP. جزئیات پذیرش و محدودیت‌ها در [LOGIN_DESIGN.md](LOGIN_DESIGN.md) است.
+
+`arka-call-center.service` همچنان `enabled/active`، Docker برابر `enabled` و restart
+policy وب `unless-stopped` است؛ سرور reboot نشده است.
+
+### پشتیبان و بازگشت صفحه ورود
+
+پوشه root-only: `/var/backups/arka-call-center/20260905-login-before-redesign`.
+این backup فقط سورس/ایمیج وب است و dump تازه دیتابیس نیست.
+
+| فایل | SHA-256 |
+| --- | --- |
+| `frontend.tgz` | `938c2be65da0cfc5a4726ffb586fb21b372e90b33af1514d2c5046b291b478fd` |
+| `web-image.tar.gz` | `05bc185e346205226ea414052d81550ff8cc071082cf1954543ac17ce3c7b469` |
+
+برای برگشت فقط به **صفحه ورود پیشین با حفظ داشبورد جدید**:
+
+```sh
+cd /opt/arka-call-center
+# اگر tag قبلی موجود نبود، ابتدا تصویر ذخیره‌شده را load کنید:
+# gzip -dc /var/backups/arka-call-center/20260905-login-before-redesign/web-image.tar.gz | docker load
+docker tag arkacallcenterdemo-web:before-login-20260905 arkacallcenterdemo-web:latest
+docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web
+curl -fsS http://127.0.0.1:8081/health
+```
+
+سورس frontend نیز پس از نگه‌داشتن کپی تغییرات جدید احتمالی باید با backup همان انتشار
+همگام شود. هیچ حذف volume، بازگردانی DB یا restart سرویس تماس لازم نیست.
+
+## انتشار قبلی: بازطراحی داشبورد — ۲۰۲۶-۰۹-۰۵، ساعت ۱۴:۴۳ UTC
 
 این انتشار **فقط web** بود. پوسته راست‌چین، نمای کلی، فرم‌ها، جداول، انتخاب گوینده،
 صفحه دانش، گزارش تماس، پنل کاربران و منوی مدیریت یکپارچه شدند. فونت Vazirmatn محلی
