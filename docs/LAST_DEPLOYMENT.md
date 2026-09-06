@@ -7,9 +7,9 @@
 
 | مورد | مقدار |
 | --- | --- |
-| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۵، ساعت `16:17:35 UTC` |
+| تاریخ آخرین انتشار وب | ۲۰۲۶-۰۹-۰۶، ساعت `16:02:05 UTC` |
 | سرور | Issabel / Asterisk در `192.168.10.101` |
-| commit رابط وب | `30eba38ce632bc1c661bea841cd1135cd56e444f` |
+| commit رابط وب | `8110e65290b4b766c3caafcd48fb1ae7aeab4c95` |
 | مبنای سورس | نسخه پایدار `edfc0bb` همراه اصلاح ارسال تکراری لید؛ بدون شاخه سؤال‌وجواب |
 | مسیر برنامه | `/opt/arka-call-center` |
 | پروژه Compose | `arkacallcenterdemo` |
@@ -29,7 +29,79 @@
 <http://192.168.10.101:8100/> فعال است و کال‌سنتر برای مسیر جایگزین OTP تلفنی به همان سرویس
 متصل می‌شود.
 
-## رفع اولین پخش مکالمه — ۲۰۲۶-۰۹-۰۵، ساعت ۱۶:۱۷ UTC
+## پالایش ظاهر ورود — ۲۰۲۶-۰۹-۰۶، ساعت ۱۶:۰۲ UTC
+
+این انتشار فقط CSS صفحه `/login` را تغییر می‌دهد: قاب سفید روی زمینه یاسی روشن،
+توازن فرم و تصویر، تایپوگرافی وزیر، کنترل‌ها، فاصله‌ها و نمایش موبایل. متن‌ها، لوگوی
+بارگذاری‌شده و تصاویر موجود حفظ شدند. مقایسه مستقیم `frontend/src` با سرور پیش از
+انتشار فقط `login.css` را متفاوت نشان داد و پوشه `public` یکسان بود. منطق OTP و
+اصلاح پخش مکالمه در نسخه قبلی بدون تغییر باقی ماندند.
+
+- commit اجرایی: `8110e65290b4b766c3caafcd48fb1ae7aeab4c95`؛ روی `origin/main` ثبت شد.
+- tag: `arkacallcenterdemo-web:login-refinement-20260906` (همچنین `latest`).
+- Image ID: `sha256:5695fd7f64172f74f1742df111b4d29f0d53903485b167eb21875e46cf595982`.
+- StartedAt: `2026-09-06T16:02:05.451767565Z`.
+- JavaScript: `index-BE9aJ-yR.js`؛ CSS: `index-CcuEp0kz.css`.
+- بسته سورس و build تست‌شده:
+  `/opt/arka-call-center/.releases/login-refinement-20260906/frontend.tgz`.
+- SHA-256 بسته: `0b90509f5da2736ffc6d3acde54542b4f2beaaa1be11d1d5507c10fda01442d8`.
+- build با `Dockerfile.login-refinement` در همان مسیر و runtime قبلی انجام شد؛
+  config Nginx و assetهای hashدار قبلی برای تب‌های از قبل باز حفظ شده‌اند.
+
+`npm run build` و `npm run lint` موفق بودند؛ warning قدیمی export `cn` باقی است.
+هشت viewport و حالت‌های ورود/خطا/cooldown با API مصنوعی در مرورگر داخلی آزمایش شدند؛
+جزئیات و دفتر تطبیق با مفهوم تصویری در [طراحی ورود](LOGIN_DESIGN.md#پالایش-بصری-دوم--۲۰۲۶-۰۹-۰۶)
+قرار دارد. `nginx -t` و سلامت کانتینر موقت loopback در `18081` پیش از انتشار موفق
+شدند. پس از جایگزینی، کانتینر آزمایشی متوقف و حذف شد.
+
+انتشار با `docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web`
+انجام شد. `/health` داخلی و HTTPS عمومی پاسخ `{"status":"ok"}` دادند. مرورگر داخلی
+روی سایت عمومی بارگذاری bundle جدید، لوگوی واقعی، نماهای ۱۵۳۶×۱۰۲۴ و ۳۹۳×۸۵۲، نبود
+overflow افقی و اعتبارسنجی شماره خالی را تأیید کرد؛ کنسول error/warning نداشت. هیچ
+OTP واقعی در این QA ارسال نشد. تصاویر مرجع و نسخه منتشرشده در بازبینی نهایی تطبیق داده شدند.
+
+سه سرویس زیر از **قبل تا بعد همین انتشار** Image ID و StartedAt یکسان داشتند
+(`backend-before.txt` و `backend-after.txt` در پوشه release با `cmp` برابر بودند).
+آن‌ها پیش از آغاز این کار در ساعت ۱۳:۳۱ همان روز شروع شده بودند؛ زمان‌های قدیمی‌تر
+در تاریخچه پایین فایل، مربوط به انتشارهای گذشته‌اند.
+
+| سرویس | Image ID | StartedAt بدون تغییر در این انتشار |
+| --- | --- | --- |
+| api | `sha256:2456441b6282fa47333d42ca2f0113b878ae40c7b3054c00a49c7642d428c24d` | `2026-09-06T13:31:09.439741285Z` |
+| realtime | `sha256:474d381c2fc55c1f89fa2872279b342a11d243b8f003978e3b50bf48db881a86` | `2026-09-06T13:31:06.452089122Z` |
+| db | `sha256:78c993fee8d828d00b080eb45a44bb43e56befb0caa67a1c2d1da57d2fc0fa95` | `2026-09-06T13:31:06.386403295Z` |
+
+Docker و `arka-call-center.service` همچنان `enabled` و واحد برنامه `active` بود؛
+policy وب `unless-stopped` است. هیچ reboot، migration، دست‌کاری volume، فایل ضبط،
+Asterisk، سرویس مستقل OTP/softphone یا پراکسی مرکزی دامنه‌ها انجام نشد. هشدار قدیمی
+Compose درباره مالکیت volumeهای موجود، باعث حذف یا ساخت مجدد آن‌ها نشد.
+
+### پشتیبان و بازگشت پالایش ورود
+
+مسیر root-only: `/var/backups/arka-call-center/20260906-login-refinement-before`؛
+شامل frontend قبلی، مستندات، image وب و مشخصات کانتینرها است؛ dump تازه DB نیست.
+
+| فایل | SHA-256 |
+| --- | --- |
+| `frontend.tgz` | `377d82e05b579be492331728ca2b368bb07bb04bdda5e7cb06f7e0e1f5c7b728` |
+| `docs.tgz` | `94195fe796b4b4811c6310cf2b934f99b1a34ebe3ee1d13b0fb0b7c0c43360a6` |
+| `web-image.tar.gz` | `cf0b8bd5d3ae1c31ce09cfa479d8c0771ac9d5b31be29124c7e6e061aff48698` |
+
+بازگشت فقط ظاهر ورود به نسخه قبل؛ **اصلاح اولین پخش مکالمه حفظ می‌شود**:
+
+```sh
+cd /opt/arka-call-center
+# فقط اگر tag پشتیبان موجود نیست:
+# gzip -dc /var/backups/arka-call-center/20260906-login-refinement-before/web-image.tar.gz | docker load
+docker tag arkacallcenterdemo-web:before-login-refinement-20260906 arkacallcenterdemo-web:latest
+docker compose -p arkacallcenterdemo up -d --no-deps --force-recreate web
+curl -fsS http://127.0.0.1:8081/health
+```
+
+همگام‌کردن سورس frontend با backup فقط پس از حفظ تغییرات جدید احتمالی انجام شود.
+این بازگشت به restore دیتابیس، حذف volume یا restart سرویس تلفن نیاز ندارد.
+
+## انتشار قبلی: رفع اولین پخش مکالمه — ۲۰۲۶-۰۹-۰۵، ساعت ۱۶:۱۷ UTC
 
 این انتشار فقط کامپوننت مشترک پخش صوت را در **web** اصلاح می‌کند. ظاهر ورود و
 داشبورد حفظ شده است. علت باگ، اجرای `pause()` در cleanup وابسته به state مربوط به
